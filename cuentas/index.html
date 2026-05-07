@@ -811,7 +811,6 @@ transform: translateX(-50%) translateY(0); /* Sube a su sitio */
 .toast.error { border-color: var(--c-danger); color: var(--c-danger); }
 .toast.info    { border-color: var(--c-primary); color: var(--c-primary); }
 .toast.warning { border-color: var(--c-warning); color: var(--c-warning); }
-.toast.ok      { border-color: var(--c-success); color: var(--c-success); }
 #deep-space {
 position: fixed;
 top: 0;
@@ -2134,27 +2133,6 @@ body #fab-main:active {
     height: 250px;
 }
 
-.inv-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 20px;
-    text-align: center;
-    color: #666;
-}
-
-.inv-empty-icon {
-    font-size: 48px;
-    margin-bottom: 15px;
-    opacity: 0.6;
-}
-
-.inv-empty-text {
-    font-size: 14px;
-    margin-bottom: 20px;
-}
-
 .inv-modal {
     display: none;
     position: fixed;
@@ -3272,116 +3250,6 @@ window.usarHuellaMovil = async function() {
 };
 // FIN REFINAMIENTO UX: Biometría sin bloqueos   
 
-// --- LÓGICA DEL TECLADO PIN (REFACTORIZADA Y FAIL-CLOSED) ---
-let pinActual = "";
-
-function teclaPin(num) {
-    const msj = document.getElementById('auth-message');
-    // Limpiamos el mensaje de error visual al empezar a teclear
-    if (msj && msj.innerText.includes("incorrecto")) {
-        msj.innerText = "Introduce tu PIN de acceso";
-        msj.style.color = "#888888"; 
-    }
-
-    if (pinActual.length < 4) {
-        pinActual += num;
-        actualizarPantallaPin();
-        
-        if (pinActual.length === 4) {
-            setTimeout(comprobarPin, 100); 
-        }
-    }
-}
-
-function borrarPin() {
-    if (pinActual.length > 0) {
-        pinActual = pinActual.slice(0, -1);
-        actualizarPantallaPin();
-    }
-}
-
-function limpiarPin() {
-    pinActual = "";
-    actualizarPantallaPin();
-}
-
-function actualizarPantallaPin() {
-    // FIX: Conexión con el DOM real (los 4 círculos físicos)
-    const dots = document.querySelectorAll('#pin-dots .pin-dot');
-    if (!dots || dots.length === 0) return;
-
-    dots.forEach((dot, index) => {
-        if (index < pinActual.length) {
-            // Estado Lleno (Teclado pulsado)
-            dot.style.background = '#FFD700';
-            dot.style.borderColor = '#FFD700';
-            dot.style.boxShadow = '0 0 10px rgba(255, 215, 0, 0.5)';
-        } else {
-            // Estado Vacío (Por defecto)
-            dot.style.background = 'transparent';
-            dot.style.borderColor = 'rgba(255,255,255,0.3)';
-            dot.style.boxShadow = 'none';
-        }
-    });
-}
-
-async function comprobarPin() {
-    const msj = document.getElementById('auth-message');
-
-    // 1. POSTURA FAIL-CLOSED (Seguridad Crítica)
-    // Si el motor criptográfico no está en memoria, DENEGAMOS acceso incondicionalmente.
-    if (typeof PinSecurity === 'undefined') {
-        if (msj) {
-            msj.innerText = "Error crítico de seguridad. Acceso denegado.";
-            msj.style.color = "#FF2E4D"; // Rojo peligro
-        }
-        return limpiarPin(); // Abortamos
-    }
-
-    try {
-        const esCorrecto = await PinSecurity.verificar(pinActual);
-
-        // 2. RETURN EARLY (Fallo de validación)
-        if (!esCorrecto) {
-            if (msj) {
-                msj.innerText = "❌ PIN incorrecto. Inténtalo de nuevo.";
-                msj.style.color = "#FF2E4D";
-            }
-            
-            // Animación de "Shake" (Agitación) y vibración para feedback táctil de error
-            const pinDotsCont = document.getElementById('pin-dots');
-            if (pinDotsCont) {
-                pinDotsCont.style.transition = 'transform 0.1s';
-                pinDotsCont.style.transform = 'translateX(-10px)';
-                setTimeout(() => pinDotsCont.style.transform = 'translateX(10px)', 50);
-                setTimeout(() => pinDotsCont.style.transform = 'translateX(-10px)', 100);
-                setTimeout(() => pinDotsCont.style.transform = 'translateX(10px)', 150);
-                setTimeout(() => pinDotsCont.style.transform = 'translateX(0)', 200);
-            }
-            if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
-
-            return limpiarPin();
-        }
-
-        // 3. CAMINO FELIZ (Happy Path)
-        PinSecurity.setSession(pinActual);
-        
-        // Dependiendo de cómo lo hayas expuesto, llamamos a la función global de desbloqueo
-        if (typeof window.desbloquearApp === 'function') {
-            window.desbloquearApp();
-        } else if (typeof desbloquearApp === 'function') {
-            desbloquearApp();
-        }
-        
-    } catch (error) {
-        // Failsafe por si PinSecurity lanza una excepción no controlada
-        if (msj) {
-            msj.innerText = "Fallo del sistema de verificación.";
-            msj.style.color = "#FF2E4D";
-        }
-        return limpiarPin();
-    }
-}
 // --- NUEVA HERRAMIENTA MATEMÁTICA SEGURA ---
 window.sumarDinero = function(a, b) {
     // Multiplica por 100 para operar con enteros (céntimos) y evitar errores de decimales fantasma
@@ -3416,10 +3284,6 @@ window.fusionarMovimientos = function(movimientosNube, movimientosLocales) {
     return listaFusionada;
 };
 // --- FIN HERRAMIENTA DE FUSIÓN DE DATOS ---
-// --- CONFIGURACIÓN GLOBAL DE AIDANAI ---
-const CONFIG = {
-APP_VERSION: "2026.2.0 - Clean"
-};
 // ============================================================
 // 🧠 MEJORA FASE 2: SISTEMA REACTIVO DE INTERFAZ (UI Events)
 // ============================================================
@@ -3556,21 +3420,8 @@ window.irPestana = function(p) {
     if (nav) nav.classList.add('active');
 
     // 5. UI: Control total de los Botones Flotantes (FAB)
-    const fabMovs = document.getElementById('fab-container');
-    const fabFijos = document.getElementById('fab-fijos');
     const overlay = document.getElementById('fab-overlay');
-
-    if (fabMovs) {
-        fabMovs.style.display = 'flex';
-        fabMovs.classList.remove('open');
-    }
-    if (overlay) overlay.style.display = 'none';
     
-    // 🔥 Recuperado del código antiguo: Evitar botones huérfanos
-    if (fabFijos) {
-        fabFijos.style.display = 'none';
-    }
-
     // 6. MOTOR MÁGICO + MANAGER DE MEMORIA
     // Usamos el setTimeout de 50ms para garantizar que el DOM ya tiene 
     // su ancho/alto final antes de que ECharts intente dibujarse.
@@ -3656,6 +3507,7 @@ if (toast.parentNode === container) container.removeChild(toast);
 }, 400);
 }, 3000);
 };
+
 window.mostrarEstado       = window.notify;
 window.mostrarToast        = window.notify;
 /* ============================================================
@@ -4069,7 +3921,6 @@ window.mapaCuentas = {};
 window.idEnEdicion = null;
 // Declaración global unificada y segura
 window.filtroUsuarioActual = 'todos';
-let filtroUsuarioActual = window.filtroUsuarioActual;
 const DEBUG = false;
 function logDev(...args) { if (DEBUG) console.log(...args); }
 function warnDev(...args) { if (DEBUG) console.warn(...args); }
@@ -4515,32 +4366,6 @@ let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: ''
 let chartInstance = null;
 let ordenPatri = { campo: 'saldo', asc: false };
 window.ordenActivo = { campo: 'ts', asc: false };
-// === NUEVA MEDIDA 2: TECLADO BALA (Auto-focus inteligente) ===
-function aplicarTecladoBala(nombreFuncion) {
-if (typeof window[nombreFuncion] === 'function') {
-const funcionOriginal = window[nombreFuncion];
-window[nombreFuncion] = function(id) {
-// 1. Ejecutamos la apertura normal de la ventana
-funcionOriginal(id);
-// 2. Si NO hay ID, significa que es un movimiento "Nuevo" (no estás editando uno antiguo)
-if (!id) {
-// Esperamos 200 milisegundos a que la ventana termine su animación de entrada
-setTimeout(() => {
-const inputImporte = document.getElementById('importe');
-if (inputImporte) {
-inputImporte.focus(); // Intenta llamar al teclado nativo
-// Si estás usando la calculadora integrada, la abre de golpe
-if (typeof window.abrirCalculadora === 'function') {
-window.abrirCalculadora('importe');
-}
-}
-}, 200);
-}
-};
-}
-}
-// Activamos el "Teclado Bala" buscando tu función de apertura de ventana
-aplicarTecladoBala('abrirModal');
 // === NUEVA MEDIDA 3: MEMORIA DE ELEFANTE (Restaurar al inicio) ===
 document.addEventListener('DOMContentLoaded', () => {
 const ultimaPestana = localStorage.getItem('aidanai_last_tab');
@@ -4614,16 +4439,6 @@ if (typeof actualizarInfoBackup === 'function') actualizarInfoBackup(true);
 console.error("Backup info:", e.message);
 }
 };
-function actualizarInfoBackup(hechoHoy) {
-const el = document.getElementById('info-ultimo-backup');
-if(el) {
-if(hechoHoy) {
-el.innerHTML = "<span style='color:var(--c-success)'>✅ Backup de hoy realizado y seguro.</span>";
-} else {
-el.innerHTML = "<span style='color:var(--c-warning)'>⚠️ Aún no has hecho copia hoy.</span>";
-}
-}
-}
 // ==========================================
 // 🔄 GESTIÓN DE DATOS UNIFICADA (LOCAL Y NUBE)
 // ==========================================
@@ -5454,37 +5269,6 @@ window.filtroRapido = function(tipo) {
     // Aplicamos los filtros automáticamente
     aplicarFiltros();
 };
-function aplicarFiltros() {
-    // Leemos el nuevo filtro
-    filtros.tipoCuenta = document.getElementById('f-tipo-cuenta').value;
-    filtros.cuenta = document.getElementById('f-cuenta').value;
-    filtros.concepto = document.getElementById('f-concepto').value;
-    filtros.beneficiario = document.getElementById('f-beneficiario').value;
-    const elPC = document.getElementById('f-texto');
-    filtros.texto = (elPC ? elPC.value : '').toLowerCase();
-    filtros.desde = document.getElementById('f-desde').value;
-    filtros.hasta = document.getElementById('f-hasta').value;
-    filtros.min = document.getElementById('f-min').value;
-    filtros.max = document.getElementById('f-max').value;
-    renderizar();
-    window.actualizarChivatoFiltros();
-    // Ocultar el panel de filtros para ver los resultados
-    const panel = document.getElementById('panel-filtros');
-    if (panel) panel.classList.remove('open');
-}
-function limpiarFiltros() {
-// Delegamos a la versión global (definida en el módulo reparador de filtros)
-if (typeof window.limpiarFiltros === 'function') { window.limpiarFiltros(); return; }
-// Fallback inline
-['f-tipo-cuenta','f-cuenta','f-concepto','f-beneficiario','f-texto','f-desde','f-hasta','f-min','f-max'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.value = '';
-});
-filtros = { tipoCuenta:'', cuenta:'', concepto:'', beneficiario:'', texto:'', desde:'', hasta:'', min:'', max:'', tipo:'' };
-renderizar();
-const panel = document.getElementById('panel-filtros');
-if(panel) { panel.classList.remove('open'); panel.style.display = 'none'; }
-if(typeof window.actualizarChivatoFiltros === 'function') window.actualizarChivatoFiltros();
-}
 function abrirModal(esEdicion = false) {
     const modal = document.getElementById('modal-manual');
     modal.style.display = ''; // ✨ EL FIX: Limpiamos el display en línea oculto
@@ -6034,12 +5818,6 @@ btnBorrar.disabled = false;
 }
 }
 };
-// --- DEBOUNCE: Colapsa múltiples llamadas rápidas en una sola ejecución ---
-let _recalcTimer = null;
-function _scheduleRecalculo() {
-clearTimeout(_recalcTimer);
-_recalcTimer = setTimeout(recalcularSaldosGlobal, 50);
-}
 // --- FUNCIÓN MATEMÁTICA CENTRAL (DEFINITIVA) ---
 // BUG 8 FIX: Bandera de guardia para evitar recursión infinita.
 // renderizar() y actualizarDashboard() podían rellamar a recalcularSaldosGlobal
@@ -8281,106 +8059,6 @@ fecha.setDate(fecha.getDate() + 1);
 // Siempre devolvemos en formato YYYY-MM-DD (compatible con Excel y Date())
 return fecha.toISOString().split('T')[0];
 }
-async function ejecutarRecurrente(idRec) {
-// 1. Localizar la regla
-const regla = window.datosRecurrentes.find(r => r.id === idRec);
-if(!regla) return notify("❌ Regla no encontrada", "error");
-const importeBonito = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(Math.abs(regla.importe));
-if(!confirm(`¿Ejecutar ahora?\n\nConcepto: ${regla.concepto}\nImporte: ${importeBonito}\n\nSe generará el movimiento y la fecha avanzará.`)) return;
-notify("⏳ Generando movimiento...", "loading");
-// 2. Preparar datos comunes
-// Usamos el texto exacto de la fecha (ej. "2026-03-01") igual que hace el formulario manual
-const fechaString = regla.fechaProx;
-const tsOperacion = new Date(fechaString + 'T12:00:00').getTime();
-let movimientosAGuardar = [];
-// Función para saber qué tipo de cuenta es
-const obtenerInfoCuenta = (nombreCuenta) => {
-const clave = String(nombreCuenta || '').toUpperCase().trim();
-const info = (window.mapaCuentas && window.mapaCuentas[clave]) ? window.mapaCuentas[clave] : null;
-return {
-tipoCuenta: info ? (info.tipo || 'SIN CLASIFICAR') : 'SIN CLASIFICAR',
-esInversion: info ? (info.esInversion === true || info.esInversion === 'SI') : false
-};
-};
-// Función INTELIGENTE para detectar el dueño real de la cuenta
-const detectarDueno = (nombreCuenta) => {
-const c = String(nombreCuenta).toUpperCase().trim();
-if (c.startsWith("D-")) return "D";
-if (c.startsWith("N-")) return "N";
-return "DN";
-};
-// 3. Lógica según tipo (Traspaso vs Normal)
-// Hacemos la comprobación SÚPER robusta a prueba de mayúsculas/minúsculas y espacios
-const tipoReglaLimpio = String(regla.tipoRegla || '').toLowerCase().trim();
-const destinoLimpio = String(regla.cuentaDestino || '').trim();
-if (tipoReglaLimpio === 'traspaso' || destinoLimpio.length > 1) {
-// ES UN TRASPASO (Genera 2 movimientos: el dinero que sale y el que entra)
-const infoOrigen = obtenerInfoCuenta(regla.cuenta);
-const infoDestino = obtenerInfoCuenta(destinoLimpio);
-// Movimiento 1: El dinero sale
-movimientosAGuardar.push({
-id: uuid(), // Generamos un ID 100% único e independiente
-fecha: fechaString,
-ts: tsOperacion,
-cuenta: regla.cuenta,
-concepto: regla.concepto,
-importe: -Math.abs(regla.importe), // Sale dinero (negativo)
-descripcion: `>> A: ${destinoLimpio} | ${regla.descripcion || 'Fijo'}`,
-beneficiario: detectarDueno(regla.cuenta), // Asigna el dueño correcto
-tipo: 'traspaso',
-tipoCuenta: infoOrigen.tipoCuenta,
-esInversion: infoOrigen.esInversion
-});
-// Movimiento 2: El dinero entra
-movimientosAGuardar.push({
-id: uuid(), // Generamos otro ID 100% único e independiente
-fecha: fechaString,
-ts: tsOperacion,
-cuenta: destinoLimpio,
-concepto: regla.concepto,
-importe: Math.abs(regla.importe), // Entra dinero (positivo)
-descripcion: `<< DE: ${regla.cuenta} | ${regla.descripcion || 'Fijo'}`,
-beneficiario: detectarDueno(destinoLimpio), // Asigna el dueño correcto
-tipo: 'traspaso',
-tipoCuenta: infoDestino.tipoCuenta,
-esInversion: infoDestino.esInversion
-});
-} else {
-// ES GASTO O INGRESO (Genera 1 solo movimiento)
-const infoCtaSimple = obtenerInfoCuenta(regla.cuenta);
-movimientosAGuardar.push({
-id: uuid(), // ID 100% único
-fecha: fechaString,
-ts: tsOperacion,
-cuenta: regla.cuenta,
-concepto: regla.concepto,
-importe: regla.importe,
-descripcion: `${regla.descripcion || ''} (Recurrente)`,
-beneficiario: regla.beneficiario || detectarDueno(regla.cuenta),
-tipo: tipoReglaLimpio || ((regla.importe >= 0) ? 'ingreso' : 'gasto'),
-tipoCuenta: infoCtaSimple.tipoCuenta,
-esInversion: infoCtaSimple.esInversion
-});
-}
-try {
-// 4. Meter los movimientos nuevos en la memoria
-window.datos.unshift(...movimientosAGuardar);
-// 5. Calcular la fecha de la próxima vez que toque este recibo
-const nuevaFecha = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-regla.fechaProx = nuevaFecha;
-// 6. Guardar la información de forma segura en Excel (OneDrive/Local)
-await guardarTodoConRecurrentes();
-// 7. Refrescar pantalla
-if (typeof _scheduleRecalculo === 'function') _scheduleRecalculo();
-notify("✅ Ejecutado. Próxima: " + nuevaFecha, "success");
-if(typeof vibrar === 'function') vibrar('ingreso');
-cargarVistaRecurrentes();
-} catch(e) {
-console.error(e);
-notify("❌ Fallo al procesar: " + e.message, "error");
-notify("❌ Error al guardar", "error");
-}
-}
 async function guardarTodoConRecurrentes() {
 // 🔒 UNIFICACIÓN: Esta función ya no duplica la lógica de guardado.
 // Delega en guardarUniversal() que es la única fuente de verdad para subir a la nube.
@@ -9112,26 +8790,6 @@ window.toggleBiometriaUI = function(cb) {
         }
     }
 };
-// Controla qué se muestra cuando arranca la app
-async function iniciarAutenticacion() {
-    const overlay = document.getElementById('auth-overlay');
-    if (!overlay) return;
-    overlay.style.display = 'flex';
-    document.getElementById('pin-pad').style.display = 'none';
-    const msg = document.getElementById('auth-message');
-    const usarBiometria = localStorage.getItem('aidanai_biometria') !== 'false';
-    const tieneHuellaGuardada = localStorage.getItem('aidanai_huella_id');
-    // Si tiene biometría activada, es móvil y tiene huella, la lanzamos automático
-    if (usarBiometria && window.PublicKeyCredential && tieneHuellaGuardada) {
-        if(msg) {
-            msg.innerText = "Solicitando huella / FaceID...";
-            msg.style.color = "#FFFFFF";
-        }
-        setTimeout(() => window.usarHuellaMovil(), 500);
-    } else {
-        window.mostrarPin();
-    }
-}
 // Auto-configuración inicial (ajustar el switch de biometría)
 document.addEventListener('DOMContentLoaded', () => {
     const bioToggle = document.getElementById('toggle-biometria');
@@ -9531,34 +9189,6 @@ document.addEventListener('click', function(e) {
         }
     }
 });
-// ============================================================
-// 🔴 MOTOR DEL CHIVATO DE FILTROS (Mejora G)
-// ============================================================
-window.actualizarChivatoFiltros = function() {
-// Buscamos el botón de filtros (probamos con las clases/IDs más comunes de tu código)
-const btnFiltros = document.querySelector('.filters-toggle') || document.getElementById('btn-filtros') || document.getElementById('btn-abrir-filtros');
-if (!btnFiltros) return;
-// Leemos tu variable global de filtros
-const f = window.filtros || {};
-// Comprobamos si hay CUALQUIER filtro activo (que no esté vacío)
-const hayFiltros = Boolean(
-(f.tipoCuenta && f.tipoCuenta !== '') ||
-(f.cuenta && f.cuenta !== '') ||
-(f.concepto && f.concepto !== '') ||
-(f.beneficiario && f.beneficiario !== '') ||
-(f.texto && f.texto !== '') ||
-(f.desde && f.desde !== '') ||
-(f.hasta && f.hasta !== '') ||
-(f.min && f.min !== '') ||
-(f.max && f.max !== '')
-);
-// Encendemos o apagamos el chivato
-if (hayFiltros) {
-btnFiltros.classList.add('filtros-activos');
-} else {
-btnFiltros.classList.remove('filtros-activos');
-}
-};
 /**
  * ============================================================================
  * 📈 MÓDULO: CARTERA DE INVERSIONES (PRODUCCIÓN 1.0 - ONLY BTC/EUR)
