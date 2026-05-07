@@ -3279,7 +3279,7 @@ window.usarHuellaMovil = async function() {
         }
     } catch (e) {
         // En Fintech, si falla/cancela el FaceID, se muestra el PIN en silencio sin asustar al usuario.
-        console.warn("Fallo o cancelación biométrica, pasando a PIN silenciosamente:", e);
+        warnDev("Fallo o cancelación biométrica, pasando a PIN silenciosamente:", e);
         window.mostrarPin();
     }
 };
@@ -4094,6 +4094,8 @@ window.idEnEdicion = null;
 window.filtroUsuarioActual = 'todos';
 let filtroUsuarioActual = window.filtroUsuarioActual;
 const DEBUG = false;
+function logDev(...args) { if (DEBUG) console.log(...args); }
+function warnDev(...args) { if (DEBUG) console.warn(...args); }
 // ============================================================
 // 🍞 SISTEMA TOAST FINTECH (Global Alert Override)
 // ============================================================
@@ -4279,7 +4281,7 @@ try {
 const response = await this.msalInstance.acquireTokenSilent(request);
 return response.accessToken;
 } catch (error) {
-console.warn("⚠️ El token silencioso caducó o falló. Forzando reconexión...", error);
+warnDev("⚠️ El token silencioso caducó o falló. Forzando reconexión...", error);
 try {
 // 2. Si falla lo silencioso (ej. llevas días sin abrirla y Microsoft exige verte), pedimos el pase visiblemente
 const response = await this.msalInstance.acquireTokenPopup(request);
@@ -4419,7 +4421,7 @@ if (typeof window.guardarUniversal === 'function') {
 await window.guardarUniversal();
 }
 } catch (e) {
-console.warn(`⚠️ addRowToTable falló:`, e.message);
+warnDev(`⚠️ addRowToTable falló:`, e.message);
 if (typeof notify === 'function') {
 notify('⚠️ Error al guardar en la nube. Revisa la conexión.', 'error');
 }
@@ -4468,7 +4470,7 @@ procesarLibroLeido(wb);
 cambiarModo('cloud');
 if(barra) barra.innerText = "✅ Sincronizado";
 } catch (error) {
-    console.warn("⚠️ Fallo arranque automático:", error);
+    warnDev("⚠️ Fallo arranque automático:", error);
     notify("❌ No se pudo conectar a OneDrive. Usa el botón 📂 para cargar un archivo Excel local.", "error");
     
     // Resaltar el botón de carga local
@@ -4589,7 +4591,7 @@ const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maxi
 const FMT_NUM  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2 });
 const FMT_EUR2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function cambiarModo(modo) {
-modoNube = (modo === 'cloud');
+    window.modoNube = (modo === 'cloud');
 // 🐛 FIX: Mantenemos tus clases perfectas y solo añadimos 'active' para iluminar el seleccionado
 document.getElementById('mode-local').className = modoNube ? 'btn-mini-head tool-yellow' : 'btn-mini-head tool-yellow active';
 document.getElementById('mode-cloud').className = modoNube ? 'btn-mini-head tool-blue active' : 'btn-mini-head tool-blue';
@@ -4607,7 +4609,7 @@ actualizarDashboard();
 // 🛡️ MOTOR DE SEGURIDAD (BACKUPS)
 // ==========================================
 window.crearBackupNube = async function(forzarManual = false) {
-if (!modoNube) {
+    if (!window.modoNube) {
 if(forzarManual) notify("⚠️ Conecta la nube para backups", "warning");
 return;
 }
@@ -4701,7 +4703,7 @@ window.iniciarCargaNube = async function() {
 };
 // 2. LÓGICA DE DESCARGA DE ONEDRIVE
 async function cargarDesdeNube(esSilencioso = false) {
-    if (!modoNube) return;
+    if (!window.modoNube) return;
     try {
         // --- INICIO MEJORA: Sincronización Silenciosa ---
         // Verificamos si el archivo realmente ha cambiado antes de descargarlo entero y redibujar la UI.
@@ -6516,7 +6518,7 @@ function accionFab(tipo) {
 window.guardarUniversal = async function(nuevasFilas) {
 // --- 1. SEMÁFORO DE SEGURIDAD (MUTEX) ---
 if (window.AppState && window.AppState.isSaving) {
-console.warn("⏳ [GuardarUniversal] Ya hay un guardado en curso. Esperando...");
+warnDev("⏳ [GuardarUniversal] Ya hay un guardado en curso. Esperando...");
 return false;
 }
 const btn = document.getElementById('btn-guardar');
@@ -6677,7 +6679,7 @@ await oneDrive.saveFile(wbout, "aidanai.xlsx");
 exito = true;
 } catch (e) {
 if (e && e.code === 'CONFLICT_412') {
-console.warn("🔄 Conflicto 412: Fusión inteligente en marcha...");
+warnDev("🔄 Conflicto 412: Fusión inteligente en marcha...");
 notify("🔄 Fusionando datos de la nube...", "loading");
 try {
 const wbFresco = await oneDrive.loadFile();
@@ -7467,7 +7469,7 @@ window.renderizarRadarScoring = function(kpis) {
 ⚙️ GESTIÓN DE AJUSTES (LOGICA NUEVA)
 ========================================= */
 async function guardarAjuste(tipo) {
-if (!modoNube) return notify("☁️ Conéctate a la Nube para editar ajustes", "warning");
+    if (!window.modoNube) return notify("☁️ Conéctate a la Nube para editar ajustes", "warning");
 const btnTextOriginal = event.target.innerText;
 event.target.innerText = "GUARDANDO...";
 event.target.disabled = true;
@@ -7512,7 +7514,7 @@ event.target.disabled = false;
 }
 window.cargarSugerenciasAjustes = function() {
     // Actualmente no hay sugerencias dinámicas; función vacía para evitar errores
-    console.log("Sugerencias de ajustes cargadas (placeholder)");
+    logDev("Sugerencias de ajustes cargadas (placeholder)");
 };
 // ==========================================
 // 🎨 MOTOR DE ANIMACIÓN Y FORMATO (NUEVO UNIFICADO)
@@ -8057,7 +8059,7 @@ const nuevo = await CryptoSystem.encriptar(datos, newVal);
 localStorage.setItem('DATA_ENCRIPTADA', nuevo);
 }
 } catch (e) {
-console.warn('No se pudo re-encriptar el caché (ignorado):', e);
+warnDev('No se pudo re-encriptar el caché (ignorado):', e);
 }
 // 7. Limpiar campos
 if (oldInput) oldInput.value = '';
@@ -9718,7 +9720,7 @@ window.obtenerPrecioBTC = async function() {
         window.precioBTC_EUR_Cache = parseFloat(data.price);
         return window.precioBTC_EUR_Cache;
     } catch(error) {
-        console.warn('Error conectando con Binance:', error.message);
+        warnDev('Error conectando con Binance:', error.message);
         return null;
     }
 };
