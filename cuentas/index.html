@@ -4467,19 +4467,22 @@ procesarLibroLeido(wb);
 // ÉXITO: Activamos modo nube
 cambiarModo('cloud');
 if(barra) barra.innerText = "✅ Sincronizado";
-}catch (error) {
+} catch (error) {
     console.warn("⚠️ Fallo arranque automático:", error);
+    notify("❌ No se pudo conectar a OneDrive. Usa el botón 📂 para cargar un archivo Excel local.", "error");
     
-    // Buscamos el elemento primero
-    const modalFuenteDatos = document.getElementById('modal-fuente-datos');
-    
-    // Solo le cambiamos el estilo SI realmente existe en el HTML
-    if (modalFuenteDatos) {
-        modalFuenteDatos.style.display = 'flex';
-    } else {
-        console.warn("No se pudo mostrar el modal porque 'modal-fuente-datos' no existe en el DOM.");
+    // Resaltar el botón de carga local
+    const btnLoadLocal = document.getElementById('btn-load-local');
+    if (btnLoadLocal) {
+        btnLoadLocal.style.transition = 'all 0.2s ease';
+        btnLoadLocal.style.transform = 'scale(1.2)';
+        btnLoadLocal.style.color = '#FFD60A';
+        setTimeout(() => {
+            btnLoadLocal.style.transform = '';
+            btnLoadLocal.style.color = '';
+        }, 2000);
     }
-        }
+}
 }
 // ✅ AÑADIR AL SCOPE GLOBAL (FUERA DE iniciarSistema)
 
@@ -10761,24 +10764,27 @@ window.calcularValoresCartera = function() {
 
   if (window.mapaCuentas) {
     Object.keys(valorPorCuenta).forEach(cta => {
-      if (window.mapaCuentas[cta]) {
-        window.mapaCuentas[cta].saldoActual = valorPorCuenta[cta];
-        window.mapaCuentas[cta].costeTotal = costePorCuenta[cta];
-        window.mapaCuentas[cta].plusvalia = valorPorCuenta[cta] - costePorCuenta[cta];
-        window.mapaCuentas[cta].tieneCartera = true;
-      } else {
-        window.mapaCuentas[cta] = {
-          nombre: cta,
-          tipo: 'INVERSIÓN',
-          esInversion: true,
-          saldoActual: valorPorCuenta[cta],
-          costeTotal: costePorCuenta[cta],
-          plusvalia: valorPorCuenta[cta] - costePorCuenta[cta],
-          tieneCartera: true
-        };
-      }
+        const valorCartera = valorPorCuenta[cta];
+        const coste = costePorCuenta[cta];
+        if (window.mapaCuentas[cta]) {
+            // Sumar el valor de la cartera al saldo existente (movimientos)
+            window.mapaCuentas[cta].saldoActual = (window.mapaCuentas[cta].saldoActual || 0) + valorCartera;
+            window.mapaCuentas[cta].costeTotal = (window.mapaCuentas[cta].costeTotal || 0) + coste;
+            window.mapaCuentas[cta].plusvalia = (window.mapaCuentas[cta].plusvalia || 0) + (valorCartera - coste);
+            window.mapaCuentas[cta].tieneCartera = true;
+        } else {
+            window.mapaCuentas[cta] = {
+                nombre: cta,
+                tipo: 'INVERSIÓN',
+                esInversion: true,
+                saldoActual: valorCartera,
+                costeTotal: coste,
+                plusvalia: valorCartera - coste,
+                tieneCartera: true
+            };
+        }
     });
-  }
+}
 
   const plusvalia = totalValor - totalCoste;
   let rentabilidad = 0;
