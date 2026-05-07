@@ -11130,18 +11130,68 @@ window.editarPosicion = function(id) {
 
 // cerrarModalCartera: definición única más arriba
 
-
 window.guardarPosicion = async function() {
-    // 1. Obtener valores del DOM (declaración única)
+    // 1. Obtener valores del DOM
     const id = document.getElementById('cartera-pos-id').value;
     const tipo = document.getElementById('cartera-tipo').value;
-        const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const cuenta = document.getElementById('cartera-cuenta').value;
+    const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
+    const nombre = document.getElementById('cartera-nombre').value;
+    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
+    let pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
+    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
+    const fecha = document.getElementById('cartera-fecha-compra').value;
+    const notas = document.getElementById('cartera-notas').value;
 
-    // Para no cripto, ignoramos la cantidad y forzamos 1
+    // 2. Validación básica
+    if (!tipo || !ticker || isNaN(pCompra) || isNaN(pActual) || (esCripto && isNaN(cantidad))) {
+        window.mostrarToast("Completa los campos vitales (Tipo, Ticker, Importe Invertido y Precio Actual)", "error");
+        return;
+    }
+
+    // 3. Control de límite de inversión (solo si hay cuenta asociada)
+    if (cuenta) {
+        let dineroAportado = 0;
+        if (window.datos) {
+            window.datos.forEach(m => {
+                if (m.cuenta === cuenta) dineroAportado += parseFloat(m.importe) || 0;
+            });
+        }
+
+        let costeOtrasPosiciones = 0;
+        if (window.datosCartera) {
+            window.datosCartera.forEach(p => {
+                if (p.cuenta === cuenta && p.id !== id) {
+                    // El coste de cada posición es su precioCompra (que representa el total invertido en ella)
+                    costeOtrasPosiciones += parseFloat(p.precioCompra) || 0;
+                }
+            });
+        }
+
+        // La nueva posición cuesta exactamente pCompra (ya sea cripto o no)
+        const costeNuevaPosicion = pCompra;
+
+        if ((costeOtrasPosiciones + costeNuevaPosicion) > (dineroAportado + 0.05)) {
+            const diferencia = (costeOtrasPosiciones + costeNuevaPosicion) - dineroAportado;
+            const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+            window.mostrarToast(`❌ Límite excedido. Has aportado ${fmt.format(dineroAportado)} a la cuenta, pero intentas asignar ${fmt.format(costeOtrasPosiciones + costeNuevaPosicion)}. Faltan ${fmt.format(diferencia)}.`, "error");
+            return;
+        }
+    }
+
+    // 4. Preparar los datos finales para guardar
+    //    Para cripto: cantidad = la que el usuario introdujo, precioCompra = total invertido, precioActual = precio unitario
+    //    Para resto:  cantidad = 1, precioCompra = total invertido, precioActual = valor actual total (manual)
     const cantidadFinal = esCripto ? cantidad : 1;
     const pCompraFinal = pCompra;   // siempre es el importe total invertido
-    const pActualFinal = esCripto ? pActual : pActual;  // unitario para cripto, total para resto
+    const pActualFinal = pActual;   // unitario para cripto, total para resto
 
+    if (!window.datosCartera) window.datosCartera = [];
+
+    const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
+
+    // Declaración ÚNICA de la variable posicion
     const posicion = {
         id: id || generarId(),
         tipo,
@@ -11154,79 +11204,8 @@ window.guardarPosicion = async function() {
         fechaCompra: fecha,
         notas
     };
-    const cuenta = document.getElementById('cartera-cuenta').value;
-    const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
-    const nombre = document.getElementById('cartera-nombre').value;
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-    let pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
-    const fecha = document.getElementById('cartera-fecha-compra').value;
-    const notas = document.getElementById('cartera-notas').value;
 
-    // 2. Validación básica
-    if (!tipo || !ticker || isNaN(cantidad) || isNaN(pCompra) || isNaN(pActual)) {
-        window.mostrarToast("Completa los campos vitales (Tipo, Ticker, Cantidad y Precios)", "error");
-        return;
-    }
-
-    // 3. Control de saldo invertido (solo si hay cuenta asociada)
-    if (cuenta) {
-        // Dinero total aportado a la cuenta según movimientos
-        let dineroAportado = 0;
-        if (window.datos) {
-            window.datos.forEach(m => {
-                if (m.cuenta === cuenta) dineroAportado += parseFloat(m.importe) || 0;
-            });
-        }
-
-        // Coste de otras posiciones en la misma cuenta (excluyendo la actual si se edita)
-        let costeOtrasPosiciones = 0;
-        if (window.datosCartera) {
-            window.datosCartera.forEach(p => {
-                if (p.cuenta === cuenta && p.id !== id) {
-                    costeOtrasPosiciones += (parseFloat(p.cantidad) * parseFloat(p.precioCompra)) || 0;
-                }
-            });
-        }
-
-        // Coste de la nueva posición
-        const costeNuevaPosicion = cantidad * pCompra;
-
-        if ((costeOtrasPosiciones + costeNuevaPosicion) > (dineroAportado + 0.05)) {
-            const diferencia = (costeOtrasPosiciones + costeNuevaPosicion) - dineroAportado;
-            const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
-            window.mostrarToast(`❌ Límite excedido. Has aportado ${fmt.format(dineroAportado)} a la cuenta, pero intentas asignar ${fmt.format(costeOtrasPosiciones + costeNuevaPosicion)}. Faltan ${fmt.format(diferencia)}.`, "error");
-            return;
-        }
-    }
-
-    // 4. Determinar qué valores guardar (para cripto se guardan los totales, para otros los unitarios)
-    let precioCompraGuardar, precioActualGuardar;
-    if (esCripto) {
-        precioCompraGuardar = pCompra;   // total invertido
-        precioActualGuardar = pActual;   // valor total actual
-    } else {
-        precioCompraGuardar = pCompra;   // precio unitario
-        precioActualGuardar = pActual;   // precio unitario actual
-    }
-
-    if (!window.datosCartera) window.datosCartera = [];
-
-    const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
-
-    const posicion = {
-        id: id || generarId(),
-        tipo,
-        cuenta,
-        ticker,
-        nombre,
-        cantidad,
-        precioCompra: precioCompraGuardar,
-        precioActual: precioActualGuardar,
-        fechaCompra: fecha,
-        notas
-    };
-
+    // 5. Guardar en el array
     if (id) {
         const idx = window.datosCartera.findIndex(p => p.id === id);
         if (idx > -1) window.datosCartera[idx] = posicion;
@@ -11237,12 +11216,11 @@ window.guardarPosicion = async function() {
 
     window.cerrarModalCartera();
 
-    // Actualizar UI
+    // 6. Actualizar UI y guardar en nube
     window.calcularValoresCartera();
     window.renderizarCartera();
     if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
 
-    // Guardar en la nube
     if (typeof window.guardarUniversal === 'function') {
         await window.guardarUniversal();
     }
@@ -11250,7 +11228,6 @@ window.guardarPosicion = async function() {
     window.mostrarToast(`Posición ${ticker} guardada`, "success");
     if ("vibrate" in navigator) navigator.vibrate(40);
 };
-
 
 window.borrarPosicion = async function(id) {
   const confirmado = await window.pedirConfirmacion('¿Eliminar posición?', 'Se borrará de tu cartera y del Excel.', '🗑️');
