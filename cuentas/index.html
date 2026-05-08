@@ -2437,6 +2437,8 @@ Ahora no
     <div style="height:180px; width:100%;">
       <div id="chart-cartera-evol" style="width:100%; height:100%;"></div>
     </div>
+    <!-- Estadísticas rápidas de la evolución -->
+    <div id="evol-stats" style="display:none; flex-wrap:wrap; gap:8px; padding:10px 5px 0 5px; border-top:1px solid rgba(255,255,255,0.05); margin-top:5px;"></div>
   </div>
 
   <!-- POSICIONES POR SECCIÓN -->
@@ -4417,29 +4419,67 @@ window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].
 	const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
 	if (wsCarteraName) {
 	  const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
-	  window.datosCartera = rawCartera.map(r => {
-        let fc = '';
-        const rawF = r.FECHA_COMPRA || r.FechaCompra || r.fecha_compra || '';
-        if (rawF instanceof Date) fc = rawF.toISOString().split('T')[0];
-        else if (typeof rawF === 'number' && rawF > 40000) {
-          const b = new Date(Math.round((rawF - 25569) * 86400 * 1000));
-          fc = b.toISOString().split('T')[0];
-        } else if (typeof rawF === 'string' && rawF) {
-          fc = rawF.includes('/') ? rawF.split('/').reverse().join('-') : rawF.split('T')[0];
+
+// Función auxiliar para obtener un campo sin importar mayúsculas/minúsculas
+function valCampo(fila, posiblesNombres) {
+    for (let nom of posiblesNombres) {
+        if (fila[nom] !== undefined && fila[nom] !== '') return fila[nom];
+    }
+    // Búsqueda case-insensitive sobre las claves reales
+    const clave = Object.keys(fila).find(k => posiblesNombres.some(pn => k.toUpperCase() === pn.toUpperCase()));
+    return clave ? fila[clave] : '';
+}
+
+window.datosCartera = rawCartera.map(r => {
+    // Fecha de compra robusta
+    const rawF = valCampo(r, ['FECHA_COMPRA','FechaCompra','fecha_compra','FECHA','Fecha','fecha']);
+    let fc = '';
+    if (rawF instanceof Date) {
+        fc = rawF.toISOString().split('T')[0];
+    } else if (typeof rawF === 'number' && rawF > 40000) {
+        const b = new Date(Math.round((rawF - 25569) * 86400 * 1000));
+        fc = b.toISOString().split('T')[0];
+    } else if (typeof rawF === 'string' && rawF) {
+        // Formato dd/mm/yyyy o yyyy-mm-dd
+        const limpio = rawF.trim();
+        if (limpio.includes('/')) {
+            const partes = limpio.split('/');
+            if (partes.length === 3) fc = partes[2] + '-' + partes[1].padStart(2,'0') + '-' + partes[0].padStart(2,'0');
+            else fc = '';
+        } else if (limpio.includes('-')) {
+            fc = limpio.split('T')[0];
+        } else {
+            fc = '';
         }
-        return {
-          id:           String(r.ID || r.Id || r.id || uuid()),
-          ticker:       String(r.TICKER || r.Ticker || r.ticker || '').toUpperCase().trim(),
-          nombre:       String(r.NOMBRE || r.Nombre || r.nombre || '').trim(),
-          tipo:         String(r.TIPO   || r.Tipo   || r.tipo   || 'OTRO').toUpperCase().trim(),
-          cuenta:       String(r.CUENTA || r.Cuenta || r.cuenta || '').toUpperCase().trim(),
-          cantidad:     parseFloat(r.CANTIDAD     || r.Cantidad     || 0),
-          precioCompra: parseFloat(r.PRECIO_COMPRA  || r.PrecioCompra  || r.precio_compra  || 0),
-          precioActual: parseFloat(r.PRECIO_ACTUAL  || r.PrecioActual  || r.precio_actual  || 0),
-          fechaCompra:  fc,
-          notas:        String(r.NOTAS || r.Notas || r.notas || '').trim()
-        };
-      }).filter(p => p.ticker || p.nombre);
+    }
+
+    // Obtener campos con buscador tolerante
+    const tickerVal = String(valCampo(r, ['TICKER','Ticker','ticker']) || '').toUpperCase().trim();
+    const nombreVal = String(valCampo(r, ['NOMBRE','Nombre','nombre']) || '').trim();
+    const tipoVal   = String(valCampo(r, ['TIPO','Tipo','tipo']) || 'OTRO').toUpperCase().trim();
+    const cuentaVal = String(valCampo(r, ['CUENTA','Cuenta','cuenta']) || '').toUpperCase().trim();
+    const cantVal   = parseFloat(valCampo(r, ['CANTIDAD','Cantidad','cantidad']) || 0);
+    const pCompra   = parseFloat(valCampo(r, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA']) || 0);
+    const pActual   = parseFloat(valCampo(r, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL']) || 0);
+    const notasVal  = String(valCampo(r, ['NOTAS','Notas','notas']) || '').trim();
+
+    // Si el ticker está vacío pero hay nombre, usamos el nombre como ticker
+    const tickerFinal = tickerVal || nombreVal;
+    const nombreFinal = nombreVal;
+
+    return {
+        id:           String(valCampo(r, ['ID','Id','id']) || uuid()),
+        ticker:       tickerFinal,
+        nombre:       nombreFinal,
+        tipo:         tipoVal,
+        cuenta:       cuentaVal,
+        cantidad:     isNaN(cantVal) ? 0 : cantVal,
+        precioCompra: isNaN(pCompra) ? 0 : pCompra,
+        precioActual: isNaN(pActual) ? 0 : pActual,
+        fechaCompra:  fc,
+        notas:        notasVal
+    };
+}).filter(p => p.ticker || p.nombre);
 	} else {
 	  window.datosCartera = window.datosCartera || [];
 	}
@@ -8791,7 +8831,29 @@ window.obtenerPrecioBTC = async function() {
         return null;
     }
 };
-
+window.refrescarPrecioBTCModal = async function() {
+    const tipo = document.getElementById('cartera-tipo').value;
+    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    if (!esCripto) return;
+    const tickerInput = document.getElementById('cartera-ticker');
+    const ticker = tickerInput ? tickerInput.value.toUpperCase().trim() : '';
+    if (ticker !== 'BTC') return;
+    const inputActual = document.getElementById('cartera-precio-actual');
+    if (inputActual) {
+        inputActual.placeholder = 'Consultando...';
+        inputActual.style.color = '#00B8FF';
+        const precio = await window.obtenerPrecioBTC();
+        if (precio !== null) {
+            inputActual.value = precio.toFixed(2);
+            inputActual.style.color = '#39FF14';
+            window.actualizarPreviewPnl();
+            window.mostrarToast('Precio BTC actualizado desde Binance', 'success');
+        } else {
+            window.mostrarToast('No se pudo obtener el precio', 'error');
+            inputActual.style.color = '#FF2E4D';
+        }
+    }
+};
 window.cerrarModalCartera = function() {
     document.getElementById('modal-cartera-pos').classList.remove('active');
 };
@@ -8822,8 +8884,10 @@ window.comportamientoTipoActivo = async function() {
         inputActual.style.color = "#00B8FF";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(0, 184, 255, 0.5)";
         inputActual.placeholder = "Consultando...";
-        if (avisoApi) avisoApi.style.display = 'block';
-        avisoApi.innerText = "Valor total = cantidad × precio actual";
+        if (avisoApi) {
+    avisoApi.style.display = 'block';
+    avisoApi.innerHTML = `Valor total = cantidad × precio actual <span onclick="window.refrescarPrecioBTCModal()" style="color:#00B8FF; cursor:pointer; text-decoration:underline; margin-left:8px;">🔄 Actualizar precio</span>`;
+}
 
         let precioUnitario = null;
         const tickerInput = document.getElementById('cartera-ticker');
@@ -8839,7 +8903,7 @@ window.comportamientoTipoActivo = async function() {
             inputActual.value = '';
             inputActual.placeholder = "Introduce precio manual";
             inputActual.readOnly = false;
-            if (avisoApi) avisoApi.innerText = "No se pudo conectar con Binance. Introduce el precio manualmente.";
+            if (avisoApi) avisoApi.innerHTML = `No se pudo conectar con Binance. Introduce el precio manualmente. <span onclick="window.refrescarPrecioBTCModal()" style="color:#00B8FF; cursor:pointer; text-decoration:underline; margin-left:8px;">🔄 Reintentar</span>`;
             labelActual.innerHTML = 'PRECIO BTC/EUR (€) ← MANUAL';
         }
     } else {
@@ -10149,16 +10213,41 @@ window.renderizarEvolCartera = function() {
   const hist = window.historicoCartera || [];
   const card = document.getElementById('card-evol-cartera');
   const container = document.getElementById('chart-cartera-evol');
+  const statsDiv = document.getElementById('evol-stats'); // nuevo div de estadísticas
   if (!container || typeof echarts === 'undefined') return;
-  if (hist.length < 2) { if (card) card.style.display = 'none'; return; }
+  if (hist.length < 2) {
+    if (card) card.style.display = 'none';
+    if (statsDiv) statsDiv.style.display = 'none';
+    return;
+  }
   if (card) card.style.display = 'block';
+  if (statsDiv) statsDiv.style.display = 'flex';
 
   let chart = echarts.getInstanceByDom(container);
   if (!chart) chart = echarts.init(container);
 
   const fechas = hist.map(h => new Date(h.ts).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'}));
   const valores = hist.map(h => parseFloat(h.valor.toFixed(2)));
-  const colorLinea = valores[valores.length-1] >= valores[0] ? '#39FF14' : '#FF2E4D';
+
+  // Obtener el coste total actual desde el resumen de cartera
+  const costeActual = window.resumenCartera ? window.resumenCartera.totalCoste : 0;
+  const costes = new Array(valores.length).fill(costeActual);
+
+  const colorValor = valores[valores.length-1] >= valores[0] ? '#39FF14' : '#FF2E4D';
+  const colorCoste = '#888888';
+
+  // Calcular plusvalía en cada punto
+  const plusvalias = valores.map(v => v - costeActual);
+  const rentabilidades = plusvalias.map(p => costeActual > 0 ? (p / costeActual) * 100 : 0);
+
+  // Determinar colores para el área de plusvalía
+  const areaColorStops = valores.map((v, i) => {
+    const isGain = v >= costeActual;
+    return {
+      offset: i / (valores.length - 1),
+      color: isGain ? 'rgba(57, 255, 20, 0.25)' : 'rgba(255, 46, 77, 0.25)'
+    };
+  });
 
   chart.setOption({
     backgroundColor: 'transparent',
@@ -10174,27 +10263,94 @@ window.renderizarEvolCartera = function() {
       trigger:'axis', backgroundColor:'rgba(15,15,20,0.9)',
       borderColor:'rgba(255,255,255,0.1)', borderRadius:12,
       textStyle:{color:'#fff',fontSize:12,fontFamily:'Inter'},
-      formatter: p => {
+      formatter: function(params) {
         const fmt2 = v => new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',minimumFractionDigits:2}).format(v);
-        return `<b>${p[0].axisValue}</b><br/>${fmt2(p[0].value)}`;
+        const idx = params[0].dataIndex;
+        const vMercado = valores[idx];
+        const coste = costeActual;
+        const pnl = vMercado - coste;
+        const rent = coste > 0 ? ((vMercado / coste) - 1) * 100 : 0;
+        const signo = pnl >= 0 ? '+' : '';
+        const colorPnL = pnl >= 0 ? '#39FF14' : '#FF2E4D';
+        return `
+          <b>${params[0].axisValue}</b><br/>
+          <span style="color:#ccc;">Valor mercado:</span> ${fmt2(vMercado)}<br/>
+          <span style="color:#aaa;">Coste total:</span> ${fmt2(coste)}<br/>
+          <span style="color:${colorPnL};font-weight:bold;">Plusvalía: ${signo}${fmt2(pnl)} (${signo}${rent.toFixed(2)}%)</span>
+        `;
       }
     },
-    series: [{
-      type:'line', data:valores, smooth:true, symbol:'none',
-      lineStyle:{color:colorLinea,width:2.5,shadowBlur:8,shadowColor:colorLinea},
-areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
-    {offset:0, color: colorLinea + '59'},
-    {offset:1, color:'rgba(0,0,0,0)'}
-])}
-    }]
+    series: [
+      {
+        name: 'Valor mercado',
+        type:'line', data:valores, smooth:true, symbol:'none',
+        lineStyle:{color:colorValor,width:2.5,shadowBlur:8,shadowColor:colorValor},
+        areaStyle:{color:'transparent'}
+      },
+      {
+        name: 'Coste total',
+        type:'line', data:costes, smooth:false, symbol:'none',
+        lineStyle:{color:colorCoste,width:1.5,type:'dashed'},
+        itemStyle:{color:colorCoste}
+      },
+      {
+        name: 'Plusvalía',
+        type:'line', data:plusvalias, smooth:true, symbol:'none',
+        lineStyle:{color:'transparent',width:0},
+        areaStyle:{
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            {offset:0, color:'rgba(57,255,20,0.2)'},
+            {offset:1, color:'rgba(255,46,77,0.2)'}
+          ])
+        },
+        z: 0
+      }
+    ]
   }, { notMerge:true });
+
+  // Actualizar estadísticas si existe el div
+  if (statsDiv) {
+    const maxVal = Math.max(...valores);
+    const minVal = Math.min(...valores);
+    const maxPnl = Math.max(...plusvalias);
+    const minPnl = Math.min(...plusvalias);
+    const ultRent = rentabilidades[rentabilidades.length-1];
+    const firstVal = valores[0];
+    const lastVal = valores[valores.length-1];
+    const dias = (hist[hist.length-1].ts - hist[0].ts) / (1000*60*60*24);
+    const anios = Math.max(dias / 365, 0.01);
+    // CAGR simple: (last/first)^(1/anios)-1
+    let cagr = 0;
+    if (firstVal > 0 && lastVal > 0 && anios > 0) {
+      cagr = (Math.pow(lastVal / firstVal, 1/anios) - 1) * 100;
+    }
+    const fmtC = v => new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v);
+    const signo = (v) => v >= 0 ? '+' : '';
+    statsDiv.innerHTML = `
+      <div style="flex:1; text-align:center;">
+        <div style="font-size:9px; color:#888; text-transform:uppercase;">Valor máx.</div>
+        <div style="font-size:13px; font-weight:800; color:#fff;">${fmtC(maxVal)}</div>
+      </div>
+      <div style="flex:1; text-align:center;">
+        <div style="font-size:9px; color:#888; text-transform:uppercase;">Valor mín.</div>
+        <div style="font-size:13px; font-weight:800; color:#fff;">${fmtC(minVal)}</div>
+      </div>
+      <div style="flex:1; text-align:center;">
+        <div style="font-size:9px; color:#888; text-transform:uppercase;">+Valía máx.</div>
+        <div style="font-size:13px; font-weight:800; color:${maxPnl>=0?'#39FF14':'#FF2E4D'};">${signo(maxPnl)}${fmtC(maxPnl)}</div>
+      </div>
+      <div style="flex:1; text-align:center;">
+        <div style="font-size:9px; color:#888; text-transform:uppercase;">Rentab. anual.</div>
+        <div style="font-size:13px; font-weight:800; color:${cagr>=0?'#39FF14':'#FF2E4D'};">${signo(cagr)}${cagr.toFixed(2)}%</div>
+      </div>
+    `;
+  }
 
   if (!window._evolCarteraResizeObs) {
     window._evolCarteraResizeObs = new ResizeObserver(() => { if (chart) chart.resize(); });
     window._evolCarteraResizeObs.observe(container);
   }
 };
-
 // ── MODAL: NUEVA / EDITAR POSICIÓN ───────────────────────────────────
 window.abrirModalNuevaPosicion = function() {
   // Rellenar cuentas disponibles
@@ -10234,20 +10390,22 @@ window.editarPosicion = function(id) {
     document.getElementById('cartera-nombre').value    = pos.nombre;
     document.getElementById('cartera-tipo').value      = pos.tipo;
     document.getElementById('cartera-cuenta').value    = pos.cuenta;
-	    document.getElementById('cartera-cantidad').value  = pos.cantidad;
-	    document.getElementById('cartera-precio-compra').value = pos.precioCompra;
-	    document.getElementById('cartera-precio-actual').value = pos.precioActual;
-        document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
-	    document.getElementById('cartera-notas').value     = pos.notas || '';
+    document.getElementById('cartera-cantidad').value  = pos.cantidad;
+    document.getElementById('cartera-precio-compra').value = pos.precioCompra;
+    document.getElementById('cartera-precio-actual').value = pos.precioActual;
+    document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
+    document.getElementById('cartera-notas').value     = pos.notas || '';
     const titulo = document.getElementById('modal-cartera-titulo');
     if (titulo) titulo.innerText = 'EDITAR: ' + (pos.ticker || pos.nombre);
     const extBtns = document.getElementById('cartera-extra-btns');
     if (extBtns) extBtns.style.display = 'grid';
     window.actualizarPreviewPnl();
+    // Añadimos esta línea para que el modal se adapte al tipo de activo
+    if (typeof window.comportamientoTipoActivo === 'function') {
+        window.comportamientoTipoActivo();
+    }
   }, 50);
 };
-
-// cerrarModalCartera: definición única más arriba
 
 window.guardarPosicion = async function() {
     // 1. Obtener valores del DOM
