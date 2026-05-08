@@ -5555,6 +5555,10 @@ window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
 });
 // 4b. MÓDULO CARTERA: Sobreescribir saldos con valor de mercado real
 if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+// 4c. Actualizar plusvalía visible en Patrimonio
+if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
+  window.actualizarPlusvaliaPatrimonio();
+}
 // 5. ACTUALIZAR PANTALLA — solo renderiza la pestaña visible
 const _tabActiva = (document.querySelector('.view-section.active') || {}).id || '';
 if(typeof renderizar === 'function') renderizar();
@@ -5760,6 +5764,10 @@ ${htmlCuentas}
 `;
 });
 contenedorLista.innerHTML = htmlFinal;
+}
+// Refrescar plusvalía latente (cartera)
+if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
+  window.actualizarPlusvaliaPatrimonio();
 }
 }
 function renderizarGraficoEvolucion(movimientos) {
@@ -9880,7 +9888,23 @@ window.calcularValoresCartera = function() {
     window.actualizarDashCartera();
   }
 };
+// ── ACTUALIZADOR DE PLUSVALÍA EN PATRIMONIO (dedicado) ─────────────────
+window.actualizarPlusvaliaPatrimonio = function() {
+  const row = document.getElementById('patri-cartera-pnl-row');
+  const val = document.getElementById('patri-cartera-pnl-val');
+  if (!row || !val) return;
 
+  const resumen = window.resumenCartera;
+  if (resumen && resumen.numPosiciones > 0) {
+    row.style.display = 'block';
+    const signo = resumen.plusvalia >= 0 ? '+' : '';
+    const fmt = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 });
+    val.innerHTML = signo + fmt.format(resumen.plusvalia) + ' (' + signo + resumen.rentabilidad.toFixed(2) + '%)';
+    val.style.color = resumen.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
+  } else {
+    row.style.display = 'none';
+  }
+};
 // ── MÓDULO 4: ACTUALIZAR TARJETA DASHBOARD ───────────────────────────
 window.actualizarDashCartera = function() {
   const fmt = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
