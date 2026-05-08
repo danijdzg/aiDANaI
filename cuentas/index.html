@@ -9782,7 +9782,6 @@ window.calcularValoresCartera = function() {
   // 📌 NUEVO: filtrar posiciones por usuario activo
   const posicionesFiltradas = window.datosCartera.filter(p => {
     if (typeof pasaFiltroPropietario !== 'function') return true;
-    // pasamos un objeto simulado con la cuenta de la posición
     return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
   });
 
@@ -9791,10 +9790,10 @@ window.calcularValoresCartera = function() {
     return;
   }
 
-  const valorPorCuenta = {};
   const costePorCuenta = {};
-  let totalValor = 0;
+  const valorPorCuenta = {};
   let totalCoste = 0;
+  let totalValor = 0;
 
   posicionesFiltradas.forEach(pos => {
     const cantidad = parseFloat(pos.cantidad) || 0;
@@ -9804,9 +9803,11 @@ window.calcularValoresCartera = function() {
 
     let costeTotal, valorActual;
     if (esCripto) {
+      // Cripto: precioCompra = importe total invertido, precioActual = precio unitario BTC/EUR
       costeTotal = precioCompra;
       valorActual = cantidad * precioActual;
     } else {
+      // Resto: precioCompra = importe invertido, precioActual = valor total estimado por el usuario
       costeTotal = precioCompra;
       valorActual = precioActual;
     }
@@ -9821,40 +9822,38 @@ window.calcularValoresCartera = function() {
     }
   });
 
+  // 🧮 Actualizar cuentas: el saldo contable SIEMPRE será igual al COSTE TOTAL
   if (window.mapaCuentas) {
-    Object.keys(valorPorCuenta).forEach(cta => {
-        const valorCartera = valorPorCuenta[cta];
-        const coste = costePorCuenta[cta];
-        const infoCuenta = window.mapaCuentas[cta];
-        if (infoCuenta) {
-    const tipoCuenta = (infoCuenta.tipo || '').toUpperCase();
-    if (tipoCuenta === 'AUTOCUSTODIA') {
-        // ✅ Asignar directamente el coste (no sumar al saldo de movimientos)
-        infoCuenta.saldoActual = coste;
-    } else {
-        // Para otras cuentas de inversión, mantenemos la suma sobre el saldo de movimientos
-        infoCuenta.saldoActual = (infoCuenta.saldoActual || 0) + valorCartera;
-    }
-    infoCuenta.costeTotal = (infoCuenta.costeTotal || 0) + coste;
-    infoCuenta.plusvalia = (infoCuenta.plusvalia || 0) + (valorCartera - coste);
-    infoCuenta.tieneCartera = true;
-} else {
-            window.mapaCuentas[cta] = {
-                nombre: cta,
-                tipo: 'INVERSIÓN',
-                esInversion: true,
-                saldoActual: valorCartera,
-                costeTotal: coste,
-                plusvalia: valorCartera - coste,
-                tieneCartera: true
-            };
-        }
+    Object.keys(costePorCuenta).forEach(cta => {
+      const coste = costePorCuenta[cta];
+      const valorCartera = valorPorCuenta[cta];
+      const infoCuenta = window.mapaCuentas[cta];
+
+      if (infoCuenta) {
+        // Cuenta ya existente → sobreescribimos saldo con el coste de las posiciones
+        infoCuenta.saldoActual  = coste;          // ← esto es lo que va al patrimonio
+        infoCuenta.costeTotal   = coste;          // coste consolidado de todas sus posiciones
+        infoCuenta.valorMercado = valorCartera;    // nuevo campo para el valor actual de mercado
+        infoCuenta.plusvalia    = valorCartera - coste;
+        infoCuenta.tieneCartera = true;
+      } else {
+        // Crear la cuenta dinámicamente (poco común, pero por si acaso)
+        window.mapaCuentas[cta] = {
+          nombre: cta,
+          tipo: 'INVERSIÓN',
+          esInversion: true,
+          saldoActual: coste,
+          costeTotal: coste,
+          valorMercado: valorCartera,
+          plusvalia: valorCartera - coste,
+          tieneCartera: true
+        };
+      }
     });
-}
+  }
 
   const plusvalia = totalValor - totalCoste;
-  let rentabilidad = 0;
-  if (totalCoste > 0) rentabilidad = (plusvalia / totalCoste) * 100;
+  const rentabilidad = totalCoste > 0 ? (plusvalia / totalCoste) * 100 : 0;
 
   window.resumenCartera = {
     totalValor,
@@ -9865,6 +9864,7 @@ window.calcularValoresCartera = function() {
     posiciones: posicionesFiltradas
   };
 
+  // Actualizar histórico diario (si procede)
   const hoy = new Date();
   const hoyStr = hoy.toISOString().split('T')[0];
   window.historicoCartera = window.historicoCartera || [];
