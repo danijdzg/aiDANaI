@@ -2201,16 +2201,7 @@ DN
 <div id="chart-Sankey" style="width: 100%; height: 100%;"></div>
 </div>
 </div>
-<div class="master-card" style="margin-top: 15px; padding-bottom: 8px;">
-<div class="card-header">
-<span class="card-title">ÚLTIMOS MOVIMIENTOS</span>
-<button onclick="irPestana('movs')" style="background:transparent; border:none; color:var(--c-primary); font-size:10px; font-weight:900; cursor:pointer; letter-spacing: 1px;">VER TODOS ❯</button>
-</div>
-<div id="lista-ultimos-movs" style="display:flex; flex-direction:column; gap:8px;">
-<div style="text-align:center; padding:15px; color:#666; font-size:12px;">Cargando movimientos...</div>
-</div>
-</div>
-<div id="contenedor-alertas-7d"></div>
+<div id="contenedor-alertas-15d"></div>
 <div class="ai-terminal" style="margin-top: 20px; margin-bottom: 20px;">
 <div class="ai-header">
 <span>> ANALISIS IA</span>
@@ -4720,96 +4711,6 @@ document.head.appendChild(style);
 }
 }
 // ==========================================
-// 📊 ÚLTIMOS MOVIMIENTOS (TARJETA COMPLETA 2 LÍNEAS)
-// ==========================================
-window.renderizarUltimosMovimientos = function() {
-const contenedor = document.getElementById('lista-ultimos-movs');
-if (!contenedor) return;
-// 1. Si no hay datos todavía, mostramos un mensaje
-if (!window.datos || window.datos.length === 0) {
-contenedor.innerHTML = '<div style="text-align:center; padding:15px; color:#666; font-size:12px;">No hay movimientos registrados.</div>';
-return;
-}
-// 2. 🏦 ALGORITMO BANCARIO: Ordenar todos los movimientos por fecha
-// Aplicamos el filtro de propietario y la regla de desempate de ingresos/gastos
-const datosFiltrados = window.datos.filter(m => typeof pasaFiltroPropietario === 'function' ? pasaFiltroPropietario(m) : true);
-const ordenados = [...datosFiltrados].sort((a, b) => {
-const valA = a.ts || new Date(a.fecha).getTime();
-const valB = b.ts || new Date(b.fecha).getTime();
-if (valA !== valB) return valB - valA;
-return a.importe - b.importe; // Los gastos se muestran primero (arriba)
-});
-// Recortar solo los 5 primeros
-const ultimos5 = ordenados.slice(0, 5);
-// 3. 🚀 MAGIA DE RENDIMIENTO: Usar una variable temporal de texto
-let htmlFinal = '';
-ultimos5.forEach(m => {
-// --- COLORES Y SIGNOS CORREGIDOS ---
-const esTraspaso = m.tipo === 'traspaso' || (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO'));
-let colorImporte = '';
-let colorBorde = '';
-let signo = '';
-if (esTraspaso) {
-colorImporte = 'var(--c-transfer)'; // AZUL
-colorBorde = 'var(--c-transfer)';
-} else if (m.importe >= 0) {
-colorImporte = 'var(--c-success)'; // VERDE
-colorBorde = 'var(--c-success)';
-signo = '+';
-} else {
-colorImporte = 'var(--c-danger)'; // ROJO
-colorBorde = 'var(--c-danger)';
-}
-// --- FORMATEO DE DINERO ---
-const formateadorDinero = FMT_NUM;
-const importeFormateado = formateadorDinero.format(Math.abs(m.importe)) + ' €';
-if (!esTraspaso && m.importe < 0) {
-signo = '-';
-}
-let saldoStr = '-';
-if (m.saldo !== undefined && m.saldo !== null) {
-saldoStr = formateadorDinero.format(m.saldo) + ' €';
-} else if (window.mapaCuentas && window.mapaCuentas[m.cuenta]) {
-saldoStr = formateadorDinero.format(window.mapaCuentas[m.cuenta].saldoActual || 0) + ' €';
-}
-// --- TEXTOS LIMPIOS Y FECHAS ---
-const f = new Date(m.ts || m.fecha);
-const fechaFormateada = isNaN(f.getTime()) ? '?' : f.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
-const cuentaLimpia = Security.escapeHTML((m.cuenta || '').replace('D-', '').replace('N-', ''));
-const escapeHTML = (str) => typeof Security !== 'undefined' ? Security.escapeHTML(str) : str;
-const descStr = m.descripcion || m.detalle || '';
-let conceptoCompleto = escapeHTML(m.concepto || 'VARIOS');
-if (descStr) {
-conceptoCompleto += ` <span style="font-weight:400; color:#FFFFFF;">- ${escapeHTML(descStr)}</span>`;
-}
-const benefStr = m.beneficiario ? ` &bull; <span style="color:#FFD60A; opacity:0.9;">${escapeHTML(m.beneficiario)}</span>` : '';
-// --- DIBUJO ESTRUCTURA: ACUMULAMOS EN LA VARIABLE ---
-htmlFinal += `
-<div onclick="if(typeof window.editarMovimiento === 'function') window.editarMovimiento('${m.id}')" style="cursor:pointer; display:flex; flex-direction:column; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border-left: 3px solid ${colorBorde}; transition: transform 0.1s, background 0.2s; gap: 4px; margin-bottom: 2px;" onmousedown="this.style.transform='scale(0.98)'; this.style.background='rgba(255,255,255,0.08)'" onmouseup="this.style.transform='scale(1)'; this.style.background='rgba(255,255,255,0.03)'" onmouseleave="this.style.transform='scale(1)'; this.style.background='rgba(255,255,255,0.03)'">
-<div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
-<span style="font-size:13px; font-weight:800; color:#eee; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
-${conceptoCompleto}
-</span>
-<span style="font-size:14px; font-weight:900; color:${colorImporte}; white-space:nowrap; flex-shrink:0;">
-${signo}${importeFormateado}
-</span>
-</div>
-<div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
-<span style="font-size:10px; color:#888; text-transform:uppercase; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
-${fechaFormateada} &bull; ${cuentaLimpia}${benefStr}
-</span>
-<span style="font-size:11px; font-weight:bold; color:#FFFFFF; white-space:nowrap; flex-shrink:0;">
-${saldoStr}
-</span>
-</div>
-</div>
-`;
-});
-// 4. PINTAR EL DOM UNA ÚNICA VEZ AL FINAL
-contenedor.innerHTML = htmlFinal;
-};
-
-// ==========================================
 // 📅 UTILIDAD DE FECHAS (Reparación del error)
 // ==========================================
 window.getFechasDashboard = function() {
@@ -7177,10 +7078,6 @@ generarAnalisisIA(datosUsuario);
 if (typeof window.calcularPresupuestoYComparativa === 'function') {
 window.calcularPresupuestoYComparativa();
 }
-// 10. ÚLTIMOS MOVIMIENTOS (tarjeta del dashboard)
-if (typeof renderizarUltimosMovimientos === 'function') {
-renderizarUltimosMovimientos();
-}
 // 11. ALERTAS DE RECIBOS PRÓXIMOS
 if (window.AppInitializer && typeof window.AppInitializer.revisarRecibosProximos === 'function') {
 window.AppInitializer.revisarRecibosProximos();
@@ -8388,7 +8285,7 @@ let recurrentes = window.datosRecurrentes || [];
 const hoy = new Date();
 hoy.setHours(0,0,0,0);
 const limite = new Date(hoy);
-limite.setDate(hoy.getDate() + 7);
+limite.setDate(hoy.getDate() + 15);
 limite.setHours(23,59,59,999);
 const proximos = recurrentes.filter(r => {
 if (!r.fechaProx) return false;
@@ -8397,14 +8294,14 @@ fechaRec.setHours(12,0,0,0);
 if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: r.cuenta || '', beneficiario: '' })) return false;
 return fechaRec >= hoy && fechaRec <= limite;
 }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
-const alertaAntigua = document.getElementById('alerta-recibos-7d');
+const alertaAntigua = document.getElementById('alerta-recibos-15d');
 if (alertaAntigua) alertaAntigua.remove();
 if (proximos.length > 0) {
 const alertaDiv = document.createElement('div');
-alertaDiv.id = 'alerta-recibos-7d';
+alertaDiv.id = 'alerta-recibos-15d';
 alertaDiv.className = 'tarjeta-alerta-animada';
 let html = '<div class="contenido-alerta-amoled">';
-html += '<div style="display:flex; align-items:center; margin-bottom:12px;"><span class="material-icons" style="color: #FFD60A; margin-right:8px; font-size:22px; filter: drop-shadow(0 0 5px rgba(255,214,10,0.5));">notification_important</span><h3 style="margin:0; font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; color: #FFD60A;">Próximos 7 días</h3></div>';
+html += '<div style="display:flex; align-items:center; margin-bottom:12px;"><span class="material-icons" style="color: #FFD60A; margin-right:8px; font-size:22px; filter: drop-shadow(0 0 5px rgba(255,214,10,0.5));">notification_important</span><h3 style="margin:0; font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; color: #FFD60A;">Próximos 15 días</h3></div>';
 html += '<div style="display:flex; flex-direction:column; gap:8px;">';
 let saldosSimulados = {};
 if (window.mapaCuentas) {
