@@ -3977,23 +3977,32 @@ const oneDrive = new OneDriveManager();
 // 🚀 ARRANQUE SEGURO (CON PREGUNTA)
 // ==========================================
 async function iniciarSistema() {
-const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
-// 1. PRIMER INTENTO: CONEXIÓN SILENCIOSA
-try {
-if(barra) barra.innerText = "☁️ Verificando Nube...";
-// Intentamos conectar sin molestar
-await oneDrive.getToken();
-// Si pasa, descargamos
-if(barra) barra.innerText = "⬇️ Bajando datos...";
-const wb = await oneDrive.loadFile();
-procesarLibroLeido(wb);
-// ÉXITO: Activamos modo nube
-cambiarModo('cloud');
-if(barra) barra.innerText = "✅ Sincronizado";
-} catch (error) {
-    warnDev("⚠️ Fallo arranque automático:", error);
-    notify("❌ No se pudo conectar a OneDrive. Usa el botón 📂 para cargar un archivo Excel local.", "error");
-    
+    const barra = document.getElementById('msg-estado') || document.getElementById('status-text');
+    // 1. PRIMER INTENTO: CONEXIÓN SILENCIOSA
+    try {
+        if(barra) barra.innerText = "☁️ Verificando Nube...";
+        await oneDrive.getToken(); 
+        if(barra) barra.innerText = "⬇️ Bajando datos...";
+        const wb = await oneDrive.loadFile();
+        
+        // ---> 🛑 DETENEMOS LA ANIMACIÓN: ¡YA TENEMOS LOS DATOS! <---
+        if (typeof window.detenerAnimacionCargaNumeros === 'function') {
+            window.detenerAnimacionCargaNumeros();
+        }
+
+        procesarLibroLeido(wb); 
+        // ÉXITO: Activamos modo nube
+        cambiarModo('cloud');
+        if(barra) barra.innerText = "✅ Sincronizado";
+    } catch (error) {
+        
+        // ---> 🛑 DETENEMOS TAMBIÉN EN CASO DE ERROR DE RED <---
+        if (typeof window.detenerAnimacionCargaNumeros === 'function') {
+            window.detenerAnimacionCargaNumeros();
+        }
+        
+        warnDev("⚠️ Fallo arranque automático:", error);
+        notify("❌ No se pudo conectar a OneDrive. Usa el botón 📂 para cargar un archivo Excel local.", "error");    
     // Resaltar el botón de carga local
     const btnLoadLocal = document.getElementById('btn-load-local');
     if (btnLoadLocal) {
@@ -8295,8 +8304,13 @@ window.desbloquearApp = function() {
         el.classList.add('visible');
     });
 
-    // 4. Marcamos que la app ya está desbloqueada (para que configurarSeguridad no se active)
+    // 4. Marcamos que la app ya está desbloqueada
     window._appDesbloqueada = true;
+
+    // ---> 🚀 ARRANCAMOS EL EFECTO DE NÚMEROS MIENTRAS CARGA <---
+    if (typeof window.iniciarAnimacionCargaNumeros === 'function') {
+        window.iniciarAnimacionCargaNumeros();
+    }
 
     // 5. Arrancamos el motor financiero (sin volver a mostrar el overlay)
     if (typeof window.AppInitializer !== 'undefined') {
@@ -8400,8 +8414,10 @@ if (typeof mostrarEstado === 'function') notify("⚠️ Nube pausada. Pulsa el b
 }
 }
 } else {
-if (typeof cambiarModo === 'function') cambiarModo('local');
-}
+            if (typeof cambiarModo === 'function') cambiarModo('local');
+            // ---> 🛑 DETENEMOS SI ENTRA 100% OFFLINE <---
+            if (typeof window.detenerAnimacionCargaNumeros === 'function') window.detenerAnimacionCargaNumeros();
+        }
 },
 revisarRecibosProximos: function() {
 let recurrentes = window.datosRecurrentes || [];
@@ -8934,6 +8950,36 @@ document.addEventListener('keydown', function(event) {
         event.preventDefault();
     }
 });
+// ==========================================
+// 🎲 MOTOR DE ANIMACIÓN DE CARGA (SCRAMBLE EFFECT)
+// ==========================================
+window._animacionCargaInterval = null;
+
+window.iniciarAnimacionCargaNumeros = function() {
+    // Buscamos las etiquetas que muestran dinero clave en el inicio y patrimonio
+    const elementos = document.querySelectorAll('.kpi-value, .val-breakdown, .orange-val, .green-val-freedom');
+    
+    // Añadimos el efecto visual
+    elementos.forEach(el => el.classList.add('scrambling-number'));
+
+    // Iteramos los números aleatoriamente cada 50 milisegundos
+    window._animacionCargaInterval = setInterval(() => {
+        elementos.forEach(el => {
+            const numAleatorio = (Math.random() * 9999).toFixed(2);
+            el.innerText = numAleatorio.replace('.', ',') + ' €'; 
+        });
+    }, 50);
+};
+
+window.detenerAnimacionCargaNumeros = function() {
+    if (window._animacionCargaInterval) {
+        clearInterval(window._animacionCargaInterval);
+        window._animacionCargaInterval = null;
+    }
+    // Retiramos el desenfoque para que los números finales queden nítidos
+    const elementos = document.querySelectorAll('.scrambling-number');
+    elementos.forEach(el => el.classList.remove('scrambling-number'));
+};
 </script>
 <div id="spotlight-modal">
 <button class="spotlight-close" onclick="cerrarSpotlight()"><span class="material-icons">close</span></button>
