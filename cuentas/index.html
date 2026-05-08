@@ -2063,7 +2063,7 @@ body #fab-main:active {
     0% {
         opacity: 0;
         /* Mantiene el centro en X (-50%) y le suma los 30px en Y para el efecto de entrada */
-        transform: translate(-50%, calc(-50% + 30px)) scale(0.96);
+        transform: translate(-50%, calc(-50% + 40px)) scale(0.96);
         filter: blur(2px);
     }
     100% {
@@ -2104,7 +2104,7 @@ body #fab-main:active {
 </div>
     <div style="flex-grow: 1;"></div>
     
-    <div id="pin-pad" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 340px; flex-direction: column; align-items: center; background: rgba(20,20,20,0.6); padding: 30px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 50px rgba(0,0,0,0.5); backdrop-filter: blur(10px); box-sizing: border-box;">
+    <div id="pin-pad" style="display: none; position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 340px; flex-direction: column; align-items: center; background: rgba(20,20,20,0.6); padding: 30px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 50px rgba(0,0,0,0.5); backdrop-filter: blur(10px); box-sizing: border-box;">
     <div id="auth-message" style="color: #888888; font-size: 15px; margin-bottom: 20px; text-align: center;">Verifica tu identidad para acceder</div>
     <div id="pin-dots" style="display: flex; gap: 24px; justify-content: center; margin-bottom: 40px;">
         <div class="pin-dot" style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); transition: all 0.2s ease;"></div>
@@ -8202,7 +8202,7 @@ window.mostrarPin = function() {
     window.pinActualUI = "";
     window.actualizarPuntosPin();
     const msg = document.getElementById('auth-message');
-    if(msg) { msg.innerText = "Introduce tu PIN de acceso"; msg.style.color = "#FFFFFF"; }
+    if(msg) { msg.innerText = "Introduce PIN"; msg.style.color = "#FFFFFF"; }
 };
 window.teclaPin = function(num) {
     if (window.pinActualUI.length < 4) {
@@ -8321,7 +8321,7 @@ document.addEventListener('visibilitychange', () => {
                     el.classList.remove('visible');
                 });
                 const msg = document.getElementById('auth-message');
-                if (msg) msg.innerText = "Sesión bloqueada. Introduce tu PIN.";
+                if (msg) msg.innerText = "Sesión bloqueada. Introduce PIN.";
             }
         }
     }
@@ -8357,6 +8357,7 @@ configurarSeguridad: function() {
     sessionStorage.removeItem('aidanai_bio_key');
     sessionStorage.removeItem('temp_pin_session');
 
+
     const overlay = document.getElementById('auth-overlay');
     if (overlay) overlay.style.display = 'flex';
 
@@ -8368,7 +8369,7 @@ configurarSeguridad: function() {
     window.actualizarPuntosPin();
     const msg = document.getElementById('auth-message');
     if (msg) {
-        msg.innerText = "Introduce tu PIN de acceso";
+        msg.innerText = "Introduce PIN";
         msg.style.color = "#FFFFFF";
     }
 },
@@ -8897,6 +8898,41 @@ document.addEventListener('DOMContentLoaded', function() {
             window.AppInitializer.configurarSeguridad();
         }
     }, 10);
+});
+// ── SOPORTE PARA TECLADO FÍSICO EN PANTALLA DE PIN ──
+document.addEventListener('keydown', function(event) {
+    // 1. Verificamos si la pantalla de PIN está visible
+    const authOverlay = document.getElementById('auth-overlay');
+    // Si no existe o está oculta, no hacemos nada (permite escribir en otros inputs de la app)
+    if (!authOverlay || window.getComputedStyle(authOverlay).display === 'none') {
+        return; 
+    }
+
+    // 2. Si se pulsa un número del 0 al 9
+    if (event.key >= '0' && event.key <= '9') {
+        // Buscamos los elementos clicables dentro de tu teclado
+        const botonesPin = document.querySelectorAll('#pin-pad div, #pin-pad button');
+        
+        for (let btn of botonesPin) {
+            // Buscamos el botón que tenga exactamente el texto del número pulsado
+            if (btn.textContent.trim() === event.key) {
+                btn.click(); // Simulamos el toque del usuario
+                event.preventDefault(); // Evitamos comportamientos por defecto del navegador
+                break;
+            }
+        }
+    } 
+    // 3. Si se pulsa la tecla de borrar (Retroceso / Backspace)
+    else if (event.key === 'Backspace') {
+        // Manipulamos las variables globales que ya tienes definidas en tu código
+        if (typeof window.pinActualUI !== 'undefined' && window.pinActualUI.length > 0) {
+            window.pinActualUI = window.pinActualUI.slice(0, -1); // Quitamos el último número
+            if (typeof window.actualizarPuntosPin === 'function') {
+                window.actualizarPuntosPin(); // Actualizamos los puntitos visuales
+            }
+        }
+        event.preventDefault();
+    }
 });
 </script>
 <div id="spotlight-modal">
