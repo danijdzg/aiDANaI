@@ -2827,7 +2827,7 @@ window.UIEvents.on('datos:actualizados', function() {
 if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
 if (typeof renderizar === 'function') renderizar();
-if (typeof actualizarDashboard === 'function') actualizarDashboard();
+if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
 if (typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
 if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 });
@@ -2990,19 +2990,19 @@ let colorFinal = colores[tipoNorm] || '#00B8FF';
 // 🛡️ REGLA DE ORO: Si no hay internet, el semáforo siempre se pone ROJO.
 if (!navigator.onLine) {
 colorFinal = colores.error;
-window.estadoConexion = 'error';
+window.AppState.estadoSemaforo = 'error';
 } else {
-window.estadoConexion = tipoNorm;
+window.AppState.estadoSemaforo = tipoNorm;
 }
 dot.style.backgroundColor = colorFinal;
 dot.style.boxShadow = `0 0 10px ${colorFinal}`;
 // Vuelve a verde brillante automáticamente si no hay error ni está guardando
-if (window.estadoConexion !== 'error' && window.estadoConexion !== 'loading') {
+if (window.AppState.estadoSemaforo !== 'error' && window.AppState.estadoSemaforo !== 'loading') {
 window.sentryTimeout = setTimeout(() => {
 if (dot && navigator.onLine) {
 dot.style.backgroundColor = '#39FF14';
 dot.style.boxShadow = '0 0 10px #39FF14';
-window.estadoConexion = 'success';
+window.AppState.estadoSemaforo = 'success';
 }
 }, 3000);
 }
@@ -3734,7 +3734,7 @@ return String(str)
 window.modoTransaccionActual = window.modoTransaccionActual || null;
 let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '', tipoCuenta: '' };
 let chartInstance = null;
-let ordenPatri = { campo: 'saldo', asc: false };
+window.ordenPatri = { campo: 'saldo', asc: false };
 window.ordenActivo = { campo: 'ts', asc: false };
 // === NUEVA MEDIDA 3: MEMORIA DE ELEFANTE (Restaurar al inicio) ===
 document.addEventListener('DOMContentLoaded', () => {
@@ -5271,8 +5271,8 @@ const modal = document.getElementById('modal-extracto');
 if(modal) modal.classList.remove('active');
 };
 function cambiarOrdenPatrimonio(campo) {
-if (ordenPatri.campo === campo) { ordenPatri.asc = !ordenPatri.asc; }
-else { ordenPatri.campo = campo; ordenPatri.asc = (campo === 'cuenta'); }
+if (window.ordenPatri.campo === campo) { window.ordenPatri.asc = !window.ordenPatri.asc; }
+else { window.ordenPatri.campo = campo; window.ordenPatri.asc = (campo === 'cuenta'); }
 actualizarPatrimonio();
 }
 function togglePatriGroup(id) {
@@ -6899,7 +6899,7 @@ window.toggleUsuario = function() {
     
     // 4. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
     setTimeout(() => {
-        let datosParaGrafico = window.datosPropietario || window.datos;
+        let datosParaGrafico = window.datos;
         if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion(datosParaGrafico);
         if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
         if(typeof renderTreeMap === 'function') renderTreeMap();
@@ -7116,7 +7116,7 @@ if (typeof guardarUniversal === 'function' && window.modoNube) {
 };
 // --- CONTROL DEL SEMÁFORO Y SEGURIDAD (V. DEFINITIVA UNIFICADA) ---
 // Acepta AMBOS conjuntos de aliases: {ok, cargando, error} y {verde, naranja, rojo, local}
-window.estadoConexion = 'ok';
+window.AppState.estadoSemaforo = 'ok';
 // ==========================================
 // ⚙️ CONTROL DE TIPO RECURRENTE (Y FUNCIONES DE MODAL)
 // ==========================================
@@ -7272,7 +7272,7 @@ contenedor.innerHTML = htmlFinal;
 window.borrarRecurrente = async function(id) {
 if(!confirm("¿Eliminar esta regla fija para siempre?")) return;
 window.datosRecurrentes = window.datosRecurrentes.filter(r => r.id !== id);
-await guardarTodoConRecurrentes();
+await guardarUniversal();
 cargarVistaRecurrentes();
 }
 // --- FUNCIONES DE ACCIÓN PARA LOS BOTONES NUEVOS ---
@@ -7371,18 +7371,6 @@ fecha.setDate(fecha.getDate() + 1);
 }
 // Siempre devolvemos en formato YYYY-MM-DD (compatible con Excel y Date())
 return fecha.toISOString().split('T')[0];
-}
-async function guardarTodoConRecurrentes() {
-// 🔒 UNIFICACIÓN: Esta función ya no duplica la lógica de guardado.
-// Delega en guardarUniversal() que es la única fuente de verdad para subir a la nube.
-// Así garantizamos que los recurrentes también pasan por:
-//   ✅ El semáforo isSaving (no dos guardados simultáneos)
-//   ✅ El header If-Match (detección de conflictos entre usuarios)
-//   ✅ El sistema de reintentos y backup de emergencia
-//   ✅ La actualización del eTag tras guardado exitoso
-if (typeof guardarUniversal === 'function') {
-await guardarUniversal();
-}
 }
 // --- OPCIÓN B: AUTOCOMPLETADO MÁGICO (VERSIÓN 4.0 - TRASPASOS INTELIGENTES) ---
 window.detectarMagia = function(texto) {
@@ -7572,7 +7560,11 @@ window.guardarComoRecurrenteUnificado = async function() {
         window.datosRecurrentes.push(reglaObj);
     }
 
-    await guardarTodoConRecurrentes();
+    await function cambiarOrdenPatrimonio(campo) {
+    if (ordenPatri.campo === campo) { ordenPatri.asc = !ordenPatri.asc; }
+    else { ordenPatri.campo = campo; ordenPatri.asc = (campo === 'cuenta'); }
+    actualizarPatrimonio();
+}();
     if(typeof cerrarModal === 'function') cerrarModal();
     notify("✅ Regla fija guardada", "success");
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
@@ -7660,7 +7652,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         // Actualizamos la siguiente fecha de la regla
         if(typeof calcularSiguienteFecha === 'function') {
             regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-            await guardarTodoConRecurrentes();
+            await guardarUniversal();
             cargarVistaRecurrentes();
         }
     } catch (e) {
