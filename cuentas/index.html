@@ -384,8 +384,6 @@ text-shadow: 0 0 8px var(--c-accent);
     border-radius: 16px;
     margin-bottom: 15px;
     display: none;
-    position:relative;
-    z-
     padding: 24px 20px; /* Más aire interior */
     flex-direction: column; /* Fundamental para evitar amontonamiento */
     gap: 16px; /* Separación perfecta entre las filas */
@@ -2413,7 +2411,7 @@ DN
 </div>
 
 <div id="tab-movs" class="view-section">
-<button class="filters-toggle" onclick="event.stopPropagation(); toggleFiltros()"><span class="material-icons">filter_list</span> Filtros Avanzados</button>
+<button class="filters-toggle" onclick="toggleFiltros()"><span class="material-icons">filter_list</span> Filtros Avanzados</button>
 <div id="panel-filtros" class="filters-container">
     
     <!-- Fila 1: Cuentas -->
@@ -2829,7 +2827,7 @@ window.UIEvents.on('datos:actualizados', function() {
 if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
 if (typeof renderizar === 'function') renderizar();
-if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+if (typeof actualizarDashboard === 'function') actualizarDashboard();
 if (typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
 if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 });
@@ -2992,19 +2990,19 @@ let colorFinal = colores[tipoNorm] || '#00B8FF';
 // 🛡️ REGLA DE ORO: Si no hay internet, el semáforo siempre se pone ROJO.
 if (!navigator.onLine) {
 colorFinal = colores.error;
-window.AppState.estadoSemaforo = 'error';
+window.estadoConexion = 'error';
 } else {
-window.AppState.estadoSemaforo = tipoNorm;
+window.estadoConexion = tipoNorm;
 }
 dot.style.backgroundColor = colorFinal;
 dot.style.boxShadow = `0 0 10px ${colorFinal}`;
 // Vuelve a verde brillante automáticamente si no hay error ni está guardando
-if (window.AppState.estadoSemaforo !== 'error' && window.AppState.estadoSemaforo !== 'loading') {
+if (window.estadoConexion !== 'error' && window.estadoConexion !== 'loading') {
 window.sentryTimeout = setTimeout(() => {
 if (dot && navigator.onLine) {
 dot.style.backgroundColor = '#39FF14';
 dot.style.boxShadow = '0 0 10px #39FF14';
-window.AppState.estadoSemaforo = 'success';
+window.estadoConexion = 'success';
 }
 }, 3000);
 }
@@ -3164,6 +3162,58 @@ animationId = requestAnimationFrame(animate);
 return { start: init };
 })();
 /* ============================================================
+🔒 CRYPTOSYSTEM — AES-GCM-256 con PBKDF2-SHA256
+Responsabilidad única: encriptar/desencriptar blobs en b64.
+============================================================ */
+const CryptoSystem = (() => {
+const ITER      = 200_000;   // OWASP 2024 mínimo para SHA-256
+const KEY_LEN   = 256;
+const SALT_LEN  = 16;        // 128 bits
+const IV_LEN    = 12;        // 96 bits (óptimo GCM)
+const enc       = new TextEncoder();
+const dec       = new TextDecoder();
+async function _derivarClave(password, salt) {
+const keyMaterial = await crypto.subtle.importKey(
+'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
+);
+return crypto.subtle.deriveKey(
+{ name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' },
+keyMaterial,
+{ name: 'AES-GCM', length: KEY_LEN },
+false, ['encrypt', 'decrypt']
+);
+}
+async function encriptar(objeto, password) {
+const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
+const iv   = crypto.getRandomValues(new Uint8Array(IV_LEN));
+const key  = await _derivarClave(password, salt);
+const data = enc.encode(JSON.stringify(objeto));
+const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+// Formato: salt(16) || iv(12) || ciphertext
+const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
+blob.set(salt, 0);
+blob.set(iv, SALT_LEN);
+blob.set(new Uint8Array(cifrado), SALT_LEN + IV_LEN);
+// --- FIX: Iteración manual en lugar de operador spread (...blob) ---
+let binaryStr = '';
+const len = blob.length;
+for (let i = 0; i < len; i++) {
+binaryStr += String.fromCharCode(blob[i]);
+}
+return btoa(binaryStr);
+}
+async function desencriptar(b64, password) {
+const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+const salt    = bytes.slice(0, SALT_LEN);
+const iv      = bytes.slice(SALT_LEN, SALT_LEN + IV_LEN);
+const cifrado = bytes.slice(SALT_LEN + IV_LEN);
+const key     = await _derivarClave(password, salt);
+const plano   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cifrado);
+return JSON.parse(dec.decode(plano));
+}
+return { encriptar, desencriptar };
+})();
+/* ============================================================
    🔐 SISTEMA DE SEGURIDAD DEFINITIVO (Limpio y Exclusivo)
    ============================================================ */
 const PinSecurity = (() => {
@@ -3203,6 +3253,8 @@ const PinSecurity = (() => {
 // ==========================================
 window.modoNube = false;
 window.datos = [];
+window.datosPropietario = [];
+window.datosResumen = [];
 window.mapaCuentas = {};
 window.idEnEdicion = null;
 // Declaración global unificada y segura
@@ -3682,7 +3734,7 @@ return String(str)
 window.modoTransaccionActual = window.modoTransaccionActual || null;
 let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '', tipoCuenta: '' };
 let chartInstance = null;
-window.ordenPatri = { campo: 'saldo', asc: false };
+let ordenPatri = { campo: 'saldo', asc: false };
 window.ordenActivo = { campo: 'ts', asc: false };
 // === NUEVA MEDIDA 3: MEMORIA DE ELEFANTE (Restaurar al inicio) ===
 document.addEventListener('DOMContentLoaded', () => {
@@ -4912,8 +4964,7 @@ salaEspera = JSON.parse(salaEsperaJSON);
 } catch (e) { return; }
 if (salaEspera.length === 0) return;
 // 2. Comprobamos si hay internet y verificamos que la app no esté ya ocupada guardando otra cosa
-if (!navigator.onLine) return; // Si no hay internet, salimos
-if (window.AppState && window.AppState.isSaving) return; // Si ya está guardando, salimos
+if (!navigator.onLine || (window.AppState && window.AppState.isSaving)) return;
 try {
 // Ponemos el cartel de "Ocupado" para no chocar con el "Escudo anti-colisiones"
 if (window.AppState) window.AppState.isSaving = true;
@@ -5220,8 +5271,8 @@ const modal = document.getElementById('modal-extracto');
 if(modal) modal.classList.remove('active');
 };
 function cambiarOrdenPatrimonio(campo) {
-if (window.ordenPatri.campo === campo) { window.ordenPatri.asc = !window.ordenPatri.asc; }
-else { window.ordenPatri.campo = campo; window.ordenPatri.asc = (campo === 'cuenta'); }
+if (ordenPatri.campo === campo) { ordenPatri.asc = !ordenPatri.asc; }
+else { ordenPatri.campo = campo; ordenPatri.asc = (campo === 'cuenta'); }
 actualizarPatrimonio();
 }
 function togglePatriGroup(id) {
@@ -5567,6 +5618,22 @@ datosFinales[indice] = f;
 }
 });
 datosFinales.sort((a, b) => b.ts - a.ts);
+}
+// --- 3. ENCRIPTADO LOCAL (AES-GCM) ---
+const pinSession = PinSecurity.getSession();
+if (pinSession && typeof CryptoSystem !== 'undefined') {
+const paqueteDeDatos = {
+movimientos: datosFinales,
+recurrentes: window.datosRecurrentes || [],
+config: {
+cuentas: window.mapaCuentas || {},
+conceptos: window.listaConceptosConfig || [],
+beneficiarios: window.listaBeneficiariosConfig || []
+},
+fechaGuardado: new Date().toISOString()
+};
+const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, pinSession);
+localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
 }
 // --- 4. CONSTRUIR EL EXCEL PARA LA NUBE ---
 wb = XLSX.utils.book_new();
@@ -6601,11 +6668,11 @@ datosUsuario = datosUsuario.filter(m => pasaFiltroPropietario(m));
 }
 // 3. FILTRADO POR FECHA (PARA LA TARJETA DE RESUMEN)
 const rango = getFechasDashboard();
-let datosResumen = datosUsuario.filter(m => m.ts >= rango.start && m.ts <= rango.end);
+window.datosResumen = datosUsuario.filter(m => m.ts >= rango.start && m.ts <= rango.end);
 // 4. CÁLCULO DE KPIs DE PERIODO (INGRESOS, GASTOS, AHORRO)
 let ing = 0;
 let gas = 0;
-let datosResumen.forEach(m => {
+window.datosResumen.forEach(m => {
 const conc = String(m.concepto || "").toLowerCase();
 if (conc.includes('inicial') || conc.includes('traspaso')) return;
 if (m.tipo === 'ingreso') {
@@ -6832,7 +6899,7 @@ window.toggleUsuario = function() {
     
     // 4. ACTUALIZACIÓN DE GRÁFICOS (CON RETARDO)
     setTimeout(() => {
-        let datosParaGrafico = window.datos;
+        let datosParaGrafico = window.datosPropietario || window.datos;
         if(typeof renderizarGraficoEvolucion === 'function') renderizarGraficoEvolucion(datosParaGrafico);
         if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
         if(typeof renderTreeMap === 'function') renderTreeMap();
@@ -7049,7 +7116,7 @@ if (typeof guardarUniversal === 'function' && window.modoNube) {
 };
 // --- CONTROL DEL SEMÁFORO Y SEGURIDAD (V. DEFINITIVA UNIFICADA) ---
 // Acepta AMBOS conjuntos de aliases: {ok, cargando, error} y {verde, naranja, rojo, local}
-window.AppState.estadoSemaforo = 'ok';
+window.estadoConexion = 'ok';
 // ==========================================
 // ⚙️ CONTROL DE TIPO RECURRENTE (Y FUNCIONES DE MODAL)
 // ==========================================
@@ -7205,7 +7272,7 @@ contenedor.innerHTML = htmlFinal;
 window.borrarRecurrente = async function(id) {
 if(!confirm("¿Eliminar esta regla fija para siempre?")) return;
 window.datosRecurrentes = window.datosRecurrentes.filter(r => r.id !== id);
-await guardarUniversal();
+await guardarTodoConRecurrentes();
 cargarVistaRecurrentes();
 }
 // --- FUNCIONES DE ACCIÓN PARA LOS BOTONES NUEVOS ---
@@ -7304,6 +7371,18 @@ fecha.setDate(fecha.getDate() + 1);
 }
 // Siempre devolvemos en formato YYYY-MM-DD (compatible con Excel y Date())
 return fecha.toISOString().split('T')[0];
+}
+async function guardarTodoConRecurrentes() {
+// 🔒 UNIFICACIÓN: Esta función ya no duplica la lógica de guardado.
+// Delega en guardarUniversal() que es la única fuente de verdad para subir a la nube.
+// Así garantizamos que los recurrentes también pasan por:
+//   ✅ El semáforo isSaving (no dos guardados simultáneos)
+//   ✅ El header If-Match (detección de conflictos entre usuarios)
+//   ✅ El sistema de reintentos y backup de emergencia
+//   ✅ La actualización del eTag tras guardado exitoso
+if (typeof guardarUniversal === 'function') {
+await guardarUniversal();
+}
 }
 // --- OPCIÓN B: AUTOCOMPLETADO MÁGICO (VERSIÓN 4.0 - TRASPASOS INTELIGENTES) ---
 window.detectarMagia = function(texto) {
@@ -7493,7 +7572,7 @@ window.guardarComoRecurrenteUnificado = async function() {
         window.datosRecurrentes.push(reglaObj);
     }
 
-    await guardarUniversal();
+    await guardarTodoConRecurrentes();
     if(typeof cerrarModal === 'function') cerrarModal();
     notify("✅ Regla fija guardada", "success");
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
@@ -7581,7 +7660,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
         // Actualizamos la siguiente fecha de la regla
         if(typeof calcularSiguienteFecha === 'function') {
             regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
-            await guardarUniversal();
+            await guardarTodoConRecurrentes();
             cargarVistaRecurrentes();
         }
     } catch (e) {
@@ -9025,10 +9104,6 @@ window.limpiarFiltros = function() {
     window.actualizarChivatoFiltros();
     const panel = document.getElementById('panel-filtros');
     if (panel) panel.style.display = 'none';
-
-    // ✅ Añade estas dos líneas
-    const overlay = document.getElementById('fab-overlay');
-    if (overlay) overlay.style.display = 'none';
 };
 // 3. Aplicar filtros y cerrar el panel correctamente
 window.aplicarFiltros = function() {
