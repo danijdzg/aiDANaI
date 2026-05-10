@@ -3324,186 +3324,278 @@ const PinSecurity = (() => {
 // 🧠 CEREBRO IA FINANCIERO 6.0 (DISEÑO Y TEXTOS PREMIUM)
 // ==========================================
 window.generarAnalisisIA = function(movimientos) {
-const output = document.getElementById('ai-output');
-if (!output) return;
-// --- 0. CONFIGURACIÓN DE PERSONALIDAD (USUARIO ACTIVO) ---
-let nombreUsuario = 'Equipo';
-let dic = {
-has: 'Habéis', tu: 'vuestro', tus: 'vuestros', te: 'os',
-estas: 'estáis', llevas: 'Lleváis', tienes: 'Tenéis', eres: 'Sois',
-sigues: 'seguís', quieres: 'queréis', enfocate: 'enfocaros',
-ahorras: 'Ahorráis', aprovechas: 'aprovecháis', vas: 'Vais',
-habias: 'habíais', tengas: 'tengáis', pongas: 'pongáis',
-acabaras: 'acabaréis', llevabas: 'llevabais', quedas: 'quedáis'
-};
-if (typeof window.filtroUsuarioActual !== 'undefined') {
-if (window.filtroUsuarioActual === 'D' || window.filtroUsuarioActual === 'N') {
-nombreUsuario = window.filtroUsuarioActual === 'D' ? 'D' : 'N';
-dic = {
-has: 'Has', tu: 'tu', tus: 'tus', te: 'te',
-estas: 'estás', llevas: 'Llevas', tienes: 'Tienes', eres: 'Eres',
-sigues: 'sigues', quieres: 'quieres', enfocate: 'enfócate',
-ahorras: 'Ahorras', aprovechas: 'aprovechas', vas: 'Vas',
-habias: 'habías', tengas: 'tengas', pongas: 'pongas',
-acabaras: 'acabarás', llevabas: 'llevabas', quedas: 'quedas'
-};
-}
-}
-if (!movimientos || movimientos.length === 0) {
-output.innerHTML = `<span class="ai-line"><span class="ai-line-title">💡 Sistema en Reposo</span><span class="ai-info">ESPERANDO DATOS:</span> Hola ${nombreUsuario}, añade movimientos para iniciar el análisis neuronal.</span><span class="blink-cursor">_</span>`;
-return;
-}
-// --- 1. CONFIGURACIÓN DEL ENTORNO TEMPORAL ---
-const hoy = new Date();
-const mesActual = hoy.getMonth();
-const anioActual = hoy.getFullYear();
-const diaHoy = hoy.getDate();
-const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
-const avanceMes = diaHoy / diasMes;
-// Inyectamos una tarjeta de saludo que da un toque muy top
-let html = `<span class="ai-line" style="border-left-color: var(--current-theme, var(--c-primary));"><span class="ai-line-title">👋 Perfil Activo</span><span style="color: var(--current-theme, var(--c-primary)); font-weight: 900; font-size: 16px; text-shadow: 0 0 10px rgba(0, 184, 255, 0.3);">HOLA, ${nombreUsuario.toUpperCase()}</span><br/><span style="color:#FFFFFF; font-size: 13px;">He procesado ${dic.tus} cuentas y movimientos. Aquí ${dic.tienes.toLowerCase()} mi análisis en tiempo real:</span></span>`;
-// --- 2. EXTRACCIÓN Y LIMPIEZA DE DATOS ---
-let gastosMes = 0;
-let ingresosMes = 0;
-let liquidezTotal = 0;
-let patrimonioTotal = 0;
-let inversionTotal = 0;
-let gastosPorConceptoMes = {};
-let gastosPorConceptoHistorico = {};
-let gastosMenoresA20 = 0;
-const esInversion = (cta) => {
-if (window.mapaCuentas && window.mapaCuentas[cta]) {
-const c = window.mapaCuentas[cta];
-return c.esInversion === true || c.esInversion === 'Si' || c.esInversion === 'SI' || c.tipo === 'BOLSA' || c.tipo === 'CRIPTOMONEDAS';
-}
-return (cta || '').toLowerCase().match(/inver|fondo|bolsa|cripto/);
-};
-if (window.mapaCuentas) {
-Object.keys(window.mapaCuentas).forEach(cta => {
-const info = window.mapaCuentas[cta];
-const saldo = info.saldoActual || 0;
-if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: cta, beneficiario: '' })) return;
-patrimonioTotal += saldo;
-if (esInversion(cta)) inversionTotal += saldo;
-else liquidezTotal += saldo;
-});
-}
-const tresMesesAtras = new Date();
-tresMesesAtras.setMonth(mesActual - 3);
-const tsTresMesesAtras = tresMesesAtras.getTime();
-const tsInicioMesActual = new Date(anioActual, mesActual, 1).getTime();
-movimientos.forEach(m => {
-if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario(m)) return;
-const fechaObj = new Date(m.ts || m.fecha);
-const fechaMs = fechaObj.getTime();
-const conceptoUp = String(m.concepto || '').toUpperCase().trim();
-const esInterno = conceptoUp === 'TRASPASO' || conceptoUp === 'INICIAL';
-if (!esInterno) {
-if (fechaObj.getMonth() === mesActual && fechaObj.getFullYear() === anioActual) {
-if (m.importe < 0) {
-const gasto = Math.abs(m.importe);
-gastosMes += gasto;
-gastosPorConceptoMes[conceptoUp] = (gastosPorConceptoMes[conceptoUp] || 0) + gasto;
-if (gasto <= 20) gastosMenoresA20 += gasto;
-} else if (m.importe > 0) {
-ingresosMes += m.importe;
-}
-} else if (fechaMs >= tsTresMesesAtras && fechaMs < tsInicioMesActual) {
-if (m.importe < 0) {
-gastosPorConceptoHistorico[conceptoUp] = (gastosPorConceptoHistorico[conceptoUp] || 0) + Math.abs(m.importe);
-}
-}
-}
-});
-const gastos3MesesTotal = Object.values(gastosPorConceptoHistorico).reduce((a, b) => a + b, 0);
-const mediaGastoMensual = gastos3MesesTotal / 3;
-// --- 3. MOTOR ANALÍTICO (TEXTOS HUMANOS Y CLAROS) ---
-// A) MODELO DE FLUJO DE CAJA
-if (ingresosMes > 0) {
-const pctGastado = gastosMes / ingresosMes;
-if (pctGastado > avanceMes + 0.15) {
-html += `<span class="ai-line"><span class="ai-line-title">🔥 Ritmo de Gasto Mensual</span><span class="ai-alert">ALERTA DE DÉFICIT:</span> ${nombreUsuario}, ${dic.has.toLowerCase()} consumido el ${(pctGastado*100).toFixed(0)}% de ${dic.tus} ingresos, pero el mes solo ha avanzado un ${(avanceMes*100).toFixed(0)}%. ${dic.te.charAt(0).toUpperCase() + dic.te.slice(1)} ${dic.estas} gastando el dinero más rápido de lo que avanza el calendario. Si ${dic.sigues} así, ${dic.acabaras} recurriendo a ${dic.tus} ahorros. Intenta frenar gastos extra.</span>`;
-} else if (pctGastado < avanceMes - 0.10) {
-html += `<span class="ai-line"><span class="ai-line-title">⚡ Ahorro a buen ritmo</span><span class="ai-highlight">ALTA RETENCIÓN:</span> ${dic.llevas} consumido un ${(((avanceMes - pctGastado)/avanceMes) * 100).toFixed(0)}% menos de lo esperado a estas alturas del mes. ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} control es excelente. Seguramente ${dic.te} sobrará dinero a fin de mes para invertir o ahorrar.</span>`;
-} else {
-html += `<span class="ai-line"><span class="ai-line-title">⚖️ Equilibrio Mensual</span><span class="ai-info">TODO EN ORDEN:</span> ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} velocidad de consumo es totalmente normal y va acorde a los días que han pasado del mes. Sigue así.</span>`;
-}
-} else if (gastosMes > 0) {
-html += `<span class="ai-line"><span class="ai-line-title">📉 Consumo de reservas</span><span class="ai-alert">DÉFICIT ACTIVO:</span> Aún no hay ingresos registrados este mes, pero ya ${dic.estas} gastando unos ${FMT_EUR0.format(gastosMes/diaHoy)} al día. ${dic.estas.charAt(0).toUpperCase() + dic.estas.slice(1)} viviendo temporalmente de ${dic.tus} ahorros previos.</span>`;
-}
-// B) DETECCIÓN DE MICRO-FUGAS (GASTOS HORMIGA)
-if (gastosMenoresA20 > (gastosMes * 0.05) && gastosMenoresA20 > 50) {
-const proyeccionAnualFugas = gastosMenoresA20 * 12;
-html += `<span class="ai-line"><span class="ai-line-title">🐜 Gastos Hormiga</span><span class="ai-info">ATENCIÓN A LAS PEQUEÑAS COMPRAS:</span> ${dic.has} gastado ${FMT_EUR0.format(gastosMenoresA20)} en compras diminutas de menos de 20€. Parecen inofensivas, pero a este ritmo ${dic.te} supondrán <span class="ai-highlight">${FMT_EUR0.format(proyeccionAnualFugas)} al año</span>. Vigila cafés o suscripciones olvidadas.</span>`;
-}
-// C) LEY DE PARETO (CONCENTRACIÓN DE RIESGO 80/20)
-const categoriasOrdenadas = Object.entries(gastosPorConceptoMes).sort((a,b) => b[1] - a[1]);
-if (categoriasOrdenadas.length > 2 && gastosMes > 0) {
-let sumaTop = 0;
-let numCatPareto = 0;
-let nombresCat = [];
-for (let [cat, imp] of categoriasOrdenadas) {
-sumaTop += imp;
-numCatPareto++;
-nombresCat.push(cat);
-if (sumaTop >= (gastosMes * 0.70)) break;
-}
-if (numCatPareto <= Math.ceil(categoriasOrdenadas.length / 3)) {
-html += `<span class="ai-line"><span class="ai-line-title">🎯 Concentración del Gasto</span><span class="ai-info">PUNTO CLAVE:</span> El ${((sumaTop/gastosMes)*100).toFixed(0)}% de todo ${dic.tu} gasto del mes se ha ido solo en: ${nombresCat.join(', ')}. Si ${dic.quieres} ahorrar, ${dic.enfocate} solo en reducir estas áreas en lugar de agobiarte con el resto.</span>`;
-}
-}
-// D) DEPRECIACIÓN POR INFLACIÓN (CASH DRAG) VS FONDO EMERGENCIA
-if (mediaGastoMensual > 0) {
-const cobertura = liquidezTotal / mediaGastoMensual;
-if (cobertura > 8) {
-const excesoLiquidez = liquidezTotal - (mediaGastoMensual * 6);
-const perdidaInflacion = excesoLiquidez * 0.035;
-if (excesoLiquidez > 2000) {
-html += `<span class="ai-line"><span class="ai-line-title">💸 Dinero Parado</span><span class="ai-alert">EXCESO DE LIQUIDEZ:</span> ${dic.tienes} ${FMT_EUR0.format(excesoLiquidez)} ahorrados por encima de ${dic.tu} colchón de seguridad de 6 meses. Al no estar invertidos, la inflación ${dic.te} hará perder silenciosamente unos <span class="ai-alert">${FMT_EUR0.format(perdidaInflacion)} de poder adquisitivo este año</span>.</span>`;
-}
-} else if (cobertura < 3) {
-html += `<span class="ai-line"><span class="ai-line-title">🛡️ Colchón de Emergencia</span><span class="ai-alert">NIVEL CRÍTICO:</span> ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} dinero en cuentas corrientes solo ${dic.te} da para sobrevivir ${cobertura.toFixed(1)} meses si ${dic.te} ${dic.quedas} sin ingresos hoy. ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} prioridad absoluta número uno debe ser ahorrar hasta alcanzar al menos 6 meses de cobertura.</span>`;
-}
-}
-// E) PREVISIÓN FIRE (INDEPENDENCIA FINANCIERA)
-const ahorroMensualProyectado = ingresosMes - gastosMes;
-if (ahorroMensualProyectado > 150 && ingresosMes > 0 && inversionTotal > 0 && mediaGastoMensual > 0) {
-const objetivoFIRE = mediaGastoMensual * 300;
-const capitalFaltante = objetivoFIRE - (inversionTotal + liquidezTotal);
-if (capitalFaltante > 0) {
-const r = 0.06 / 12;
-const A = ahorroMensualProyectado;
-const V = inversionTotal + liquidezTotal;
-const P = objetivoFIRE;
-const mesesParaFIRE = Math.log((P * r + A) / (V * r + A)) / Math.log(1 + r);
-const aniosParaFIRE = (mesesParaFIRE / 12).toFixed(1);
-html += `<span class="ai-line"><span class="ai-line-title">🚀 Jubilación Financiera</span><span class="ai-highlight">MANTÉN EL RUMBO:</span> A este gran ritmo de ahorro mensual (${FMT_EUR0.format(ahorroMensualProyectado)}), alcanzarás ${dic.tu} libertad financiera total en exactamente <span style="font-size:16px; text-shadow:0 0 10px #39ff14;">${aniosParaFIRE} años</span>. Lo ${dic.estas} haciendo genial.</span>`;
-} else {
-html += `<span class="ai-line"><span class="ai-line-title">👑 Objetivo Logrado</span><span class="ai-highlight">INDEPENDENCIA ABSOLUTA:</span> ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} patrimonio supera con creces la regla del 4%. ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} capital ya genera suficiente interés para mantener ${dic.tu} nivel de vida sin que ${dic.tengas} que volver a trabajar.</span>`;
-}
-} else if (ahorroMensualProyectado > 0 && ingresosMes > 0 && inversionTotal === 0) {
-html += `<span class="ai-line"><span class="ai-line-title">📉 Estancamiento</span><span class="ai-info">FALTA DE INVERSIÓN:</span> ${dic.ahorras} dinero todos los meses, pero al no invertir, no ${dic.aprovechas} el interés compuesto. ${dic.tu.charAt(0).toUpperCase() + dic.tu.slice(1)} riqueza crecerá muy lentamente a menos que la ${dic.pongas} a trabajar.</span>`;
-}
-// F) ANÁLISIS PRESUPUESTO 2026 vs RITMO REAL
-if (window._analisisPresupuesto) {
-const bp = window._analisisPresupuesto;
-if (bp.presupuestoAnual2026 > 0) {
-const pctAnio = (bp.fraccionAnioTranscurrida * 100).toFixed(0);
-const desv = bp.pctDesviacion;
-const consumido = bp.presupuestoAnual2026 > 0 ? ((bp.totalGastos2026 / bp.presupuestoAnual2026) * 100).toFixed(0) : 0;
-if (desv > 15) {
-html += `<span class="ai-line"><span class="ai-line-title">📊 Presupuesto Anual</span><span class="ai-alert">DESVÍO IMPORTANTE:</span> ${dic.has} gastado ya el ${consumido}% de todo ${dic.tu} presupuesto del año, cuando el calendario solo ha avanzado un ${pctAnio}%. ${dic.vas} un <span class="ai-alert">+${desv.toFixed(1)}% por encima</span> del ritmo que ${dic.llevabas} el año pasado.</span>`;
-} else if (desv < -10) {
-html += `<span class="ai-line"><span class="ai-line-title">📊 Presupuesto Anual</span><span class="ai-highlight">AHORRO EXTRA:</span> Magnífico esfuerzo. ${dic.llevas} gastado un <span class="ai-highlight">${Math.abs(desv).toFixed(1)}% menos</span> de lo que ${dic.habias} gastado el año pasado por estas mismas fechas.</span>`;
-}
-}
-}
-// Si todo va bien y no saltó ninguna alerta de arriba
-if (html.indexOf('ai-alert') === -1 && html.indexOf('ai-highlight') === -1) {
-html += `<span class="ai-line"><span class="ai-line-title">💡 Sistema en Reposo</span><span class="ai-info">ESTABILIDAD DETECTADA:</span> No detecto anomalías críticas en ${dic.tus} finanzas. Sigue registrando movimientos.</span>`;
-}
-output.innerHTML = html;
-};
+  const output = document.getElementById('ai-output');
+  if (!output) return;
+
+  // --- 0. CONFIGURACIÓN DE PERSONALIDAD (USUARIO ACTIVO) ---
+  let nombreUsuario = 'Equipo';
+  let dic = {
+    has: 'Habéis', tu: 'vuestro', tus: 'vuestros', te: 'os',
+    estas: 'estáis', llevas: 'Lleváis', tienes: 'Tenéis', eres: 'Sois',
+    sigues: 'seguís', quieres: 'queréis', enfocate: 'enfocaros',
+    ahorras: 'Ahorráis', aprovechas: 'aprovecháis', vas: 'Vais',
+    habias: 'habíais', tengas: 'tengáis', pongas: 'pongáis',
+    acabaras: 'acabaréis', llevabas: 'llevabais', quedas: 'quedáis'
+  };
+  if (typeof window.filtroUsuarioActual !== 'undefined') {
+    if (window.filtroUsuarioActual === 'D' || window.filtroUsuarioActual === 'N') {
+      nombreUsuario = window.filtroUsuarioActual === 'D' ? 'D' : 'N';
+      dic = {
+        has: 'Has', tu: 'tu', tus: 'tus', te: 'te',
+        estas: 'estás', llevas: 'Llevas', tienes: 'Tienes', eres: 'Eres',
+        sigues: 'sigues', quieres: 'quieres', enfocate: 'enfócate',
+        ahorras: 'Ahorras', aprovechas: 'aprovechas', vas: 'Vas',
+        habias: 'habías', tengas: 'tengas', pongas: 'pongas',
+        acabaras: 'acabarás', llevabas: 'llevabas', quedas: 'quedas'
+      };
+    }
+  }
+
+  if (!movimientos || movimientos.length === 0) {
+    output.innerHTML = `<span class="ai-line"><span class="ai-line-title">💡 Sistema en Reposo</span><span class="ai-info">ESPERANDO DATOS:</span> Hola ${nombreUsuario}, añade movimientos para iniciar el análisis neuronal.</span><span class="blink-cursor">_</span>`;
+    // reseteamos emojis
+    document.getElementById('ai-emoji-ahorro').textContent = '💤';
+    document.getElementById('ai-emoji-cobertura').textContent = '💤';
+    document.getElementById('ai-emoji-inversion').textContent = '💤';
+    document.getElementById('ai-emoji-libertad').textContent = '💤';
+    document.getElementById('ai-recommendations').innerHTML = '';
+    return;
+  }
+
+  // --- 1. SALUDO ---
+  const hoy = new Date();
+  const mesActual = hoy.getMonth();
+  const anioActual = hoy.getFullYear();
+  const diaHoy = hoy.getDate();
+  const diasMes = new Date(anioActual, mesActual + 1, 0).getDate();
+  const avanceMes = diaHoy / diasMes;
+
+  let html = '';
+
+  // --- 2. CÁLCULOS (idénticos a los que ya tenías) ---
+  let gastosMes = 0;
+  let ingresosMes = 0;
+  let liquidezTotal = 0;
+  let patrimonioTotal = 0;
+  let inversionTotal = 0;
+  let gastosPorConceptoMes = {};
+  let gastosPorConceptoHistorico = {};
+  let gastosMenoresA20 = 0;
+
+  const esInversion = (cta) => {
+    if (window.mapaCuentas && window.mapaCuentas[cta]) {
+      const c = window.mapaCuentas[cta];
+      return c.esInversion === true || c.esInversion === 'Si' || c.esInversion === 'SI' || c.tipo === 'BOLSA' || c.tipo === 'CRIPTOMONEDAS';
+    }
+    return (cta || '').toLowerCase().match(/inver|fondo|bolsa|cripto/);
+  };
+
+  if (window.mapaCuentas) {
+    Object.keys(window.mapaCuentas).forEach(cta => {
+      const info = window.mapaCuentas[cta];
+      const saldo = info.saldoActual || 0;
+      if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: cta, beneficiario: '' })) return;
+      patrimonioTotal += saldo;
+      if (esInversion(cta)) inversionTotal += saldo;
+      else liquidezTotal += saldo;
+    });
+  }
+
+  const tresMesesAtras = new Date();
+  tresMesesAtras.setMonth(mesActual - 3);
+  const tsTresMesesAtras = tresMesesAtras.getTime();
+  const tsInicioMesActual = new Date(anioActual, mesActual, 1).getTime();
+
+  movimientos.forEach(m => {
+    if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario(m)) return;
+    const fechaObj = new Date(m.ts || m.fecha);
+    const fechaMs = fechaObj.getTime();
+    const conceptoUp = String(m.concepto || '').toUpperCase().trim();
+    const esInterno = conceptoUp === 'TRASPASO' || conceptoUp === 'INICIAL';
+    if (!esInterno) {
+      if (fechaObj.getMonth() === mesActual && fechaObj.getFullYear() === anioActual) {
+        if (m.importe < 0) {
+          const gasto = Math.abs(m.importe);
+          gastosMes += gasto;
+          gastosPorConceptoMes[conceptoUp] = (gastosPorConceptoMes[conceptoUp] || 0) + gasto;
+          if (gasto <= 20) gastosMenoresA20 += gasto;
+        } else if (m.importe > 0) {
+          ingresosMes += m.importe;
+        }
+      } else if (fechaMs >= tsTresMesesAtras && fechaMs < tsInicioMesActual) {
+        if (m.importe < 0) {
+          gastosPorConceptoHistorico[conceptoUp] = (gastosPorConceptoHistorico[conceptoUp] || 0) + Math.abs(m.importe);
+        }
+      }
+    }
+  });
+
+  const gastos3MesesTotal = Object.values(gastosPorConceptoHistorico).reduce((a, b) => a + b, 0);
+  const mediaGastoMensual = gastos3MesesTotal / 3;
+  const ahorroMensualProyectado = ingresosMes - gastosMes;
+
+  // --- 3. MOTOR DE RECOMENDACIONES (NUEVO) ---
+  const recomendaciones = [];
+
+  // A) Ritmo de gasto
+  if (ingresosMes > 0) {
+    const pctGastado = gastosMes / ingresosMes;
+    if (pctGastado > avanceMes + 0.15) {
+      recomendaciones.push({
+        tipo: 'alerta',
+        mensaje: `Llevas gastado el ${(pctGastado*100).toFixed(0)}% de tus ingresos y solo ha pasado el ${(avanceMes*100).toFixed(0)}% del mes. Frena gastos o acabarás en déficit.`,
+        accion: 'ver_gastos',
+        label: 'Ver los gastos del mes'
+      });
+    } else if (pctGastado < avanceMes - 0.10) {
+      recomendaciones.push({
+        tipo: 'positivo',
+        mensaje: `Excelente ritmo de gasto. Vas un ${(((avanceMes - pctGastado)/avanceMes)*100).toFixed(0)}% por debajo de lo esperado.`,
+        accion: null
+      });
+    }
+  }
+
+  // B) Micro-fugas
+  if (gastosMenoresA20 > (gastosMes * 0.05) && gastosMenoresA20 > 50) {
+    recomendaciones.push({
+      tipo: 'alerta',
+      mensaje: `Has gastado ${FMT_EUR0.format(gastosMenoresA20)} en compras de menos de 20 €. Pequeños gastos que suman más de ${FMT_EUR0.format(gastosMenoresA20*12)} al año.`,
+      accion: 'ver_hormiga',
+      label: 'Ver gastos < 20 €'
+    });
+  }
+
+  // C) Pareto
+  const categoriasOrdenadas = Object.entries(gastosPorConceptoMes).sort((a,b) => b[1] - a[1]);
+  if (categoriasOrdenadas.length > 2 && gastosMes > 0) {
+    let sumaTop = 0;
+    let numCatPareto = 0;
+    let nombresCat = [];
+    for (let [cat, imp] of categoriasOrdenadas) {
+      sumaTop += imp;
+      numCatPareto++;
+      nombresCat.push(cat);
+      if (sumaTop >= (gastosMes * 0.70)) break;
+    }
+    if (numCatPareto <= Math.ceil(categoriasOrdenadas.length / 3)) {
+      const catPrincipal = nombresCat[0];
+      recomendaciones.push({
+        tipo: 'info',
+        mensaje: `El ${((sumaTop/gastosMes)*100).toFixed(0)}% de tu gasto se concentra en: ${nombresCat.join(', ')}. Reducir '${catPrincipal}' tendría el mayor impacto.`,
+        accion: 'ver_concepto',
+        label: `Ver gastos de ${catPrincipal}`,
+        concepto: catPrincipal
+      });
+    }
+  }
+
+  // D) Cash drag / fondo de emergencia
+  if (mediaGastoMensual > 0) {
+    const cobertura = liquidezTotal / mediaGastoMensual;
+    if (cobertura > 8) {
+      const excesoLiquidez = liquidezTotal - (mediaGastoMensual * 6);
+      if (excesoLiquidez > 2000) {
+        recomendaciones.push({
+          tipo: 'info',
+          mensaje: `Tienes ${FMT_EUR0.format(excesoLiquidez)} parados que pierden valor con la inflación. Invertir una parte mejoraría tu patrimonio.`,
+          accion: 'ir_inversiones',
+          label: 'Ir a cartera de inversión'
+        });
+      }
+    } else if (cobertura < 3) {
+      recomendaciones.push({
+        tipo: 'alerta',
+        mensaje: `Tu colchón de emergencia solo cubre ${cobertura.toFixed(1)} meses. Prioriza ahorrar hasta llegar a 6 meses.`,
+        accion: null
+      });
+    }
+  }
+
+  // E) FIRE
+  if (ahorroMensualProyectado > 150 && ingresosMes > 0 && inversionTotal > 0 && mediaGastoMensual > 0) {
+    const objetivoFIRE = mediaGastoMensual * 300;
+    const capitalFaltante = objetivoFIRE - (inversionTotal + liquidezTotal);
+    if (capitalFaltante > 0) {
+      const r = 0.06 / 12;
+      const A = ahorroMensualProyectado;
+      const V = inversionTotal + liquidezTotal;
+      const P = objetivoFIRE;
+      const mesesParaFIRE = Math.log((P * r + A) / (V * r + A)) / Math.log(1 + r);
+      const aniosParaFIRE = (mesesParaFIRE / 12).toFixed(1);
+      recomendaciones.push({
+        tipo: 'positivo',
+        mensaje: `Al ritmo actual alcanzarás la libertad financiera en ${aniosParaFIRE} años. ¡Sigue así!`,
+        accion: 'ver_salud',
+        label: 'Ver proyección completa'
+      });
+    }
+  }
+
+  // --- 4. PINTAR EMOJIS DE SALUD ---
+  const setEmoji = (id, valor, umbrales) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let emoji, color;
+    if (valor >= umbrales.bueno) { emoji = '✅'; color = '#39FF14'; }
+    else if (valor >= umbrales.regular) { emoji = '⚠️'; color = '#FFD60A'; }
+    else { emoji = '❌'; color = '#FF2E4D'; }
+    el.textContent = emoji;
+    el.style.color = color;
+  };
+
+  const tasaAhorro = ingresosMes > 0 ? ((ingresosMes - gastosMes) / ingresosMes) * 100 : 0;
+  setEmoji('ai-emoji-ahorro', tasaAhorro, { bueno: 20, regular: 5 });
+
+  const coberturaFinal = mediaGastoMensual > 0 ? liquidezTotal / mediaGastoMensual : 0;
+  setEmoji('ai-emoji-cobertura', coberturaFinal, { bueno: 6, regular: 3 });
+
+  const ratioInv = patrimonioTotal > 0 ? (inversionTotal / patrimonioTotal) * 100 : 0;
+  setEmoji('ai-emoji-inversion', ratioInv, { bueno: 30, regular: 10 });
+
+  const libertadPct = mediaGastoMensual > 0 ? (patrimonioTotal / (mediaGastoMensual * 300)) * 100 : 0;
+  setEmoji('ai-emoji-libertad', libertadPct, { bueno: 30, regular: 10 });
+
+  // --- 5. PINTAR RECOMENDACIONES CON BOTONES ---
+  const recDiv = document.getElementById('ai-recommendations');
+  if (recDiv && recomendaciones.length > 0) {
+    let recHTML = '';
+    recomendaciones.slice(0, 3).forEach(r => {
+      let icono = r.tipo === 'alerta' ? '🔴' : (r.tipo === 'positivo' ? '🟢' : '🔵');
+      let btnHTML = '';
+      if (r.accion) {
+        let onclick = '';
+        if (r.accion === 'ver_gastos') {
+          onclick = `window.irPestana('movs'); window.aplicarFiltros();`;
+        } else if (r.accion === 'ver_hormiga') {
+          // filtro máximo 20€
+          onclick = `document.getElementById('f-max').value='20'; window.aplicarFiltros(); window.irPestana('movs');`;
+        } else if (r.accion === 'ver_concepto' && r.concepto) {
+          onclick = `document.getElementById('f-concepto').value='${r.concepto}'; window.aplicarFiltros(); window.irPestana('movs');`;
+        } else if (r.accion === 'ir_inversiones') {
+          onclick = `window.irPestana('inversiones');`;
+        } else if (r.accion === 'ver_salud') {
+          onclick = `window.irPestana('salud');`;
+        }
+        btnHTML = `<button onclick="${onclick}" style="margin-top:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; padding:4px 12px; border-radius:14px; font-size:10px; font-weight:bold; cursor:pointer;">${r.label}</button>`;
+      }
+      recHTML += `
+        <div class="ai-line" style="border-left-color: ${r.tipo === 'alerta' ? 'var(--c-danger)' : (r.tipo === 'positivo' ? 'var(--c-success)' : 'var(--c-primary)')};">
+          <span class="ai-line-title">${icono} ${r.tipo === 'alerta' ? 'ALERTA' : (r.tipo === 'positivo' ? 'BIEN' : 'CONSEJO')}</span>
+          ${r.mensaje}
+          ${btnHTML}
+        </div>`;
+    });
+    recDiv.innerHTML = recHTML;
+  } else if (recDiv) {
+    recDiv.innerHTML = '';
+  }
+
+  // --- 6. DETALLE CLÁSICO (compacto, abajo) ---
+  // (puedes dejar la sección de texto que ya tenías, pero simplificada)
+  html += `<span class="ai-line" style="border-left-color: var(--current-theme);"><span class="ai-line-title">📊 RESUMEN</span>Ingresos: ${FMT_EUR0.format(ingresosMes)} | Gastos: ${FMT_EUR0.format(gastosMes)} | Neto: ${FMT_EUR0.format(ahorroMensualProyectado)}</span>`;
+  output.innerHTML = html + '<span class="blink-cursor">_</span>';
+}; // fin generarAnalisisIA
 // ==========================================
 // 1. VARIABLES GLOBALES ESTRICTAS
 // ==========================================
