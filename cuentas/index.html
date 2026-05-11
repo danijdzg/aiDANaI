@@ -8036,39 +8036,43 @@ return fechaRec >= hoy && fechaRec <= limite;
 }).sort((a,b) => new Date(a.fechaProx) - new Date(b.fechaProx));
 const alertaAntigua = document.getElementById('alerta-recibos-15d');
 if (alertaAntigua) alertaAntigua.remove();
-if (proximos.length > 0) {
+
 const alertaDiv = document.createElement('div');
 alertaDiv.id = 'alerta-recibos-15d';
 alertaDiv.className = 'tarjeta-alerta-animada';
 let html = '<div class="contenido-alerta-amoled">';
 html += '<div style="display:flex; align-items:center; margin-bottom:12px;"><span class="material-icons" style="color: #FFD60A; margin-right:8px; font-size:22px; filter: drop-shadow(0 0 5px rgba(255,214,10,0.5));">notification_important</span><h3 style="margin:0; font-size:12px; font-weight:900; letter-spacing:1px; text-transform:uppercase; color: #FFD60A;">Próximos 15 días</h3></div>';
-html += '<div style="display:flex; flex-direction:column; gap:8px;">';
-let saldosSimulados = {};
-if (window.mapaCuentas) {
-Object.keys(window.mapaCuentas).forEach(k => {
-saldosSimulados[k] = window.mapaCuentas[k].saldoActual || 0;
-});
-}
-proximos.forEach(p => {
-const fObj = new Date(p.fechaProx);
-const diaStr = String(fObj.getDate()).padStart(2, '0');
-const mesStr = String(fObj.getMonth() + 1).padStart(2, '0');
-const fechaCorta = `${diaStr}/${mesStr}`;
-let colorImporte = '#32D74B';
-if (p.tipoRegla === 'traspaso') colorImporte = '#0a84ff';
-else if (p.tipoRegla === 'gasto' || p.importe < 0) colorImporte = '#FF453A';
-let importeNum = parseFloat(p.importe) || 0;
-let importeFmt = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(importeNum));
-let contenido = '';
-if (p.tipoRegla === 'traspaso') {
-let cuentaDest = p.cuentaDestino || 'N/A';
-let saldoOrig = (saldosSimulados[p.cuenta] || 0) - Math.abs(importeNum);
-let saldoDest = (saldosSimulados[cuentaDest] || 0) + Math.abs(importeNum);
-saldosSimulados[p.cuenta] = saldoOrig;
-saldosSimulados[cuentaDest] = saldoDest;
-let fmtOrig = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoOrig);
-let fmtDest = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoDest);
-contenido = `
+
+if (proximos.length === 0) {
+    html += '<div style="text-align:center; padding:16px; color:rgba(255,255,255,0.35); font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Sin movimientos</div>';
+} else {
+    html += '<div style="display:flex; flex-direction:column; gap:8px;">';
+    let saldosSimulados = {};
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(k => {
+            saldosSimulados[k] = window.mapaCuentas[k].saldoActual || 0;
+        });
+    }
+    proximos.forEach(p => {
+        const fObj = new Date(p.fechaProx);
+        const diaStr = String(fObj.getDate()).padStart(2, '0');
+        const mesStr = String(fObj.getMonth() + 1).padStart(2, '0');
+        const fechaCorta = `${diaStr}/${mesStr}`;
+        let colorImporte = '#32D74B';
+        if (p.tipoRegla === 'traspaso') colorImporte = '#0a84ff';
+        else if (p.tipoRegla === 'gasto' || p.importe < 0) colorImporte = '#FF453A';
+        let importeNum = parseFloat(p.importe) || 0;
+        let importeFmt = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(importeNum));
+        let contenido = '';
+        if (p.tipoRegla === 'traspaso') {
+            let cuentaDest = p.cuentaDestino || 'N/A';
+            let saldoOrig = (saldosSimulados[p.cuenta] || 0) - Math.abs(importeNum);
+            let saldoDest = (saldosSimulados[cuentaDest] || 0) + Math.abs(importeNum);
+            saldosSimulados[p.cuenta] = saldoOrig;
+            saldosSimulados[cuentaDest] = saldoDest;
+            let fmtOrig = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoOrig);
+            let fmtDest = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoDest);
+            contenido = `
 <div style="display:flex; flex-direction:column; width:100%; gap:4px; color:${colorImporte}; font-size:11px; font-weight:800; letter-spacing:0.2px;">
 <div style="display:flex; justify-content:space-between; align-items:center;">
 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${p.cuenta} (${fmtOrig}€)</span>
@@ -8078,23 +8082,21 @@ contenido = `
 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${cuentaDest} (${fmtDest}€)</span>
 <span style="flex-shrink:0; margin-left:6px;">+${importeFmt}€</span>
 </div>
-</div>
-`;
-} else {
-let saldoNuevo = (saldosSimulados[p.cuenta] || 0) + importeNum;
-saldosSimulados[p.cuenta] = saldoNuevo;
-let fmtNuevo = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoNuevo);
-let descTexto = p.descripcion ? ` - ${p.descripcion}` : '';
-let textoPrincipal = `${p.concepto}${descTexto}`.toUpperCase();
-let signoM = importeNum < 0 ? '-' : '+';
-contenido = `
+</div>`;
+        } else {
+            let saldoNuevo = (saldosSimulados[p.cuenta] || 0) + importeNum;
+            saldosSimulados[p.cuenta] = saldoNuevo;
+            let fmtNuevo = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(saldoNuevo);
+            let descTexto = p.descripcion ? ` - ${p.descripcion}` : '';
+            let textoPrincipal = `${p.concepto}${descTexto}`.toUpperCase();
+            let signoM = importeNum < 0 ? '-' : '+';
+            contenido = `
 <div style="display:flex; justify-content:space-between; align-items:center; width:100%; color:${colorImporte}; font-size:11px; font-weight:800; letter-spacing:0.2px;">
 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${fechaCorta} | ${textoPrincipal} | ${p.cuenta} (${fmtNuevo}€)</span>
 <span style="flex-shrink:0; margin-left:6px;">${signoM}${importeFmt}€</span>
-</div>
-`;
-}
-html += `
+</div>`;
+        }
+        html += `
 <div style="display:flex; align-items:center; background:rgba(255,255,255,0.05); border-radius:8px; padding:10px; border-left: 3px solid ${colorImporte};">
 <div style="flex-grow:1; display:flex; flex-direction:column; overflow:hidden; padding-right:8px;">
 ${contenido}
@@ -8106,10 +8108,12 @@ style="background:${colorImporte}; border:none; color:#000000; width:26px; heigh
 </button>
 </div>
 </div>`;
-});
-html += '</div></div>';
+    });
+    html += '</div>';
+}
+html += '</div>';
 alertaDiv.innerHTML = html;
-const contenedorAlertas = document.getElementById('contenedor-alertas-7d');
+const contenedorAlertas = document.getElementById('contenedor-alertas-15d');
 if (contenedorAlertas) contenedorAlertas.appendChild(alertaDiv);
 }
 }
