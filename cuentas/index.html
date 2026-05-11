@@ -368,6 +368,8 @@ justify-content: center;
 gap: 8px;
 transition: all 0.3s ease;
 box-shadow: 0 0 10px rgba(191, 90, 242, 0.1);
+position: relative;  /* Necesario para que z-index funcione */
+z-index: 9001;       /* Por encima del panel y del overlay */
 }
 .filters-toggle:hover {
 background: rgba(191, 90, 242, 0.2) !important;
@@ -387,6 +389,8 @@ text-shadow: 0 0 8px var(--c-accent);
     padding: 24px 20px; /* Más aire interior */
     flex-direction: column; /* Fundamental para evitar amontonamiento */
     gap: 16px; /* Separación perfecta entre las filas */
+    position: relative;  /* Necesario para que z-index tenga efecto */
+    z-index: 9000;       /* Por encima del fab-overlay (z-index: 8999) */
 }
 
 .filters-container.open {
@@ -4552,12 +4556,11 @@ llenar('f-beneficiario', sBeneficiarios, 'Todos Beneficiarios');
 // ──────────────────────────────────────────────────────────────
 let _debounceSearchTimer = null;
 window.aplicarFiltrosDebounced = function() {
-// 1. Cancelamos el renderizado si el usuario sigue tecleando rápido
-clearTimeout(_debounceSearchTimer);
-// 2. Programamos el renderizado para cuando deje de teclear (250ms)
-_debounceSearchTimer = setTimeout(() => {
-aplicarFiltros();
-}, 250);
+    clearTimeout(_debounceSearchTimer);
+    _debounceSearchTimer = setTimeout(() => {
+        // LE PASAMOS "false" PARA QUE EL PANEL NO SE CIERRE AL TECLEAR
+        aplicarFiltros(false); 
+    }, 250);
 };
 window.filtroRapido = function(tipo) {
     const hoy = new Date();
@@ -8316,7 +8319,10 @@ document.addEventListener('click', function(e) {
     if (panelFiltros && panelFiltros.classList.contains('open') && btnFiltros) {
         // Si el clic NO fue dentro de la caja de filtros Y TAMPOCO en el botón de abrirlo...
         if (!panelFiltros.contains(e.target) && !btnFiltros.contains(e.target)) {
-            panelFiltros.classList.remove('open'); // Lo plegamos suavemente
+            panelFiltros.classList.remove('open');
+            panelFiltros.style.display = 'none'; // Limpiar inline style para no confundir a toggleFiltros
+            const overlayClickOut = document.getElementById('fab-overlay');
+            if (overlayClickOut) overlayClickOut.style.display = 'none'; // Ocultar el fondo borroso
         }
     }
 });
@@ -9106,12 +9112,18 @@ window.limpiarFiltros = function() {
     filtros = { tipoCuenta:'', cuenta:'', concepto:'', beneficiario:'', texto:'', desde:'', hasta:'', min:'', max:'' };
     renderizar();
     window.actualizarChivatoFiltros();
-    const panel = document.getElementById('panel-filtros');
-    if (panel) panel.style.display = 'none';
+    
+    // NUEVO: Cerramos usando el método oficial que limpia el fondo borroso
+    if (typeof toggleFiltros === 'function') {
+        toggleFiltros('cerrar');
+    }
 };
 // 3. Aplicar filtros y cerrar el panel correctamente
-window.aplicarFiltros = function() {
-    const val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+window.aplicarFiltros = function(cerrarPanel = true) {
+    const val = (id) => {
+        const el = document.getElementById(id);
+        return el ? el.value : '';
+    };
     filtros.tipoCuenta = val('f-tipo-cuenta');
     filtros.cuenta = val('f-cuenta');
     filtros.concepto = val('f-concepto');
@@ -9121,17 +9133,15 @@ window.aplicarFiltros = function() {
     filtros.hasta = val('f-hasta');
     filtros.min = val('f-min');
     filtros.max = val('f-max');
+    
     window.filtros = filtros; // Sincronizar con el objeto global
     renderizar();
     window.actualizarChivatoFiltros();
-     // Cierra el panel y el overlay
-    const panel = document.getElementById('panel-filtros');
-    const overlay = document.getElementById('fab-overlay');
-    if (panel) {
-        panel.classList.remove('open');
-        panel.style.display = 'none';
+
+    // NUEVO: Solo cierra el panel visual si se solicita explícitamente
+    if (cerrarPanel && typeof toggleFiltros === 'function') {
+        toggleFiltros('cerrar'); // Esto cierra el panel Y quita el fondo borroso
     }
-    if (overlay) overlay.style.display = 'none';
 };
 // 4. Mejorar el botón visual para poder borrar filtros con una "X" directa
 window.actualizarChivatoFiltros = function() {
@@ -9901,6 +9911,5 @@ if ('serviceWorker' in navigator) {
 }
 
 </script>
-<div id="fab-overlay" style="display: none;" onclick="toggleFiltros('cerrar')"></div>
 </body>
 </html>
