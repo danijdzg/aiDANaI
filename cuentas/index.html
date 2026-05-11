@@ -1973,6 +1973,28 @@ body #fab-main:active {
     box-shadow: 0 0 25px rgba(0, 184, 255, 0.3), inset 0 1px 0 rgba(255,255,255,0.1);
     transition: all 0.3s ease;
 }
+/* =========================================
+   TARJETA PRÓXIMOS 15 DÍAS
+========================================= */
+.tarjeta-alerta-animada {
+    background: rgba(28, 28, 30, 0.75);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(255, 214, 10, 0.30);
+    border-top: 1px solid rgba(255, 214, 10, 0.55);
+    border-radius: 20px;
+    margin-top: 16px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45), 0 0 18px rgba(255,214,10,0.08);
+    animation: slideDown 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    overflow: hidden;
+}
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.contenido-alerta-amoled {
+    padding: 16px 16px 12px 16px;
+}
 </style>
 </head>
 <body>
@@ -4086,14 +4108,16 @@ window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
 window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
 // ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
 	const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
-	if (wsCarteraName) {
-	  const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
-
-// Función auxiliar para obtener un campo sin importar mayúsculas/minúsculas
-function valCampo(fila, posiblesNombres) {
+function valCampo(fila, posiblesNombres) {   // ← FUERA del if, bien
     for (let nom of posiblesNombres) {
         if (fila[nom] !== undefined && fila[nom] !== '') return fila[nom];
     }
+    const clave = Object.keys(fila).find(k => posiblesNombres.some(pn => k.toUpperCase() === pn.toUpperCase()));
+    return clave ? fila[clave] : '';
+}
+
+if (wsCarteraName) {
+    const rawCartera = XLSX.utils.sheet_to_json(...);
     // Búsqueda case-insensitive sobre las claves reales
     const clave = Object.keys(fila).find(k => posiblesNombres.some(pn => k.toUpperCase() === pn.toUpperCase()));
     return clave ? fila[clave] : '';
@@ -4570,13 +4594,13 @@ window.filtroRapido = function(tipo) {
         const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
         const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
         // Formatear a YYYY-MM-DD respetando la zona horaria local
-        desde = primerDia.toLocaleDateString('en-CA'); 
-        hasta = ultimoDia.toLocaleDateString('en-CA');
+        desde = primerDia.toISOString().split('T')[0];
+hasta = ultimoDia.toISOString().split('T')[0];
     } else if (tipo === 'mesPasado') {
         const primerDia = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
         const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
-        desde = primerDia.toLocaleDateString('en-CA');
-        hasta = ultimoDia.toLocaleDateString('en-CA');
+        desde = primerDia.toISOString().split('T')[0];
+hasta = ultimoDia.toISOString().split('T')[0];
     } else if (tipo === 'esteAno') {
         desde = `${hoy.getFullYear()}-01-01`;
         hasta = `${hoy.getFullYear()}-12-31`;
@@ -4719,7 +4743,7 @@ window.addEventListener('click', function(event) {
     const modal = document.getElementById('modal-manual');
     
     // Si el clic fue EXACTAMENTE en el fondo oscuro (overlay) y no dentro del formulario
-    if (modal && modal.style.display === 'flex' && event.target === modal) {
+    if (modal && modal.classList.contains('active') && event.target === modal) {
         cerrarModal();
     }
 });
@@ -4913,9 +4937,13 @@ tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: timestampInterno
 if (idExistente) {
 const movOriginal = window.datos.find(m => m.id === idExistente);
 if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
+const desc = movOriginal.descripcion || '';
+let cuentaHermana = '';
+if (desc.includes('>> A:')) cuentaHermana = desc.split('>> A:')[1].split('|')[0].trim();
+else if (desc.includes('<< DE:')) cuentaHermana = desc.split('<< DE:')[1].split('|')[0].trim();
 window.datos = window.datos.filter(m => {
 if (m.id === idExistente) return false;
-if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.id !== idExistente) return false;
+if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.cuenta === cuentaHermana) return false;
 return true;
 });
 } else {
@@ -4923,8 +4951,7 @@ window.datos = window.datos.filter(m => m.id !== idExistente);
 }
 }
 movimientosParaLocal.forEach(m => window.datos.push(m));
-// Actualizamos UI usando el sistema de eventos de la Fase 2 (Más limpio)
-if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
+// La emisión la hace guardarUniversal al terminar. No emitir aquí para evitar doble renderizado.
 // 🚀 SUBIDA A LA NUBE
 await window.guardarUniversal();
 if (typeof window.cerrarModal === 'function') window.cerrarModal();
@@ -4995,8 +5022,9 @@ if (typeof actualizarDashboard === 'function') actualizarDashboard();
 }
 // 4. Intentamos subir el Excel completo a OneDrive
 await window.guardarUniversal();
-// 5. ¡Éxito! Limpiamos la sala de espera
+// 5. ¡Éxito! Limpiamos AMBAS colas offline
 localStorage.removeItem('salaEsperaMovimientos');
+localStorage.removeItem('aidanai_buzon');
 if (typeof notify === 'function') {
 notify(`✅ ¡Conexión recuperada! ${salaEspera.length} movimientos de la Sala de Espera subidos a OneDrive.`, "success");
 }
@@ -5024,7 +5052,10 @@ notify("❌ No encuentro el movimiento original", "error");
 return;
 }
 const modalElement = document.getElementById('modal-manual');
-if (modalElement) modalElement.classList.add('active');
+if (modalElement) {
+    modalElement.style.display = '';
+    modalElement.classList.add('active');
+}
 const setVal = (domId, valor) => {
 const el = document.getElementById(domId);
 if(el) el.value = valor || "";
@@ -6563,12 +6594,13 @@ window.renderizarRadarScoring = function(kpis) {
     };
     window.radarInstance.setOption(optionRadar, { notMerge: true });
     // 🟢 NUEVO: Seguro contra roturas al girar pantalla (Radar)
-    if (!window._radarResizeObs) {
-        window._radarResizeObs = new ResizeObserver(() => {
-            if (window.radarInstance) window.radarInstance.resize();
-        });
-        window._radarResizeObs.observe(chartDom);
-    }
+if (window._radarResizeObs) {
+    window._radarResizeObs.disconnect();
+}
+window._radarResizeObs = new ResizeObserver(() => {
+    if (window.radarInstance) window.radarInstance.resize();
+});
+window._radarResizeObs.observe(chartDom);
 };
 
 // ==========================================
@@ -7669,6 +7701,9 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
             regla.fechaProx = calcularSiguienteFecha(regla.fechaProx, regla.frecuencia, regla.diasSemana);
             await guardarTodoConRecurrentes();
             cargarVistaRecurrentes();
+            if (window.AppInitializer && typeof window.AppInitializer.revisarRecibosProximos === 'function') {
+                window.AppInitializer.revisarRecibosProximos();
+            }
         }
     } catch (e) {
         console.error(e);
@@ -8029,7 +8064,21 @@ limite.setDate(hoy.getDate() + 15);
 limite.setHours(23,59,59,999);
 const proximos = recurrentes.filter(r => {
 if (!r.fechaProx) return false;
-const fechaRec = new Date(r.fechaProx);
+let fechaRec;
+if (typeof r.fechaProx === 'number') {
+    // Serial de Excel → Date local
+    fechaRec = new Date(Math.round((r.fechaProx - 25569) * 86400 * 1000));
+} else {
+    const str = String(r.fechaProx).trim();
+    const parts = str.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+        // YYYY-MM-DD → forzamos local para evitar desfase UTC
+        fechaRec = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    } else {
+        fechaRec = new Date(str);
+    }
+}
+if (!fechaRec || isNaN(fechaRec.getTime())) return false;
 fechaRec.setHours(12,0,0,0);
 if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: r.cuenta || '', beneficiario: '' })) return false;
 return fechaRec >= hoy && fechaRec <= limite;
@@ -8050,7 +8099,18 @@ saldosSimulados[k] = window.mapaCuentas[k].saldoActual || 0;
 });
 }
 proximos.forEach(p => {
-const fObj = new Date(p.fechaProx);
+let fObj;
+if (typeof p.fechaProx === 'number') {
+    fObj = new Date(Math.round((p.fechaProx - 25569) * 86400 * 1000));
+} else {
+    const str = String(p.fechaProx).trim();
+    const parts = str.split('-');
+    if (parts.length === 3 && parts[0].length === 4) {
+        fObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    } else {
+        fObj = new Date(str);
+    }
+}
 const diaStr = String(fObj.getDate()).padStart(2, '0');
 const mesStr = String(fObj.getMonth() + 1).padStart(2, '0');
 const fechaCorta = `${diaStr}/${mesStr}`;
@@ -8109,7 +8169,7 @@ style="background:${colorImporte}; border:none; color:#000000; width:26px; heigh
 });
 html += '</div></div>';
 alertaDiv.innerHTML = html;
-const contenedorAlertas = document.getElementById('contenedor-alertas-7d');
+const contenedorAlertas = document.getElementById('contenedor-alertas-15d');
 if (contenedorAlertas) contenedorAlertas.appendChild(alertaDiv);
 }
 }
@@ -8646,6 +8706,7 @@ const datos = window.datos;
 if (!datos || datos.length === 0) return;
 const hoy = new Date();
 const anioActual = hoy.getFullYear(); // 2026
+const anioAnterior = anioActual - 1;
 const diaAnio = Math.floor((hoy - new Date(anioActual, 0, 1)) / (1000 * 60 * 60 * 24)) + 1;
 const diasTotalesAnio = ((anioActual % 4 === 0 && anioActual % 100 !== 0) || anioActual % 400 === 0) ? 366 : 365;
 const fraccionAnioTranscurrida = diaAnio / diasTotalesAnio;
@@ -8685,7 +8746,7 @@ const anio = fecha.getFullYear();
 const mes = fecha.getMonth();
 const gasto = Math.abs(m.importe) * multiplicador;
 const conc = conceptoUp || 'OTROS';
-if (anio === 2025) {
+if (anio === anioAnterior) {
 gastos2025[conc] = (gastos2025[conc] || 0) + gasto;
 totalGastos2025 += gasto;
 mesesConDatos2025.add(mes);
@@ -8718,7 +8779,7 @@ if (!contPres) return;
 if (totalGastos2025 === 0) {
 contPres.innerHTML = '<div style="text-align:center;padding:20px;color:#555;font-size:12px;">Sin datos de 2025 para proyectar</div>';
 } else {
-if (subtitPres) subtitPres.textContent = `Basado en ${mesesReales2025} mes${mesesReales2025>1?'es':''} reales de 2025`;
+if (subtitPres) subtitPres.textContent = `Basado en ${mesesReales2025} mes${mesesReales2025>1?'es':''} reales de ${anioAnterior}`;
 const maxVal = (conceptosFiltrados.length > 0 ? conceptosFiltrados[0][1] : 0) * factorAnualizacion || 1;
 const presupuestoMensual = presupuestoAnual2026 / 12;
 // KPIs superiores
@@ -8767,11 +8828,11 @@ htmlPres += `
 }
 htmlPres += `
 <div class="budget-total-row">
-<span class="budget-total-label">PRESUPUESTO TOTAL 2026</span>
+<span class="budget-total-label">PRESUPUESTO TOTAL ${anioActual}</span>
 <span class="budget-total-valor">${FMT_EUR0.format(presupuestoAnual2026)}</span>
 </div>
 <div style="font-size:10px;color:#555;text-align:center;padding-top:6px;">
-Dato ejecutado 2025: ${FMT_EUR0.format(totalGastos2025)} en ${mesesReales2025} mes${mesesReales2025>1?'es':''}
+Dato ejecutado ${anioAnterior}: ${FMT_EUR0.format(totalGastos2025)} en ${mesesReales2025} mes${mesesReales2025>1?'es':''}
 </div>
 `;
 contPres.innerHTML = htmlPres;
@@ -8796,7 +8857,7 @@ comparativa.push({ conc, anual2025, esperado2026ytd, real2026 });
 comparativa.sort((a, b) => b.anual2025 - a.anual2025);
 const topComp = comparativa.slice(0, 7);
 if (topComp.length === 0) {
-contComp.innerHTML = '<div style="text-align:center;padding:20px;color:#555;font-size:12px;">Necesitas datos de 2025 y 2026 para la comparativa</div>';
+contComp.innerHTML = '<div style="text-align:center;padding:20px;color:#555;font-size:12px;">Necesitas datos de ${anioAnterior} y ${anioActual} para la comparativa</div>';
 return;
 }
 const pctAnio = (fraccionAnioTranscurrida * 100).toFixed(0);
@@ -8811,7 +8872,7 @@ const textoDif = diferencia <= 0 ? 'Por debajo del ritmo' : 'Por encima del ritm
 let htmlComp = `
 <div class="comp-kpi-grid">
 <div class="comp-kpi-pill">
-<span class="label">REAL 2026</span>
+<span class="label">REAL ${anioActual}</span>
 <span class="valor" style="color:var(--c-primary);">${FMT_EUR0.format(totalGastos2026)}</span>
 </div>
 <div class="comp-kpi-pill">
@@ -8850,21 +8911,21 @@ htmlComp += `
 </div>
 <div class="comp-barras">
 <div>
-<div class="comp-barra-label">2025 proporcional</div>
+<div class="comp-barra-label">${anioAnterior} proporcional</div>
 <div class="comp-barra-wrap">
 <div class="comp-barra-fill" style="width:${barra2025.toFixed(1)}%;background:#555;"></div>
 </div>
 </div>
 <div>
-<div class="comp-barra-label">2026 real</div>
+<div class="comp-barra-label">${anioActual} real</div>
 <div class="comp-barra-wrap">
 <div class="comp-barra-fill" style="width:${barra2026.toFixed(1)}%;background:${color2026};"></div>
 </div>
 </div>
 </div>
 <div class="comp-val-row">
-<span class=\"comp-val\" style=\"color:#666;\">${FMT_EUR2.format(esperado2026ytd)}</span>
-<span class=\"comp-val\" style=\"color:${color2026};\">${FMT_EUR2.format(real2026)}</span>
+<span class="comp-val" style="color:#666;">${FMT_EUR2.format(esperado2026ytd)}</span>
+<span class="comp-val" style="color:${color2026};">${FMT_EUR2.format(real2026)}</span>
 </div>
 </div>
 `;
@@ -8907,7 +8968,8 @@ const f = new Date(m.fecha);
 if (f.getFullYear() === año && (f.getMonth() + 1) === mes) {
 if (m.beneficiario === 'DN') {
 const nombreCuenta = (m.cuenta || '').toUpperCase();
-const aportacionNeta = -(parseFloat(m.importe) || 0);
+const importe = parseFloat(m.importe) || 0;
+const aportacionNeta = importe < 0 ? -importe : 0; // Solo contamos gastos, ignoramos reembolsos
 if (nombreCuenta.startsWith('D-')) {
 totalD += aportacionNeta;
 } else if (nombreCuenta.startsWith('N-')) {
@@ -9422,7 +9484,7 @@ window.renderizarCartera = function() {
       <div id="${groupId}">`;
     g.posiciones.sort((a,b) => (b.cantidad*b.precioActual) - (a.cantidad*a.precioActual)).forEach(pos => {
           const valPos  = pos.cantidad * pos.precioActual;
-          const cosPos  = pos.cantidad * pos.precioCompra;
+          const cosPos  = pos.precioCompra;
           const pnlPos  = valPos - cosPos;
           let rentPos = cosPos > 0 ? ((valPos / cosPos) - 1) * 100 : 0;
           const fCompra = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
