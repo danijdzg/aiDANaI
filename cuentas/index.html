@@ -3196,7 +3196,7 @@ return { start: init };
 Responsabilidad única: encriptar/desencriptar blobs en b64.
 ============================================================ */
 const CryptoSystem = (() => {
-const ITER      = 200_000;   // OWASP 2024 mínimo para SHA-256
+const ITER = 200000;// OWASP 2024 mínimo para SHA-256
 const KEY_LEN   = 256;
 const SALT_LEN  = 16;        // 128 bits
 const IV_LEN    = 12;        // 96 bits (óptimo GCM)
@@ -3296,7 +3296,7 @@ function warnDev(...args) { if (DEBUG) console.warn(...args); }
 Object.defineProperty(window, 'filtroUsuarioActual', {
     get() {
         // Siempre devuelve el valor real del estado global
-        return window.AppState?.filtroUsuario || 'todos';
+        return (window.AppState && window.AppState.filtroUsuario) || 'todos';
     },
     set(nuevoValor) {
         // 1. Actualiza el objeto de estado principal
@@ -4117,65 +4117,59 @@ function valCampo(fila, posiblesNombres) {   // ← FUERA del if, bien
 }
 
 if (wsCarteraName) {
-    const rawCartera = XLSX.utils.sheet_to_json(...);
-    // Búsqueda case-insensitive sobre las claves reales
-    const clave = Object.keys(fila).find(k => posiblesNombres.some(pn => k.toUpperCase() === pn.toUpperCase()));
-    return clave ? fila[clave] : '';
-}
+    const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
 
-window.datosCartera = rawCartera.map(r => {
-    // Fecha de compra robusta
-    const rawF = valCampo(r, ['FECHA_COMPRA','FechaCompra','fecha_compra','FECHA','Fecha','fecha']);
-    let fc = '';
-    if (rawF instanceof Date) {
-        fc = rawF.toISOString().split('T')[0];
-    } else if (typeof rawF === 'number' && rawF > 40000) {
-        const b = new Date(Math.round((rawF - 25569) * 86400 * 1000));
-        fc = b.toISOString().split('T')[0];
-    } else if (typeof rawF === 'string' && rawF) {
-        // Formato dd/mm/yyyy o yyyy-mm-dd
-        const limpio = rawF.trim();
-        if (limpio.includes('/')) {
-            const partes = limpio.split('/');
-            if (partes.length === 3) fc = partes[2] + '-' + partes[1].padStart(2,'0') + '-' + partes[0].padStart(2,'0');
-            else fc = '';
-        } else if (limpio.includes('-')) {
-            fc = limpio.split('T')[0];
-        } else {
-            fc = '';
+    window.datosCartera = rawCartera.map(r => {
+        // Fecha de compra robusta
+        const rawF = valCampo(r, ['FECHA_COMPRA','FechaCompra','fecha_compra','FECHA','Fecha','fecha']);
+        let fc = '';
+        if (rawF instanceof Date) {
+            fc = rawF.toISOString().split('T')[0];
+        } else if (typeof rawF === 'number' && rawF > 40000) {
+            const b = new Date(Math.round((rawF - 25569) * 86400 * 1000));
+            fc = b.toISOString().split('T')[0];
+        } else if (typeof rawF === 'string' && rawF) {
+            const limpio = rawF.trim();
+            if (limpio.includes('/')) {
+                const partes = limpio.split('/');
+                if (partes.length === 3) fc = partes[2] + '-' + partes[1].padStart(2,'0') + '-' + partes[0].padStart(2,'0');
+                else fc = '';
+            } else if (limpio.includes('-')) {
+                fc = limpio.split('T')[0];
+            } else {
+                fc = '';
+            }
         }
-    }
 
-    // Obtener campos con buscador tolerante
-    const tickerVal = String(valCampo(r, ['TICKER','Ticker','ticker']) || '').toUpperCase().trim();
-    const nombreVal = String(valCampo(r, ['NOMBRE','Nombre','nombre']) || '').trim();
-    const tipoVal   = String(valCampo(r, ['TIPO','Tipo','tipo']) || 'OTRO').toUpperCase().trim();
-    const cuentaVal = String(valCampo(r, ['CUENTA','Cuenta','cuenta']) || '').toUpperCase().trim();
-    const cantVal   = parseFloat(valCampo(r, ['CANTIDAD','Cantidad','cantidad']) || 0);
-    const pCompra   = parseFloat(valCampo(r, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA']) || 0);
-    const pActual   = parseFloat(valCampo(r, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL']) || 0);
-    const notasVal  = String(valCampo(r, ['NOTAS','Notas','notas']) || '').trim();
+        const tickerVal = String(valCampo(r, ['TICKER','Ticker','ticker']) || '').toUpperCase().trim();
+        const nombreVal = String(valCampo(r, ['NOMBRE','Nombre','nombre']) || '').trim();
+        const tipoVal   = String(valCampo(r, ['TIPO','Tipo','tipo']) || 'OTRO').toUpperCase().trim();
+        const cuentaVal = String(valCampo(r, ['CUENTA','Cuenta','cuenta']) || '').toUpperCase().trim();
+        const cantVal   = parseFloat(valCampo(r, ['CANTIDAD','Cantidad','cantidad']) || 0);
+        const pCompra   = parseFloat(valCampo(r, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA']) || 0);
+        const pActual   = parseFloat(valCampo(r, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL']) || 0);
+        const notasVal  = String(valCampo(r, ['NOTAS','Notas','notas']) || '').trim();
 
-    // Si el ticker está vacío pero hay nombre, usamos el nombre como ticker
-    const tickerFinal = tickerVal || nombreVal;
-    const nombreFinal = nombreVal;
+        const tickerFinal = tickerVal || nombreVal;
+        const nombreFinal = nombreVal;
 
-    return {
-        id:           String(valCampo(r, ['ID','Id','id']) || uuid()),
-        ticker:       tickerFinal,
-        nombre:       nombreFinal,
-        tipo:         tipoVal,
-        cuenta:       cuentaVal,
-        cantidad:     isNaN(cantVal) ? 0 : cantVal,
-        precioCompra: isNaN(pCompra) ? 0 : pCompra,
-        precioActual: isNaN(pActual) ? 0 : pActual,
-        fechaCompra:  fc,
-        notas:        notasVal
-    };
-}).filter(p => p.ticker || p.nombre);
-	} else {
-	  window.datosCartera = window.datosCartera || [];
-	}
+        return {
+            id:           String(valCampo(r, ['ID','Id','id']) || uuid()),
+            ticker:       tickerFinal,
+            nombre:       nombreFinal,
+            tipo:         tipoVal,
+            cuenta:       cuentaVal,
+            cantidad:     isNaN(cantVal) ? 0 : cantVal,
+            precioCompra: isNaN(pCompra) ? 0 : pCompra,
+            precioActual: isNaN(pActual) ? 0 : pActual,
+            fechaCompra:  fc,
+            notas:        notasVal
+        };
+    }).filter(p => p.ticker || p.nombre);
+
+} else {
+    window.datosCartera = window.datosCartera || [];
+}
 // ── MÓDULO CARTERA: Leer hoja HISTORICO_CARTERA ────────────────────────
 const wsHistCarteraName = wb.SheetNames.find(n => /HISTORICO.*CARTERA|CARTERA.*HISTORICO/i.test(n.trim()));
 if (wsHistCarteraName) {
