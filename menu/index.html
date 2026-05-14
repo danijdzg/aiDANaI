@@ -377,6 +377,38 @@
             .orbit-item .label { font-size: 0.6rem; }
             #fab-hint { bottom: calc(50% - 100px); }
         }
+
+        /* ── REDUCED MOTION ── */
+        @media (prefers-reduced-motion: reduce) {
+            /* Splash: sin pulso */
+            #splash-logo { animation: none; opacity: 1; transform: none; }
+
+            /* Cita: sin flotación */
+            #quote-container { animation: none !important; }
+            #quote-container:hover { transform: translateX(-50%); }
+
+            /* FAB: sin glow pulsante, sin rotación al activar */
+            #fab-button img { animation: none !important; }
+            #fab-button.active { transform: scale(0.9); }
+
+            /* Anillo FAB: estático */
+            #fab-ring { animation: none; opacity: 0.4; }
+
+            /* Menú orbital: sin rotación al abrir */
+            #menu-container.active #orbital-menu { transform: none; }
+
+            /* Ítems orbitales: transiciones más cortas */
+            .orbit-item { transition: opacity 0.15s ease, transform 0.15s ease !important; }
+
+            /* Shimmer de carga: sin movimiento */
+            #quote-container.loading #quote-text {
+                animation: none;
+                background: rgba(255,255,255,0.12);
+            }
+
+            /* Hint: aparece sin desplazamiento */
+            #fab-hint { animation: none; opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -504,6 +536,9 @@
             splash.classList.add('hidden');
         });
 
+        // --- Detección de preferencia de movimiento reducido ---
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
         // --- Canvas / Starfield ---
         const canvas = document.getElementById('starfield');
         const ctx    = canvas.getContext('2d');
@@ -524,26 +559,21 @@
             resizeTimeout = setTimeout(resizeCanvas, 200);
         }, { passive: true });
 
-        let mouseX = 0, mouseY = 0;
-        window.addEventListener('mousemove', (e) => {
-            mouseX = (e.clientX - window.innerWidth  / 2) / 50;
-            mouseY = (e.clientY - window.innerHeight / 2) / 50;
-        }, { passive: true });
+        
 
         class Star {
             constructor() { this.reset(); }
             reset() {
-                this.x             = Math.random() * canvas.width;
-                this.y             = Math.random() * canvas.height;
-                this.size          = Math.random() * 2;
-                this.vx            = (Math.random() - 0.5) * 0.2;
-                this.vy            = (Math.random() - 0.5) * 0.2;
-                this.opacity       = Math.random();
-                this.parallaxFactor = this.size * 0.5;
+                this.x       = Math.random() * canvas.width;
+                this.y       = Math.random() * canvas.height;
+                this.size    = Math.random() * 2;
+                this.vx      = (Math.random() - 0.5) * 0.2;
+                this.vy      = (Math.random() - 0.5) * 0.2;
+                this.opacity = Math.random();
             }
             update() {
-                this.x += this.vx + (mouseX * this.parallaxFactor);
-                this.y += this.vy + (mouseY * this.parallaxFactor);
+                this.x += this.vx;
+                this.y += this.vy;
                 if (this.x < 0)            this.x = canvas.width;
                 if (this.x > canvas.width) this.x = 0;
                 if (this.y < 0)             this.y = canvas.height;
@@ -600,7 +630,10 @@
                 ctx.fill();
             }
             ctx.globalAlpha = 1;
-            for (const s of shootingStars) { s.update(); s.draw(); }
+            // Estrellas fugaces solo si no hay preferencia de movimiento reducido
+            if (!prefersReducedMotion) {
+                for (const s of shootingStars) { s.update(); s.draw(); }
+            }
             animationFrameId = requestAnimationFrame(animate);
         }
 
@@ -617,75 +650,73 @@
         resizeCanvas();
         animate();
 
-        // --- Citas desde API (quotable.io) con fallback local ---
-        const fallbackQuotes = [
-            { text: "La creatividad es la inteligencia divirtiéndose.",           author: "Albert Einstein"    },
-            { text: "El único modo de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs"       },
-            { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" },
-            { text: "No cuentes los días, haz que los días cuenten.",             author: "Muhammad Ali"      },
-            { text: "Un viaje de mil millas comienza con un solo paso.",          author: "Lao Tse"           },
-            { text: "La vida es lo que pasa mientras estás ocupado haciendo otros planes.", author: "John Lennon" },
-            { text: "En medio de la dificultad yace la oportunidad.",             author: "Albert Einstein"   },
-            { text: "Sé el cambio que deseas ver en el mundo.",                   author: "Mahatma Gandhi"    },
-            { text: "El éxito es la suma de pequeños esfuerzos repetidos día tras día.", author: "Robert Collier" },
-            { text: "No es la especie más fuerte la que sobrevive, sino la más adaptable.", author: "Charles Darwin" }
+        // --- Citas en español (banco local, sin API) ---
+        const allQuotes = [
+            // — Originales —
+            { text: "La creatividad es la inteligencia divirtiéndose.",                                    author: "Albert Einstein"     },
+            { text: "El único modo de hacer un gran trabajo es amar lo que haces.",                        author: "Steve Jobs"          },
+            { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.",                    author: "Eleanor Roosevelt"   },
+            { text: "No cuentes los días, haz que los días cuenten.",                                      author: "Muhammad Ali"        },
+            { text: "Un viaje de mil millas comienza con un solo paso.",                                    author: "Lao Tse"             },
+            { text: "La vida es lo que pasa mientras estás ocupado haciendo otros planes.",                 author: "John Lennon"         },
+            { text: "En medio de la dificultad yace la oportunidad.",                                      author: "Albert Einstein"     },
+            { text: "Sé el cambio que deseas ver en el mundo.",                                            author: "Mahatma Gandhi"      },
+            { text: "El éxito es la suma de pequeños esfuerzos repetidos día tras día.",                   author: "Robert Collier"      },
+            { text: "No es la especie más fuerte la que sobrevive, sino la más adaptable.",                author: "Charles Darwin"      },
+            // — Nuevas —
+            { text: "La paciencia es la madre de la ciencia.",                                             author: "Proverbio español"   },
+            { text: "Caer está permitido. Levantarse es obligatorio.",                                     author: "Proverbio ruso"      },
+            { text: "Lo que no te mata te hace más fuerte.",                                               author: "Friedrich Nietzsche" },
+            { text: "El conocimiento es poder.",                                                           author: "Francis Bacon"       },
+            { text: "La imaginación es más importante que el conocimiento.",                               author: "Albert Einstein"     },
+            { text: "Vive como si fueras a morir mañana. Aprende como si fueras a vivir siempre.",        author: "Mahatma Gandhi"      },
+            { text: "La simplicidad es la máxima sofisticación.",                                         author: "Leonardo da Vinci"   },
+            { text: "No hay atajos para ningún lugar que valga la pena ir.",                               author: "Beverly Sills"       },
+            { text: "El secreto de salir adelante es empezar.",                                            author: "Mark Twain"          },
+            { text: "Si puedes soñarlo, puedes hacerlo.",                                                  author: "Walt Disney"         },
+            { text: "La disciplina es el puente entre las metas y los logros.",                            author: "Jim Rohn"            },
+            { text: "No dejes para mañana lo que puedas aprender hoy.",                                   author: "Benjamin Franklin"   },
+            { text: "La felicidad no es algo hecho. Viene de tus propias acciones.",                      author: "Dalai Lama"          },
+            { text: "El mejor momento para plantar un árbol fue hace veinte años. El segundo mejor es ahora.", author: "Proverbio chino" },
+            { text: "Quien no arriesga, no gana.",                                                         author: "Proverbio popular"   },
+            { text: "La perseverancia es el camino al éxito.",                                             author: "Charles Chaplin"     },
+            { text: "No importa cuán despacio vayas, siempre que no te detengas.",                        author: "Confucio"            },
+            { text: "Haz hoy lo que otros no harán, y mañana tendrás lo que otros no tienen.",             author: "Jerry Rice"          },
+            { text: "La única forma de hacer algo grande es empezar antes de estar listo.",                author: "Marie Curie"         },
+            { text: "Cada experto fue alguna vez un principiante.",                                        author: "Helen Hayes"         },
+            { text: "El talento gana partidos, pero el trabajo en equipo gana campeonatos.",               author: "Michael Jordan"      },
+            { text: "No busques los errores; busca un remedio.",                                           author: "Henry Ford"          },
+            { text: "La actitud es una pequeña cosa que marca una gran diferencia.",                       author: "Winston Churchill"   },
+            { text: "El optimismo es la fe que conduce al logro.",                                         author: "Helen Keller"        },
+            { text: "Primero muévete, luego inspírate.",                                                   author: "Aristóteles"         },
+            { text: "La vida no se mide por los momentos que respiras, sino por los que te dejan sin aliento.", author: "Maya Angelou" },
+            { text: "El coraje no es la ausencia del miedo, sino el juicio de que algo más importante que el miedo.", author: "Ambrose Redmoon" },
+            { text: "Aprende las reglas como un profesional para poder romperlas como un artista.",        author: "Pablo Picasso"       },
+            { text: "Si tu plan A no funciona, recuerda que el abecedario tiene 26 letras más.",           author: "Anónimo"             },
+            { text: "Cada día es una nueva oportunidad para cambiar tu vida.",                             author: "Anónimo"             },
         ];
-
-        // Cache de citas API para no hacer fetch en cada cambio
-        let apiQuoteCache = [];
-        let apiFailed = false;
-
-        async function fetchQuoteFromAPI() {
-            // Si ya tenemos cache, devolvemos una al azar
-            if (apiQuoteCache.length > 0) {
-                return apiQuoteCache[Math.floor(Math.random() * apiQuoteCache.length)];
-            }
-            // Si ya falló antes, usamos fallback directamente
-            if (apiFailed) return null;
-
-            try {
-                // quotable.io: citas aleatorias en inglés — las traducimos con fallback si falla
-                const res = await fetch('https://api.quotable.io/quotes/random?limit=20&minLength=40&maxLength=140', {
-                    signal: AbortSignal.timeout(4000)
-                });
-                if (!res.ok) throw new Error('API error');
-                const data = await res.json();
-                // data es un array de objetos {content, author}
-                apiQuoteCache = data.map(q => ({ text: q.content, author: q.author }));
-                return apiQuoteCache[Math.floor(Math.random() * apiQuoteCache.length)];
-            } catch {
-                apiFailed = true;
-                return null;
-            }
-        }
 
         const quoteContainer = document.getElementById('quote-container');
         const quoteTextEl    = document.getElementById('quote-text');
         const quoteAuthorEl  = document.getElementById('quote-author');
 
         let quoteInterval;
-        let lastQuoteText = '';
-        let isTopPosition = true;
-        let isUpdatingQuote = false;
+        let lastQuoteText    = '';
+        let isTopPosition    = true;
+        let isUpdatingQuote  = false;
 
-        async function updateQuote() {
+        function getRandomQuote() {
+            const pool = allQuotes.filter(q => q.text !== lastQuoteText);
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        function updateQuote() {
             if (isUpdatingQuote) return;
             isUpdatingQuote = true;
 
             quoteContainer.classList.add('fading');
 
-            // Buscar la cita mientras hace fade out (400ms)
-            const apiQuote = await fetchQuoteFromAPI();
-
-            // Elegir fuente: API si está disponible, fallback si no
-            let quote;
-            if (apiQuote && apiQuote.text !== lastQuoteText) {
-                quote = apiQuote;
-            } else {
-                // Fallback: evitar repetir la última
-                const pool = fallbackQuotes.filter(q => q.text !== lastQuoteText);
-                quote = pool[Math.floor(Math.random() * pool.length)];
-            }
+            const quote = getRandomQuote();
             lastQuoteText = quote.text;
 
             setTimeout(() => {
@@ -701,12 +732,10 @@
             }, 400);
         }
 
-        // Carga inicial: intentar API o usar fallback inmediato
-        (async () => {
-            quoteContainer.classList.add('loading');
-            const apiQuote = await fetchQuoteFromAPI();
-            const first = apiQuote || fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
-            lastQuoteText = first.text;
+        // Carga inicial instantánea desde el banco local
+        (() => {
+            const first = getRandomQuote();
+            lastQuoteText             = first.text;
             quoteTextEl.textContent   = `"${first.text}"`;
             quoteAuthorEl.textContent = `— ${first.author}`;
             quoteContainer.classList.remove('loading');
@@ -733,6 +762,10 @@
 
         function openMenu() {
             menuOpen = true;
+            // Vibración háptica corta (solo si el dispositivo lo soporta y el usuario no prefiere movimiento reducido)
+            if ('vibrate' in navigator && !prefersReducedMotion) {
+                navigator.vibrate(10);
+            }
             mainContent.classList.add('blurred');
             menuContainer.classList.add('active');
             fabButton.classList.add('active');
