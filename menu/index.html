@@ -9,11 +9,11 @@
     <meta name="theme-color" content="#000000"/>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
-    
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500;1,600&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
-    
+
     <style>
         :root {
             --bg-color: #000000;
@@ -71,6 +71,80 @@
         @keyframes splashPulse {
             0%, 100% { opacity: 0.5; transform: scale(0.95); }
             50%       { opacity: 1;   transform: scale(1.05); }
+        }
+
+        /* ── NAV TRANSITION OVERLAY (PUNTO 5) ──
+           Reemplaza la apertura en nueva pestaña por una transición
+           "lanzamiento de app" que navega en la misma ventana PWA.      */
+        #nav-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.35s ease, visibility 0.35s ease;
+        }
+        #nav-overlay.active {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: all;
+        }
+        #nav-overlay-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: navIconPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        #nav-overlay-icon svg {
+            width: 36px;
+            height: 36px;
+            stroke: white;
+            stroke-width: 2;
+        }
+        #nav-overlay-label {
+            font-family: var(--font-main);
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.75);
+            animation: navLabelFade 0.4s ease 0.1s both;
+        }
+        #nav-overlay-dots {
+            display: flex;
+            gap: 6px;
+            animation: navLabelFade 0.4s ease 0.2s both;
+        }
+        #nav-overlay-dots span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.4);
+            animation: dotPulse 1s ease-in-out infinite;
+        }
+        #nav-overlay-dots span:nth-child(2) { animation-delay: 0.15s; }
+        #nav-overlay-dots span:nth-child(3) { animation-delay: 0.30s; }
+        @keyframes navIconPop {
+            from { opacity: 0; transform: scale(0.6); }
+            to   { opacity: 1; transform: scale(1);   }
+        }
+        @keyframes navLabelFade {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0);   }
+        }
+        @keyframes dotPulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50%       { opacity: 1;   transform: scale(1.2); }
         }
 
         #starfield, #galaxy-overlay {
@@ -360,7 +434,22 @@
         }
 
         .orbit-item svg { width: 24px; height: 24px; stroke: white; stroke-width: 2; }
-        .orbit-item .label { font-size: 0.7rem; font-weight: 500; color: white; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); opacity: 0; transition: opacity 0.3s ease 0.2s; }
+
+        /* ── PUNTO 2: Labels más grandes y siempre legibles ──
+           Se sube de 0.7rem a 0.9rem en base, con sombra de texto
+           para garantizar contraste sobre cualquier fondo.           */
+        .orbit-item .label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: white;
+            text-shadow:
+                0 1px 4px rgba(0, 0, 0, 0.8),
+                0 0 8px rgba(0, 0, 0, 0.6);
+            letter-spacing: 0.3px;
+            opacity: 0;
+            transition: opacity 0.3s ease 0.2s;
+            white-space: nowrap;
+        }
         #menu-container.active .orbit-item .label { opacity: 1; }
 
         #item-agenda         { background: linear-gradient(135deg, #ffb74d, #ffa726); }
@@ -374,40 +463,31 @@
             #fab-button { width: 130px; height: 130px; }
             .orbit-item { width: 50px; height: 50px; margin: -25px; }
             .orbit-item svg { width: 20px; height: 20px; }
-            .orbit-item .label { font-size: 0.6rem; }
+            /* PUNTO 2: en pantallas pequeñas se baja a 0.75rem (antes 0.6rem) */
+            .orbit-item .label { font-size: 0.75rem; }
             #fab-hint { bottom: calc(50% - 100px); }
         }
 
         /* ── REDUCED MOTION ── */
         @media (prefers-reduced-motion: reduce) {
-            /* Splash: sin pulso */
             #splash-logo { animation: none; opacity: 1; transform: none; }
-
-            /* Cita: sin flotación */
             #quote-container { animation: none !important; }
             #quote-container:hover { transform: translateX(-50%); }
-
-            /* FAB: sin glow pulsante, sin rotación al activar */
             #fab-button img { animation: none !important; }
             #fab-button.active { transform: scale(0.9); }
-
-            /* Anillo FAB: estático */
             #fab-ring { animation: none; opacity: 0.4; }
-
-            /* Menú orbital: sin rotación al abrir */
             #menu-container.active #orbital-menu { transform: none; }
-
-            /* Ítems orbitales: transiciones más cortas */
             .orbit-item { transition: opacity 0.15s ease, transform 0.15s ease !important; }
-
-            /* Shimmer de carga: sin movimiento */
             #quote-container.loading #quote-text {
                 animation: none;
                 background: rgba(255,255,255,0.12);
             }
-
-            /* Hint: aparece sin desplazamiento */
             #fab-hint { animation: none; opacity: 1; }
+            #nav-overlay { transition: opacity 0.15s ease, visibility 0.15s ease; }
+            #nav-overlay-icon { animation: none; }
+            #nav-overlay-label { animation: none; opacity: 1; }
+            #nav-overlay-dots { animation: none; opacity: 1; }
+            #nav-overlay-dots span { animation: none; opacity: 0.6; }
         }
     </style>
 </head>
@@ -417,6 +497,17 @@
     <div id="splash">
         <img id="splash-logo" src="icon-512.png" alt="aiDANaI">
         <span id="splash-text">Cargando</span>
+    </div>
+
+    <!-- PUNTO 5: Overlay de transición de navegación (reemplaza nueva pestaña) -->
+    <div id="nav-overlay" role="status" aria-live="polite" aria-label="Abriendo aplicación">
+        <div id="nav-overlay-icon">
+            <!-- El SVG del icono se inyecta por JS según el ítem pulsado -->
+        </div>
+        <span id="nav-overlay-label">Abriendo</span>
+        <div id="nav-overlay-dots">
+            <span></span><span></span><span></span>
+        </div>
     </div>
 
     <canvas id="starfield"></canvas>
@@ -445,8 +536,14 @@
     <div id="menu-container" role="navigation" aria-label="Menú principal">
         <div id="orbital-menu">
 
-            <a href="https://aidanai-agenda.vercel.app/" class="orbit-item" id="item-agenda"
-               target="_blank" rel="noopener noreferrer"
+            <!--
+                PUNTO 5: Se elimina target="_blank" y rel="noopener noreferrer" de todos
+                los ítems. La navegación ahora ocurre en la misma ventana PWA mediante
+                la función navigateTo(), que muestra una transición animada antes de
+                redirigir con window.location.href.
+            -->
+            <a href="https://aidanai-agenda.vercel.app/"
+               class="orbit-item" id="item-agenda"
                aria-label="Abrir Agenda">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -457,8 +554,8 @@
                 <span class="label">Agenda</span>
             </a>
 
-            <a href="https://aidanai-ctas.vercel.app/" class="orbit-item" id="item-cuentas"
-               target="_blank" rel="noopener noreferrer"
+            <a href="https://aidanai-ctas.vercel.app/"
+               class="orbit-item" id="item-cuentas"
                aria-label="Abrir Cuentas">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="1" x2="12" y2="23"></line>
@@ -467,8 +564,8 @@
                 <span class="label">Ctas</span>
             </a>
 
-            <a href="https://danijdzg.github.io/aiDANaI/calculadora/" class="orbit-item" id="item-DaniCalc"
-               target="_blank" rel="noopener noreferrer"
+            <a href="https://danijdzg.github.io/aiDANaI/calculadora/"
+               class="orbit-item" id="item-DaniCalc"
                aria-label="Abrir Calculadora">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="4" y="2" width="16" height="20" rx="2"></rect>
@@ -485,8 +582,8 @@
                 <span class="label">Calculadora</span>
             </a>
 
-            <a href="https://aidanai-gym.vercel.app/" class="orbit-item" id="item-gym"
-               target="_blank" rel="noopener noreferrer"
+            <a href="https://aidanai-gym.vercel.app/"
+               class="orbit-item" id="item-gym"
                aria-label="Abrir Gym">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8L22 12L18 16"></path>
@@ -498,9 +595,9 @@
                 <span class="label">Gym</span>
             </a>
 
-            <a href="https://danijdzg.github.io/aiDANaI/cuentas/" class="orbit-item" id="item-cuentas-prueba"
-               target="_blank" rel="noopener noreferrer"
-               aria-label="Abrir Ctas">
+            <a href="https://danijdzg.github.io/aiDANaI/cuentas/"
+               class="orbit-item" id="item-cuentas-prueba"
+               aria-label="Abrir Cuentas">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
@@ -526,13 +623,8 @@
 
         // --- Splash Screen ---
         const splash = document.getElementById('splash');
-        // Ocultar splash cuando la página esté lista (fuentes + canvas listo)
-        // Usamos un mínimo de 800ms para que no sea un parpadeo brusco
         const splashMinTime = new Promise(res => setTimeout(res, 800));
-        Promise.all([
-            splashMinTime,
-            document.fonts.ready
-        ]).then(() => {
+        Promise.all([splashMinTime, document.fonts.ready]).then(() => {
             splash.classList.add('hidden');
         });
 
@@ -559,8 +651,6 @@
             resizeTimeout = setTimeout(resizeCanvas, 200);
         }, { passive: true });
 
-        
-
         class Star {
             constructor() { this.reset(); }
             reset() {
@@ -576,7 +666,7 @@
                 this.y += this.vy;
                 if (this.x < 0)            this.x = canvas.width;
                 if (this.x > canvas.width) this.x = 0;
-                if (this.y < 0)             this.y = canvas.height;
+                if (this.y < 0)            this.y = canvas.height;
                 if (this.y > canvas.height) this.y = 0;
             }
         }
@@ -630,7 +720,6 @@
                 ctx.fill();
             }
             ctx.globalAlpha = 1;
-            // Estrellas fugaces solo si no hay preferencia de movimiento reducido
             if (!prefersReducedMotion) {
                 for (const s of shootingStars) { s.update(); s.draw(); }
             }
@@ -652,18 +741,16 @@
 
         // --- Citas en español (banco local, sin API) ---
         const allQuotes = [
-            // — Originales —
             { text: "La creatividad es la inteligencia divirtiéndose.",                                    author: "Albert Einstein"     },
             { text: "El único modo de hacer un gran trabajo es amar lo que haces.",                        author: "Steve Jobs"          },
             { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.",                    author: "Eleanor Roosevelt"   },
             { text: "No cuentes los días, haz que los días cuenten.",                                      author: "Muhammad Ali"        },
-            { text: "Un viaje de mil millas comienza con un solo paso.",                                    author: "Lao Tse"             },
-            { text: "La vida es lo que pasa mientras estás ocupado haciendo otros planes.",                 author: "John Lennon"         },
+            { text: "Un viaje de mil millas comienza con un solo paso.",                                   author: "Lao Tse"             },
+            { text: "La vida es lo que pasa mientras estás ocupado haciendo otros planes.",                author: "John Lennon"         },
             { text: "En medio de la dificultad yace la oportunidad.",                                      author: "Albert Einstein"     },
             { text: "Sé el cambio que deseas ver en el mundo.",                                            author: "Mahatma Gandhi"      },
             { text: "El éxito es la suma de pequeños esfuerzos repetidos día tras día.",                   author: "Robert Collier"      },
             { text: "No es la especie más fuerte la que sobrevive, sino la más adaptable.",                author: "Charles Darwin"      },
-            // — Nuevas —
             { text: "La paciencia es la madre de la ciencia.",                                             author: "Proverbio español"   },
             { text: "Caer está permitido. Levantarse es obligatorio.",                                     author: "Proverbio ruso"      },
             { text: "Lo que no te mata te hace más fuerte.",                                               author: "Friedrich Nietzsche" },
@@ -701,9 +788,9 @@
         const quoteAuthorEl  = document.getElementById('quote-author');
 
         let quoteInterval;
-        let lastQuoteText    = '';
-        let isTopPosition    = true;
-        let isUpdatingQuote  = false;
+        let lastQuoteText   = '';
+        let isTopPosition   = true;
+        let isUpdatingQuote = false;
 
         function getRandomQuote() {
             const pool = allQuotes.filter(q => q.text !== lastQuoteText);
@@ -755,14 +842,12 @@
         const angleStep = 360 / orbitItems.length;
         orbitItems.forEach((item, i) => item.style.setProperty('--angle', `${angleStep * i}deg`));
 
-        // Ocultar hint tras animación
         fabHint.addEventListener('animationend', () => {
             fabHint.style.display = 'none';
         });
 
         function openMenu() {
             menuOpen = true;
-            // Vibración háptica corta (solo si el dispositivo lo soporta y el usuario no prefiere movimiento reducido)
             if ('vibrate' in navigator && !prefersReducedMotion) {
                 navigator.vibrate(10);
             }
@@ -790,11 +875,7 @@
         }
 
         fabButton.addEventListener('click', toggleMenu);
-
-        // Botón X explícito
         closeBtn.addEventListener('click', closeMenu);
-
-        // Overlay cierra el menú (pero NO si el click fue en el FAB o sus hijos)
         closeOverlay.addEventListener('click', closeMenu);
 
         // Clic en la frase reinicia el intervalo
@@ -805,6 +886,56 @@
                 quoteInterval = setInterval(updateQuote, 8000);
             }
         });
+
+        // ── PUNTO 5: Navegación en la misma ventana PWA ──────────────────────
+        // Interceptamos el clic en cada ítem orbital. En lugar de abrir una nueva
+        // pestaña (target="_blank"), mostramos la pantalla de transición y luego
+        // redirigimos con window.location.href dentro de la misma ventana.
+        // Esto mantiene la experiencia dentro del contexto de la PWA instalada.
+
+        const navOverlay      = document.getElementById('nav-overlay');
+        const navOverlayIcon  = document.getElementById('nav-overlay-icon');
+        const navOverlayLabel = document.getElementById('nav-overlay-label');
+
+        // Mapa de ítem → nombre legible para el overlay de transición
+        const itemNames = {
+            'item-agenda':         'Agenda',
+            'item-cuentas':        'Cuentas',
+            'item-DaniCalc':       'Calculadora',
+            'item-gym':            'Gym',
+            'item-cuentas-prueba': 'Cuentas',
+        };
+
+        orbitItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault(); // Evita la navegación inmediata del <a>
+
+                const url        = item.getAttribute('href');
+                const label      = itemNames[item.id] || 'Abriendo';
+                const iconClone  = item.querySelector('svg').cloneNode(true);
+                const bgStyle    = getComputedStyle(item).background;
+
+                // Preparar el overlay con el ícono y color del ítem pulsado
+                navOverlayIcon.innerHTML  = '';
+                navOverlayIcon.appendChild(iconClone);
+                navOverlayIcon.style.background = bgStyle;
+                navOverlayLabel.textContent     = label;
+
+                // Mostrar overlay
+                navOverlay.classList.add('active');
+
+                // Vibración háptica corta al confirmar la navegación
+                if ('vibrate' in navigator && !prefersReducedMotion) {
+                    navigator.vibrate([10, 50, 10]);
+                }
+
+                // Navegar en la misma ventana tras la animación de entrada
+                setTimeout(() => {
+                    window.location.href = url;
+                }, prefersReducedMotion ? 150 : 550);
+            });
+        });
+        // ─────────────────────────────────────────────────────────────────────
 
         // Soporte para gestos swipe: swipe arriba abre, swipe abajo cierra
         let touchStartY = 0;
@@ -820,7 +951,6 @@
             const isVertical = Math.abs(dy) > 50 && dx < 60;
             if (!isVertical) return;
 
-            // Swipe arriba → abrir, swipe abajo → cerrar
             if (dy > 0 && !menuOpen) openMenu();
             if (dy < 0 && menuOpen)  closeMenu();
         }, { passive: true });
