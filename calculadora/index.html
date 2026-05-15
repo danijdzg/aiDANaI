@@ -202,6 +202,9 @@
     .hist-res { cursor: pointer; color: var(--history-res-color); font-weight: 700; padding: 2px 6px; border-radius: 4px; }
     .hist-res:hover { background: rgba(57, 255, 20, 0.1); box-shadow: 0 0 10px rgba(57, 255, 20, 0.2); }
 
+    .hist-del { cursor: pointer; color: #555; font-size: 1rem; line-height: 1; padding: 2px 6px; border-radius: 4px; margin-right: auto; flex-shrink: 0; transition: color 0.15s; }
+    .hist-del:hover { color: var(--neon-red); background: rgba(255,0,51,0.1); }
+
     .status-dot.warning { background-color: var(--neon-lime); box-shadow: 0 0 8px var(--neon-lime); }
     #history-list li:hover { opacity: 1; background: var(--edit-highlight); }
     #history-list b { color: var(--history-res-color); font-weight: 700; margin-left: 8px; }
@@ -410,6 +413,9 @@
         
             <div class="upper-section">
                 <div class="display-lens" id="display-container">
+                    <div id="history-header" style="display:none; justify-content:flex-end; padding-bottom:4px; flex-shrink:0;">
+                        <button onclick="App.clearHistory()" style="background:none; border:none; color:#555; font-size:0.75rem; cursor:pointer; padding:2px 6px; border-radius:6px; font-family:'Lexend',sans-serif; letter-spacing:0.5px; transition:color 0.2s;" onmouseover="this.style.color='#ff0033'" onmouseout="this.style.color='#555'">Borrar todo</button>
+                    </div>
                     <ul id="history-list"></ul>
                     <div class="display-area">
                         <div id="secondary-display" class="tabular-nums"></div>
@@ -698,7 +704,7 @@
                 let leftMatch = this.expr.match(/^(.+?)([+\-*/])[^+\-*/]+$/);
                 if (leftMatch) {
                     let leftExpr = leftMatch[1];
-                    let leftVal = eval(leftExpr);
+                    let leftVal = this.safeEval(leftExpr);
                     if (!isNaN(leftVal)) {
                         let percentVal = leftVal * (numVal / 100);
                         this.expr = leftExpr + operator + percentVal;
@@ -744,11 +750,103 @@
             this.render();
         },
 
+        // Parser matemático seguro — sustituye new Function() y eval()
+        safeEval(expr) {
+            let pos = 0;
+            const s = expr.trim();
+
+            const peek   = () => s[pos];
+            const consume = () => s[pos++];
+            const skipSp = () => { while (pos < s.length && s[pos] === ' ') pos++; };
+
+            const parseNum = () => {
+                skipSp();
+                let start = pos;
+                while (pos < s.length && ((s[pos] >= '0' && s[pos] <= '9') || s[pos] === '.')) pos++;
+                if (pos === start) throw new Error('Número esperado en posición ' + pos);
+                return parseFloat(s.slice(start, pos));
+            };
+
+            const parseFactor = () => {
+                skipSp();
+                if (peek() === '(') {
+                    consume();
+                    const v = parseAddSub();
+                    skipSp();
+                    if (peek() !== ')') throw new Error('Paréntesis sin cerrar');
+                    consume();
+                    return v;
+                }
+                if (peek() === '-') { consume(); return -parseFactor(); }
+                if (peek() === '+') { consume(); return  parseFactor(); }
+                return parseNum();
+            };
+
+            const parseMulDiv = () => {
+                let left = parseFactor();
+                skipSp();
+                while (pos < s.length && (peek() === '*' || peek() === '/')) {
+                    const op = consume();
+                    const right = parseFactor();
+                    if (op === '/') {
+                        if (right === 0) throw new Error('División por cero');
+                        left /= right;
+                    } else { left *= right; }
+                    skipSp();
+                }
+                return left;
+            };
+
+            const parseAddSub = () => {
+                let left = parseMulDiv();
+                skipSp();
+                while (pos < s.length && (peek() === '+' || peek() === '-')) {
+                    const op = consume();
+                    left = op === '+' ? left + parseMulDiv() : left - parseMulDiv();
+                    skipSp();
+                }
+                return left;
+            };
+
+            const result = parseAddSub();
+            skipSp();
+            if (pos < s.length) throw new Error('Carácter inesperado: "' + peek() + '"');
+            return result;
+        },
+
+        // Tokenizador para render() — diferencia operadores unarios de binarios
+        _tokenizeExpr(expr) {
+            const tokens = [];
+            let i = 0;
+            while (i < expr.length) {
+                const c = expr[i];
+                const last = tokens[tokens.length - 1];
+                const prevIsNum   = last && last.type === 'num';
+                const prevIsClose = last && last.type === 'paren' && last.val === ')';
+                const prevIsValue = prevIsNum || prevIsClose;
+
+                if (c === '(' || c === ')') {
+                    tokens.push({ type: 'paren', val: c }); i++;
+                } else if ('*/'.includes(c) || ((c === '+' || c === '-') && prevIsValue)) {
+                    tokens.push({ type: 'op', val: c }); i++;
+                } else {
+                    // Número (con posible signo unario)
+                    let numStr = '';
+                    if ((c === '-' || c === '+') && !prevIsValue) { numStr += c; i++; }
+                    while (i < expr.length && ((expr[i] >= '0' && expr[i] <= '9') || expr[i] === '.')) {
+                        numStr += expr[i++];
+                    }
+                    if (numStr) tokens.push({ type: 'num', val: numStr });
+                }
+            }
+            return tokens;
+        },
+
         calculate() {
             if(!this.expr) return;
             try {
                 let clean = this.expr.replace(/[^0-9+\-*/().]/g, '');
-                let res = new Function('return ' + clean)();
+                let res = this.safeEval(clean);
                 if(!isFinite(res) || isNaN(res)) throw new Error("Err");
                 res = parseFloat(res.toPrecision(12));
                 this.addToHistory(this.expr, res);
@@ -770,21 +868,38 @@
         render(isResult = false) {
             const d = document.getElementById('main-display');
             if(!this.expr) { d.innerHTML = '0'; d.style.fontSize = '3.5rem'; return; }
-            
+
             let html = '';
-            // Mostrar con formato español: separador de miles punto, decimal coma
-            const parts = this.expr.split(/([+\-*/])/);
-            parts.forEach(part => {
-                if ("+-*/".includes(part)) {
-                    html += `<span style="color:var(--neon-cyan)">${part.replace('*','×').replace('/','÷')}</span>`;
-                } else if (!isNaN(parseFloat(part))) {
-                    let num = parseFloat(part);
-                    let formatted = num.toLocaleString('es-ES', { maximumFractionDigits: 10 });
-                    html += formatted;
+            const tokens = this._tokenizeExpr(this.expr);
+            tokens.forEach(tok => {
+                if (tok.type === 'op') {
+                    const sym = tok.val === '*' ? '×' : tok.val === '/' ? '÷' : tok.val;
+                    html += `<span style="color:var(--neon-cyan)">${sym}</span>`;
+                } else if (tok.type === 'paren') {
+                    html += `<span style="color:var(--neon-cyan)">${tok.val}</span>`;
                 } else {
-                    html += part;
+                    // Número: preservar el punto decimal en curso mientras se escribe
+                    const raw = tok.val;
+                    if (raw === '-' || raw === '+' || raw.endsWith('.')) {
+                        html += raw.replace('.', ',');
+                    } else {
+                        const num = parseFloat(raw);
+                        if (!isNaN(num)) {
+                            // Preservar decimales exactos que el usuario está escribiendo
+                            if (raw.includes('.')) {
+                                const [intPart, decPart] = raw.split('.');
+                                const formattedInt = parseInt(intPart || '0').toLocaleString('es-ES');
+                                html += (num < 0 && !intPart ? '-' : '') + formattedInt + ',' + decPart;
+                            } else {
+                                html += num.toLocaleString('es-ES', { maximumFractionDigits: 10 });
+                            }
+                        } else {
+                            html += raw;
+                        }
+                    }
                 }
             });
+
             d.innerHTML = html;
             this.adjustFontSize(d);
         },
@@ -847,23 +962,33 @@
 
         addToHistory(ex, r) {
             this.state.history.unshift({ expr: ex, res: r }); 
-            if (this.state.history.length > 20) this.state.history.pop(); 
+            if (this.state.history.length > 50) this.state.history.pop(); 
             this.saveState();
             this.renderHistory(); 
         },
 
         renderHistory() {
             const list = document.getElementById('history-list');
+            const header = document.getElementById('history-header');
+            if (header) header.style.display = this.state.history.length > 0 ? 'flex' : 'none';
             list.innerHTML = this.state.history.map((item, index) => {
                 const resF = item.res.toLocaleString('es-ES', { maximumFractionDigits: 10 });
                 const prettyExpr = item.expr.replace(/\./g, ',').replace(/\*/g,'×').replace(/\//g,'÷');
                 return `
                     <li>
+                        <span class="hist-del" onclick="App.deleteHistoryItem(${index})" title="Borrar entrada">×</span>
                         <span class="hist-expr" onclick="App.handleHistoryClick(${index}, 'expr')" title="Recuperar operación">${prettyExpr}</span> 
                         <span>=</span> 
                         <span class="hist-res" onclick="App.handleHistoryClick(${index}, 'res')" title="Usar resultado">${resF}</span>
                     </li>`;
             }).join('');
+        },
+
+        deleteHistoryItem(index) {
+            this.state.history.splice(index, 1);
+            this.saveState();
+            this.renderHistory();
+            this.showToast("Entrada eliminada");
         },
 
         handleHistoryClick(index, type) {
@@ -884,13 +1009,17 @@
         clearAll() { 
             this.expr = ''; 
             this.fresh = true;
-            this.state.history = []; 
             const sec = document.getElementById('secondary-display');
             sec.classList.remove('visible'); 
             sec.innerText = '';              
-            this.saveState(); 
-            this.renderHistory(); 
-            this.render(); 
+            this.render();
+        },
+
+        clearHistory() {
+            this.state.history = [];
+            this.saveState();
+            this.renderHistory();
+            this.showToast("Historial borrado");
         },
 
         // CRYPTO mejorado con skeletons
