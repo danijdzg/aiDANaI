@@ -4277,17 +4277,19 @@ if (wsCarteraName) {
 
         const tickerVal = String(valCampo(r, ['TICKER','Ticker','ticker']) || '').toUpperCase().trim();
         const nombreVal = String(valCampo(r, ['NOMBRE','Nombre','nombre']) || '').trim();
-        const tipoVal   = String(valCampo(r, ['TIPO','Tipo','tipo']) || 'OTRO').toUpperCase().trim();
+        const tipoVal   = window.normalizarTipoCartera(valCampo(r, ['TIPO','Tipo','tipo']) || 'OTRO');
         const cuentaVal = String(valCampo(r, ['CUENTA','Cuenta','cuenta']) || '').toUpperCase().trim();
-        const cantVal   = parseFloat(valCampo(r, ['CANTIDAD','Cantidad','cantidad']) || 0);
-        const pCompra   = parseFloat(valCampo(r, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA']) || 0);
-        const pActual   = parseFloat(valCampo(r, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL']) || 0);
+        const cantVal   = window.parseNumeroCartera(valCampo(r, ['CANTIDAD','Cantidad','cantidad']) || 0);
+        const pCompra   = window.parseNumeroCartera(valCampo(r, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA']) || 0);
+        const pActual   = window.parseNumeroCartera(valCampo(r, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL']) || 0);
         const notasVal  = String(valCampo(r, ['NOTAS','Notas','notas']) || '').trim();
+        const fuenteVal = String(valCampo(r, ['PRECIO_FUENTE','PrecioFuente','precio_fuente','FUENTE_PRECIO']) || '').trim();
+        const precioFechaVal = String(valCampo(r, ['PRECIO_ACTUALIZADO','PrecioActualizado','precio_actualizado','FECHA_PRECIO']) || '').trim();
 
         const tickerFinal = tickerVal || nombreVal;
         const nombreFinal = nombreVal;
 
-        return {
+        return window.sanitizarPosicionCartera({
             id:           String(valCampo(r, ['ID','Id','id']) || uuid()),
             ticker:       tickerFinal,
             nombre:       nombreFinal,
@@ -4297,8 +4299,10 @@ if (wsCarteraName) {
             precioCompra: isNaN(pCompra) ? 0 : pCompra,
             precioActual: isNaN(pActual) ? 0 : pActual,
             fechaCompra:  fc,
-            notas:        notasVal
-        };
+            notas:        notasVal,
+            precioFuente: fuenteVal,
+            precioActualizadoEn: precioFechaVal
+        });
     }).filter(p => p.ticker || p.nombre);
 
 } else {
@@ -4318,7 +4322,14 @@ if (wsHistCarteraName) {
     } else if (typeof rf === 'string' && rf) {
       fh = new Date(rf.includes('/') ? rf.split('/').reverse().join('-') : rf);
     }
-    return { fecha: fh, ts: fh.getTime(), valor: parseFloat(r.VALOR || r.Valor || 0) };
+    const costeRaw = r.COSTE ?? r.Coste ?? r.coste ?? '';
+    const puntoHist = {
+      fecha: fh,
+      ts: fh.getTime(),
+      valor: window.parseNumeroCartera(r.VALOR || r.Valor || 0)
+    };
+    if (costeRaw !== '') puntoHist.coste = window.parseNumeroCartera(costeRaw);
+    return puntoHist;
   }).filter(h => !isNaN(h.ts)).sort((a,b) => a.ts - b.ts);
 } else {
   window.historicoCartera = window.historicoCartera || [];
@@ -5346,7 +5357,7 @@ window.mapaCuentas[cta] = { tipo: 'SIN CLASIFICAR', esInversion: false };
 }
 window.mapaCuentas[cta].saldoActual = saldosTemporales[cta];
 });
-// 4b. MÓDULO CARTERA: Sobreescribir saldos con valor de mercado real
+// 4b. MÓDULO CARTERA: Patrimonio siempre a coste; mercado queda como plusvalía latente
 if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
 // 4c. Actualizar plusvalía visible en Patrimonio
 if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
@@ -5474,6 +5485,18 @@ if (!cta) return;
 const val = parseFloat(m.importe) || 0;
 saldos[cta] = window.sumarDinero(saldos[cta] || 0, val);
 });
+if (window.mapaCuentas) {
+Object.keys(window.mapaCuentas).forEach(ctaKey => {
+const info = window.mapaCuentas[ctaKey];
+if (!info || !info.tieneCartera) return;
+if (filtroUsuarioActual !== 'todos') {
+const letra = ctaKey.charAt(0).toUpperCase();
+if (filtroUsuarioActual === 'D' && letra !== 'D') return;
+if (filtroUsuarioActual === 'N' && letra !== 'N') return;
+}
+saldos[ctaKey] = info.costeTotal !== undefined ? info.costeTotal : (info.saldoActual || 0);
+});
+}
 const grupos = {};
 let sumaTotal = 0;
 // Agrupar saldos
@@ -5853,15 +5876,17 @@ XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
 	// ── MÓDULO CARTERA: Guardar hoja CARTERA ──────────────────────────────
 	const listaCartera = window.datosCartera || [];
 	if (listaCartera.length > 0) {
-	  const filasCartera = listaCartera.map(p => ({
+	  const filasCartera = listaCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
 	    "ID": p.id, "TICKER": p.ticker, "NOMBRE": p.nombre, "TIPO": p.tipo,
 	    "CUENTA": p.cuenta, "CANTIDAD": p.cantidad,
 	    "PRECIO_COMPRA": p.precioCompra, "PRECIO_ACTUAL": p.precioActual,
+        "PRECIO_FUENTE": p.precioFuente || "",
+        "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "",
         "FECHA_COMPRA": p.fechaCompra || "",
 	    "NOTAS": p.notas || ""
 	  }));
 	  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCartera, {
-	    header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","FECHA_COMPRA","NOTAS"]
+	    header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"]
 	  }), "Cartera");
 	}
 // ── MÓDULO CARTERA: Guardar hoja HISTORICO_CARTERA ────────────────────
@@ -5869,9 +5894,10 @@ const listaHistCartera = window.historicoCartera || [];
 if (listaHistCartera.length > 0) {
   const filasHist = listaHistCartera.map(h => ({
     "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
-    "VALOR": h.valor
+    "VALOR": h.valor,
+    "COSTE": typeof h.coste === 'number' ? h.coste : ""
   }));
-  const wsHistC = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR"] });
+  const wsHistC = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR","COSTE"] });
   Object.keys(wsHistC).forEach(k => { if (wsHistC[k].t === 'd') wsHistC[k].z = 'dd/mm/yyyy'; });
   XLSX.utils.book_append_sheet(wb, wsHistC, "Historico_Cartera");
 }
@@ -5937,7 +5963,7 @@ const lr2 = window.datosRecurrentes||[];
 XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lr2.map(r=>({ID:r.id,PROXIMA_FECHA:r.fechaProx,FRECUENCIA:r.frecuencia,DIAS_SEMANA:r.diasSemana||"",TIPO_REGLA:r.tipoRegla||"gasto",CUENTA:r.cuenta,CUENTA_DESTINO:r.cuentaDestino||"",IMPORTE:r.importe,CONCEPTO:r.concepto,BENEFICIARIO:r.beneficiario||"",DESCRIPCION:r.descripcion||""})),{header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]}), "Recurrentes");
 // ── RECONSTRUIR HOJA CARTERA ──────────────────────────────────────
 if (window.datosCartera && window.datosCartera.length > 0) {
-    const filasCartera = window.datosCartera.map(p => ({
+    const filasCartera = window.datosCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
         "ID": p.id,
         "TICKER": p.ticker,
         "NOMBRE": p.nombre,
@@ -5946,11 +5972,13 @@ if (window.datosCartera && window.datosCartera.length > 0) {
         "CANTIDAD": p.cantidad,
         "PRECIO_COMPRA": p.precioCompra,
         "PRECIO_ACTUAL": p.precioActual,
+        "PRECIO_FUENTE": p.precioFuente || "",
+        "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "",
         "FECHA_COMPRA": p.fechaCompra || "",
         "NOTAS": p.notas || ""
     }));
     const wsCartera = XLSX.utils.json_to_sheet(filasCartera, {
-        header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","FECHA_COMPRA","NOTAS"]
+        header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"]
     });
     XLSX.utils.book_append_sheet(wb, wsCartera, "Cartera");
 }
@@ -5959,9 +5987,10 @@ if (window.datosCartera && window.datosCartera.length > 0) {
 if (window.historicoCartera && window.historicoCartera.length > 0) {
     const filasHist = window.historicoCartera.map(h => ({
         "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
-        "VALOR": h.valor
+        "VALOR": h.valor,
+        "COSTE": typeof h.coste === 'number' ? h.coste : ""
     }));
-    const wsHist = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR"] });
+    const wsHist = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR","COSTE"] });
     // Aplicar formato de fecha legible
     Object.keys(wsHist).forEach(k => {
         if (wsHist[k].t === 'd') wsHist[k].z = 'dd/mm/yyyy';
@@ -8504,6 +8533,125 @@ document.addEventListener('click', function(e) {
  * 📈 MÓDULO: CARTERA DE INVERSIONES (PRODUCCIÓN 1.0 - ONLY BTC/EUR)
  * ============================================================================
  */
+window.CARTERA_TIPOS = Object.freeze({
+    BOLSA:          { label: 'Bolsa',             color: '#0A84FF', badge: 'badge-bolsa',   emoji: '📈' },
+    CRIPTOMONEDAS: { label: 'Criptomonedas',     color: '#FF9F1B', badge: 'badge-cripto',  emoji: '🪙' },
+    AUTOCUSTODIA:  { label: 'Autocustodia',      color: '#39FF14', badge: 'badge-custodia',emoji: '🔐' },
+    PLANPENSIONES: { label: 'Plan de Pensiones', color: '#BF5AF2', badge: 'badge-pension', emoji: '🏦' },
+    CROWDFUNDING:  { label: 'Crowdfunding',      color: '#00B8FF', badge: 'badge-bolsa',   emoji: '🤝' },
+    OTRO:          { label: 'Otros',             color: '#888888', badge: '',              emoji: '💼' }
+});
+
+window.normalizarTipoCartera = function(tipo) {
+    const limpio = String(tipo || 'OTRO').toUpperCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\s_-]+/g, '');
+    const alias = {
+        CRIPTO: 'CRIPTOMONEDAS',
+        CRYPTO: 'CRIPTOMONEDAS',
+        CRIPTOMONEDA: 'CRIPTOMONEDAS',
+        CRIPTOMONEDAS: 'CRIPTOMONEDAS',
+        BTC: 'CRIPTOMONEDAS',
+        BITCOIN: 'CRIPTOMONEDAS',
+        PENSION: 'PLANPENSIONES',
+        PENSIONES: 'PLANPENSIONES',
+        PLANPENSION: 'PLANPENSIONES',
+        PLANPENSIONES: 'PLANPENSIONES',
+        FONDO: 'CROWDFUNDING',
+        FONDOS: 'CROWDFUNDING',
+        CROWDFUNDING: 'CROWDFUNDING',
+        CROWDLENDING: 'CROWDFUNDING',
+        AUTOCUSTODIA: 'AUTOCUSTODIA',
+        BOLSA: 'BOLSA',
+        ACCION: 'BOLSA',
+        ACCIONES: 'BOLSA',
+        ETF: 'BOLSA',
+        OTRO: 'OTRO',
+        OTROS: 'OTRO'
+    };
+    return alias[limpio] || (window.CARTERA_TIPOS[limpio] ? limpio : 'OTRO');
+};
+
+window.getMetaTipoCartera = function(tipo) {
+    const key = window.normalizarTipoCartera(tipo);
+    return window.CARTERA_TIPOS[key] || window.CARTERA_TIPOS.OTRO;
+};
+
+window.parseNumeroCartera = function(valor) {
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
+    const raw = String(valor ?? '').trim();
+    if (!raw) return 0;
+    let limpio = raw.replace(/[€%\s]/g, '');
+    if (limpio.includes(',') && limpio.includes('.')) {
+        limpio = limpio.replace(/\./g, '').replace(',', '.');
+    } else if (limpio.includes(',')) {
+        limpio = limpio.replace(',', '.');
+    }
+    const n = parseFloat(limpio);
+    return Number.isFinite(n) ? n : 0;
+};
+
+window.esCriptoCartera = function(posOTipo) {
+    const tipo = typeof posOTipo === 'object' ? posOTipo.tipo : posOTipo;
+    const normalizado = window.normalizarTipoCartera(tipo);
+    return normalizado === 'CRIPTOMONEDAS' || normalizado === 'AUTOCUSTODIA';
+};
+
+window.esBTCCartera = function(pos) {
+    return window.esCriptoCartera(pos) && String(pos?.ticker || '').toUpperCase().trim() === 'BTC';
+};
+
+window.getCantidadCartera = function(pos) {
+    return window.esCriptoCartera(pos) ? window.parseNumeroCartera(pos?.cantidad) : 1;
+};
+
+window.getCostePosicionCartera = function(pos) {
+    return window.parseNumeroCartera(pos?.precioCompra);
+};
+
+window.getValorMercadoPosicionCartera = function(pos) {
+    const precioActual = window.parseNumeroCartera(pos?.precioActual);
+    return window.esCriptoCartera(pos) ? window.getCantidadCartera(pos) * precioActual : precioActual;
+};
+
+window.getPnlPosicionCartera = function(pos) {
+    return window.getValorMercadoPosicionCartera(pos) - window.getCostePosicionCartera(pos);
+};
+
+window.getRentabilidadPosicionCartera = function(pos) {
+    const coste = window.getCostePosicionCartera(pos);
+    return coste > 0 ? (window.getPnlPosicionCartera(pos) / coste) * 100 : 0;
+};
+
+window.sanitizarPosicionCartera = function(pos) {
+    const tipo = window.normalizarTipoCartera(pos?.tipo);
+    const esCripto = window.esCriptoCartera(tipo);
+    return {
+        id: String(pos?.id || ((typeof uuid === 'function') ? uuid() : ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`))),
+        ticker: String(pos?.ticker || pos?.nombre || '').toUpperCase().trim(),
+        nombre: String(pos?.nombre || '').trim(),
+        tipo,
+        cuenta: String(pos?.cuenta || '').toUpperCase().trim(),
+        cantidad: esCripto ? window.parseNumeroCartera(pos?.cantidad) : 1,
+        precioCompra: window.parseNumeroCartera(pos?.precioCompra),
+        precioActual: window.parseNumeroCartera(pos?.precioActual),
+        fechaCompra: pos?.fechaCompra || '',
+        notas: String(pos?.notas || '').trim(),
+        precioFuente: pos?.precioFuente || (window.esBTCCartera(pos) ? 'Binance BTC/EUR' : 'Manual'),
+        precioActualizadoEn: pos?.precioActualizadoEn || ''
+    };
+};
+
+window.escapeHtmlCartera = function(valor) {
+    return String(valor ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+};
+
+window.escapeJsCartera = function(valor) {
+    return String(valor ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+};
+
 window.precioBTC_EUR_Cache = 0; // Memoria caché para el precio en euros
 
 // 1. CONEXIÓN API BINANCE (Exclusivo BTC/EUR)
@@ -8521,7 +8669,7 @@ window.obtenerPrecioBTC = async function() {
 };
 window.refrescarPrecioBTCModal = async function() {
     const tipo = document.getElementById('cartera-tipo').value;
-    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const esCripto = window.esCriptoCartera(tipo);
     if (!esCripto) return;
     const tickerInput = document.getElementById('cartera-ticker');
     const ticker = tickerInput ? tickerInput.value.toUpperCase().trim() : '';
@@ -8533,6 +8681,8 @@ window.refrescarPrecioBTCModal = async function() {
         const precio = await window.obtenerPrecioBTC();
         if (precio !== null) {
             inputActual.value = precio.toFixed(2);
+            inputActual.dataset.precioFuente = 'Binance BTC/EUR';
+            inputActual.dataset.precioActualizadoEn = new Date().toISOString();
             inputActual.style.color = '#39FF14';
             window.actualizarPreviewPnl();
             window.mostrarToast('Precio BTC actualizado desde Binance', 'success');
@@ -8548,8 +8698,9 @@ window.cerrarModalCartera = function() {
 
 // 3. COMPORTAMIENTO INTELIGENTE DEL FORMULARIO
 window.comportamientoTipoActivo = async function() {
-    const tipo = document.getElementById('cartera-tipo').value;
-    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const tipoRaw = document.getElementById('cartera-tipo').value;
+    const tipo = window.normalizarTipoCartera(tipoRaw);
+    const esCripto = window.esCriptoCartera(tipo);
 
     // Referencias DOM
     const cajaCantidad = document.getElementById('caja-cantidad');
@@ -8585,6 +8736,8 @@ window.comportamientoTipoActivo = async function() {
         }
         if (precioUnitario !== null) {
             inputActual.value = precioUnitario.toFixed(2);
+            inputActual.dataset.precioFuente = 'Binance BTC/EUR';
+            inputActual.dataset.precioActualizadoEn = new Date().toISOString();
             inputActual.readOnly = false; // permite ajuste manual
             if (avisoApi) avisoApi.innerText = "Precio actualizado desde Binance. Puedes editarlo.";
         } else {
@@ -8602,6 +8755,8 @@ window.comportamientoTipoActivo = async function() {
         if (labelCompra) labelCompra.innerText = 'IMPORTE INVERTIDO (€)';
         if (labelActual) labelActual.innerText = 'VALOR ACTUAL (€) ← MANUAL';
         inputActual.readOnly = false;
+        inputActual.dataset.precioFuente = 'Manual';
+        inputActual.dataset.precioActualizadoEn = '';
         inputActual.style.color = "#39FF14";
         if (cajaPrecio) cajaPrecio.style.borderColor = "rgba(57, 255, 20, 0.4)";
         inputActual.placeholder = "0.00";
@@ -8614,34 +8769,38 @@ window.comportamientoTipoActivo = async function() {
 document.addEventListener('DOMContentLoaded', () => {
     const tipoSelect = document.getElementById('cartera-tipo');
     const tickerInput = document.getElementById('cartera-ticker');
+    const precioInput = document.getElementById('cartera-precio-actual');
     if (tipoSelect && tickerInput) {
         tipoSelect.addEventListener('change', () => {
             const tipo = tipoSelect.value;
-            if (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA') {
+            if (window.esCriptoCartera(tipo)) {
                 if (!tickerInput.value || tickerInput.value.toUpperCase() === 'BTC') {
                     tickerInput.value = 'BTC';
                 }
             }
         });
     }
+    if (precioInput) {
+        precioInput.addEventListener('input', () => {
+            precioInput.dataset.precioFuente = 'Manual';
+            precioInput.dataset.precioActualizadoEn = '';
+        });
+    }
 });
 
 // 4. PREVIEW P&L (VISTA PREVIA DE RENTABILIDAD)
 window.actualizarPreviewPnl = function() {
-    const tipo = document.getElementById('cartera-tipo').value;
-    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || (esCripto ? 0 : 1);
-    const pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    const pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
-
-    let costeTotal, valorActual;
-    if (esCripto) {
-        costeTotal = pCompra;                      // importe total invertido
-        valorActual = cantidad * pActual;           // cantidad * precio unitario
-    } else {
-        costeTotal = pCompra;                      // importe invertido
-        valorActual = pActual;                     // valor actual total (campo ya es total)
-    }
+    const tipoRaw = document.getElementById('cartera-tipo').value;
+    const tipo = window.normalizarTipoCartera(tipoRaw);
+    const posTmp = window.sanitizarPosicionCartera({
+        tipo,
+        ticker: document.getElementById('cartera-ticker').value,
+        cantidad: document.getElementById('cartera-cantidad').value,
+        precioCompra: document.getElementById('cartera-precio-compra').value,
+        precioActual: document.getElementById('cartera-precio-actual').value
+    });
+    const costeTotal = window.getCostePosicionCartera(posTmp);
+    const valorActual = window.getValorMercadoPosicionCartera(posTmp);
 
     const previewDiv = document.getElementById('preview-pnl-cartera');
     const valDiv = document.getElementById('preview-pnl-valor');
@@ -9350,22 +9509,10 @@ window.calcularValoresCartera = function() {
   let totalCoste = 0;
   let totalValor = 0;
 
-  posicionesFiltradas.forEach(pos => {
-    const cantidad = parseFloat(pos.cantidad) || 0;
-    const precioCompra = parseFloat(pos.precioCompra) || 0;
-    const precioActual = parseFloat(pos.precioActual) || 0;
-    const esCripto = (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA');
-
-    let costeTotal, valorActual;
-    if (esCripto) {
-      // Cripto: precioCompra = importe total invertido, precioActual = precio unitario BTC/EUR
-      costeTotal = precioCompra;
-      valorActual = cantidad * precioActual;
-    } else {
-      // Resto: precioCompra = importe invertido, precioActual = valor total estimado por el usuario
-      costeTotal = precioCompra;
-      valorActual = precioActual;
-    }
+  posicionesFiltradas.forEach(posRaw => {
+    const pos = window.sanitizarPosicionCartera(posRaw);
+    const costeTotal = window.getCostePosicionCartera(pos);
+    const valorActual = window.getValorMercadoPosicionCartera(pos);
 
     totalCoste += costeTotal;
     totalValor += valorActual;
@@ -9416,7 +9563,7 @@ window.calcularValoresCartera = function() {
     plusvalia,
     rentabilidad,
     numPosiciones: posicionesFiltradas.length,
-    posiciones: posicionesFiltradas
+    posiciones: posicionesFiltradas.map(p => window.sanitizarPosicionCartera(p))
   };
 
   // Actualizar histórico diario (si procede)
@@ -9542,19 +9689,17 @@ window.renderizarCartera = function() {
 
   // Agrupar posiciones por tipo
   const grupos = {};
-  const colorTipo = { BOLSA:'#0A84FF', CRIPTO:'#FF9F1B', AUTOCUSTODIA:'#39FF14', PENSION:'#BF5AF2', FONDO:'#00B8FF', OTRO:'#888' };
-  const badgeTipo = { BOLSA:'badge-bolsa', CRIPTO:'badge-cripto', AUTOCUSTODIA:'badge-custodia', PENSION:'badge-pension', FONDO:'badge-bolsa', OTRO:'' };
-  const emojiTipo = { BOLSA:'📈', CRIPTO:'🪙', AUTOCUSTODIA:'🔐', PENSION:'🏦', FONDO:'📊', OTRO:'💼' };
+  const colorTipo = Object.fromEntries(Object.entries(window.CARTERA_TIPOS).map(([k, v]) => [k, v.color]));
 	  // 📌 NUEVO: filtrar posiciones por usuario activo
   const posicionesFiltradas = (window.datosCartera || []).filter(p => {
     if (typeof pasaFiltroPropietario !== 'function') return true;
     return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
-  });
+  }).map(p => window.sanitizarPosicionCartera(p));
 
   posicionesFiltradas.forEach(pos => {
-      const tipo = pos.tipo || 'OTRO';
+      const tipo = window.normalizarTipoCartera(pos.tipo);
     if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
-    const valPos = pos.cantidad * pos.precioActual;
+    const valPos = window.getValorMercadoPosicionCartera(pos);
     grupos[tipo].total += valPos;
     grupos[tipo].posiciones.push(pos);
   });
@@ -9563,16 +9708,18 @@ window.renderizarCartera = function() {
   let html = '';
   Object.keys(grupos).sort().forEach(tipo => {
     const g = grupos[tipo];
-    const color = colorTipo[tipo] || '#888';
-    const badgeClass = badgeTipo[tipo] || '';
-    const emoji = emojiTipo[tipo] || '💼';
-    const groupId = 'grp-' + tipo;
+    const meta = window.getMetaTipoCartera(tipo);
+    const color = meta.color || '#888';
+    const badgeClass = meta.badge || '';
+    const emoji = meta.emoji || '💼';
+    const tipoLabel = window.escapeHtmlCartera(meta.label || tipo);
+    const groupId = 'grp-' + tipo.replace(/[^a-zA-Z0-9]/g, '');
     html += `
     <div style="border-bottom:1px solid #111;">
       <div class="cartera-section-header" onclick="window.toggleCarteraGroup('${groupId}')">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="font-size:18px;">${emoji}</span>
-          <span class="cartera-section-title" style="color:${color};">${tipo}</span>
+          <span class="cartera-section-title" style="color:${color};">${tipoLabel}</span>
           <span style="font-size:9px; color:#555; font-weight:700;">(${g.posiciones.length})</span>
         </div>
         <span class="cartera-section-total" style="color:${color};">${fmt(g.total)} <span style="font-size:10px; opacity:0.6;">(${((g.total / (r.totalValor || 1)) * 100).toFixed(1)}%)</span></span>
@@ -9580,18 +9727,18 @@ window.renderizarCartera = function() {
       <div id="${groupId}">`;
       const totalValorCartera = r.totalValor || 1; // evita división por cero
     g.posiciones.sort((a,b) => {
-  const vA = a.cantidad * a.precioActual, vB = b.cantidad * b.precioActual;
-  if (window.ordenCartera === 'pnl')  return (vB - b.precioCompra) - (vA - a.precioCompra);
-  if (window.ordenCartera === 'rent') return ((vB / (b.precioCompra||1))) - ((vA / (a.precioCompra||1)));
+  const vA = window.getValorMercadoPosicionCartera(a), vB = window.getValorMercadoPosicionCartera(b);
+  if (window.ordenCartera === 'pnl')  return window.getPnlPosicionCartera(b) - window.getPnlPosicionCartera(a);
+  if (window.ordenCartera === 'rent') return window.getRentabilidadPosicionCartera(b) - window.getRentabilidadPosicionCartera(a);
   if (window.ordenCartera === 'fecha') return (b.fechaCompra||'').localeCompare(a.fechaCompra||'');
   return vB - vA;
 }).forEach(pos => {
-          const valPos  = pos.cantidad * pos.precioActual;
+          const valPos  = window.getValorMercadoPosicionCartera(pos);
 const pesoPct = (valPos / totalValorCartera) * 100;
 const alertaPeso = pesoPct > 40 ? '🔴' : pesoPct > 25 ? '🟡' : '';
-          const cosPos  = pos.precioCompra;
-          const pnlPos  = valPos - cosPos;
-          let rentPos = cosPos > 0 ? ((valPos / cosPos) - 1) * 100 : 0;
+          const cosPos  = window.getCostePosicionCartera(pos);
+          const pnlPos  = window.getPnlPosicionCartera(pos);
+          let rentPos = window.getRentabilidadPosicionCartera(pos);
           const fCompra = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
           if (fCompra && !isNaN(fCompra.getTime())) {
             const years = (new Date() - fCompra) / (1000 * 60 * 60 * 24 * 365.25);
@@ -9601,24 +9748,32 @@ const alertaPeso = pesoPct > 40 ? '🔴' : pesoPct > 25 ? '🟡' : '';
           }
           const pnlSig  = pnlPos >= 0 ? '+' : '';
           const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
-          const cantStr = pos.cantidad >= 1 ? pos.cantidad.toFixed(2) : pos.cantidad.toFixed(6);
+          const cant = window.getCantidadCartera(pos);
+          const cantStr = cant >= 1 ? cant.toFixed(2) : cant.toFixed(6);
 
           // ✨ NUEVA LÓGICA DIFERENCIADA POR TIPO DE ACTIVO
-          const esCripto = (pos.tipo === 'CRIPTOMONEDAS' || pos.tipo === 'AUTOCUSTODIA');
-			const esPrecioAuto = (esCripto && pos.ticker.toUpperCase() === 'BTC'); // solo BTC tiene precio automático por ahora
+          const esCripto = window.esCriptoCartera(pos);
+			const esPrecioAuto = window.esBTCCartera(pos); // solo BTC/EUR tiene precio automático
 const precioIcon = esPrecioAuto ? '<span style="color:#00B8FF; font-size:10px; margin-left:4px;" title="Precio automático vía Binance">⚡</span>' : '<span style="color:#888; font-size:9px; margin-left:4px;" title="Precio manual">✏️</span>';
+          const tickerTxt = window.escapeHtmlCartera(pos.ticker || pos.nombre);
+          const nombreTxt = window.escapeHtmlCartera(pos.nombre || '');
+          const fuenteTxt = window.escapeHtmlCartera(pos.precioFuente || (esPrecioAuto ? 'Binance BTC/EUR' : 'Manual'));
+          const fechaPrecioTxt = pos.precioActualizadoEn ? new Date(pos.precioActualizadoEn).toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+          const precioInfo = fechaPrecioTxt ? `${fuenteTxt} · ${fechaPrecioTxt}` : fuenteTxt;
+          const posIdJs = window.escapeJsCartera(pos.id);
           html += `
-          <div class="cartera-pos-row" onclick="window.editarPosicion('${pos.id}')">
+          <div class="cartera-pos-row" onclick="window.editarPosicion('${posIdJs}')">
             <div style="flex:1; min-width:0; padding-right:8px;">
-              <div class="cartera-ticker">${alertaPeso}${pos.ticker || pos.nombre}${precioIcon}</div>
-              ${pos.nombre && pos.ticker ? `<div class="cartera-nombre">${pos.nombre}</div>` : ''}
+              <div class="cartera-ticker">${alertaPeso}${tickerTxt}${precioIcon}</div>
+              ${pos.nombre && pos.ticker ? `<div class="cartera-nombre">${nombreTxt}</div>` : ''}
               ${esCripto ? `<div class="cartera-cantidad">${cantStr} × ${fmt2(pos.precioActual)}</div>` : ''}
-              <span class="cartera-tipo-badge ${badgeClass}">${tipo}</span>
+              <span class="cartera-tipo-badge ${badgeClass}">${tipoLabel}</span>
             </div>
             <div style="text-align:right; flex-shrink:0;">
               <div class="cartera-valor" style="color:#fff;">${fmt2(valPos)}</div>
               <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%${pos.fechaCompra && (new Date() - new Date(pos.fechaCompra)) > 2592000000 ? ' an.' : ''})</div>
               <div style="font-size:9px; color:#555; margin-top:2px;">${pos.fechaCompra ? pos.fechaCompra.split('-').reverse().join('/') + ' · ' : ''}Invertido: ${fmt2(pos.precioCompra)}</div>
+              <div style="font-size:9px; color:#555; margin-top:2px;">Precio: ${precioInfo}</div>
 <div class="pos-weight-pct">${((valPos / totalValorCartera) * 100).toFixed(1)}% cartera</div>
 <div class="pos-weight-bar-bg">
   <div class="pos-weight-bar-fill" style="width:${Math.min((valPos / totalValorCartera) * 100, 100).toFixed(1)}%; background:${color};"></div>
@@ -9657,7 +9812,7 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
   if (elCenter) elCenter.innerText = new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(totalVal);
 
   const dataDonut = Object.keys(grupos).map(tipo => ({
-    name: tipo,
+    name: window.getMetaTipoCartera(tipo).label || tipo,
     value: parseFloat(grupos[tipo].total.toFixed(2)),
     itemStyle: { color: colorTipo[tipo] || '#888', shadowBlur: 15, shadowColor: colorTipo[tipo] || '#888' }
   }));
@@ -9871,6 +10026,11 @@ window.abrirModalNuevaPosicion = function() {
 	  ['cartera-cantidad','cartera-precio-compra','cartera-precio-actual'].forEach(id => {
 	    const el = document.getElementById(id); if (el) el.value = '';
 	  });
+  const inputActual = document.getElementById('cartera-precio-actual');
+  if (inputActual) {
+    inputActual.dataset.precioFuente = 'Manual';
+    inputActual.dataset.precioActualizadoEn = '';
+  }
   const extBtns = document.getElementById('cartera-extra-btns');
   if (extBtns) extBtns.style.display = 'none';
   const preview = document.getElementById('preview-pnl-cartera');
@@ -9889,11 +10049,13 @@ window.editarPosicion = function(id) {
     document.getElementById('cartera-pos-id').value    = pos.id;
     document.getElementById('cartera-ticker').value    = pos.ticker;
     document.getElementById('cartera-nombre').value    = pos.nombre;
-    document.getElementById('cartera-tipo').value      = pos.tipo;
+    document.getElementById('cartera-tipo').value      = window.normalizarTipoCartera(pos.tipo);
     document.getElementById('cartera-cuenta').value    = pos.cuenta;
     document.getElementById('cartera-cantidad').value  = pos.cantidad;
     document.getElementById('cartera-precio-compra').value = pos.precioCompra;
     document.getElementById('cartera-precio-actual').value = pos.precioActual;
+    document.getElementById('cartera-precio-actual').dataset.precioFuente = pos.precioFuente || (window.esBTCCartera(pos) ? 'Binance BTC/EUR' : 'Manual');
+    document.getElementById('cartera-precio-actual').dataset.precioActualizadoEn = pos.precioActualizadoEn || '';
     document.getElementById('cartera-fecha-compra').value = pos.fechaCompra || '';
     document.getElementById('cartera-notas').value     = pos.notas || '';
     const titulo = document.getElementById('modal-cartera-titulo');
@@ -9902,7 +10064,7 @@ window.editarPosicion = function(id) {
     if (extBtns) extBtns.style.display = 'grid';
     window.actualizarPreviewPnl();
     // Añadimos esta línea para que el modal se adapte al tipo de activo
-    if (typeof windo.comportamientoTipoActivo === 'function') {
+    if (typeof window.comportamientoTipoActivo === 'function') {
         window.comportamientoTipoActivo();
     }
     setTimeout(() => window.actualizarPreviewPnl(), 100);
@@ -9912,19 +10074,23 @@ window.editarPosicion = function(id) {
 window.guardarPosicion = async function() {
     // 1. Obtener valores del DOM
     const id = document.getElementById('cartera-pos-id').value;
-    const tipo = document.getElementById('cartera-tipo').value;
-    const esCripto = (tipo === 'CRIPTOMONEDAS' || tipo === 'AUTOCUSTODIA');
+    const tipoRaw = document.getElementById('cartera-tipo').value;
+    const tipo = window.normalizarTipoCartera(tipoRaw);
+    const esCripto = window.esCriptoCartera(tipo);
     const cuenta = document.getElementById('cartera-cuenta').value;
     const ticker = document.getElementById('cartera-ticker').value.toUpperCase().trim();
     const nombre = document.getElementById('cartera-nombre').value;
-    const cantidad = parseFloat(document.getElementById('cartera-cantidad').value) || 0;
-    let pCompra = parseFloat(document.getElementById('cartera-precio-compra').value) || 0;
-    let pActual = parseFloat(document.getElementById('cartera-precio-actual').value) || 0;
+    const cantidad = window.parseNumeroCartera(document.getElementById('cartera-cantidad').value);
+    let pCompra = window.parseNumeroCartera(document.getElementById('cartera-precio-compra').value);
+    let pActual = window.parseNumeroCartera(document.getElementById('cartera-precio-actual').value);
     const fecha = document.getElementById('cartera-fecha-compra').value;
     const notas = document.getElementById('cartera-notas').value;
+    const inputActual = document.getElementById('cartera-precio-actual');
+    const precioFuente = inputActual?.dataset?.precioFuente || (ticker === 'BTC' && esCripto ? 'Binance BTC/EUR' : 'Manual');
+    const precioActualizadoEn = inputActual?.dataset?.precioActualizadoEn || '';
 
     // 2. Validación básica
-    if (!tipo || !ticker || isNaN(pCompra) || isNaN(pActual) || (esCripto && isNaN(cantidad))) {
+    if (!tipoRaw || !ticker || pCompra <= 0 || pActual <= 0 || (esCripto && cantidad <= 0)) {
         window.mostrarToast("Completa los campos vitales (Tipo, Ticker, Importe Invertido y Precio Actual)", "error");
         return;
     }
@@ -9934,16 +10100,16 @@ window.guardarPosicion = async function() {
         let dineroAportado = 0;
         if (window.datos) {
             window.datos.forEach(m => {
-                if (m.cuenta === cuenta) dineroAportado += parseFloat(m.importe) || 0;
+                if (String(m.cuenta || '').toUpperCase().trim() === String(cuenta || '').toUpperCase().trim()) dineroAportado += window.parseNumeroCartera(m.importe);
             });
         }
 
         let costeOtrasPosiciones = 0;
         if (window.datosCartera) {
             window.datosCartera.forEach(p => {
-                if (p.cuenta === cuenta && p.id !== id) {
+                if (String(p.cuenta || '').toUpperCase().trim() === String(cuenta || '').toUpperCase().trim() && p.id !== id) {
                     // El coste de cada posición es su precioCompra (que representa el total invertido en ella)
-                    costeOtrasPosiciones += parseFloat(p.precioCompra) || 0;
+                    costeOtrasPosiciones += window.getCostePosicionCartera(p);
                 }
             });
         }
@@ -9971,7 +10137,7 @@ window.guardarPosicion = async function() {
     const generarId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`;
 
     // Declaración ÚNICA de la variable posicion
-    const posicion = {
+    const posicion = window.sanitizarPosicionCartera({
         id: id || generarId(),
         tipo,
         cuenta,
@@ -9981,8 +10147,10 @@ window.guardarPosicion = async function() {
         precioCompra: pCompraFinal,
         precioActual: pActualFinal,
         fechaCompra: fecha,
-        notas
-    };
+        notas,
+        precioFuente,
+        precioActualizadoEn
+    });
 
     // 5. Guardar en el array
     if (id) {
@@ -10047,33 +10215,39 @@ window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
     if (icon && !modoSilencioso) icon.textContent = '⏳';
     if (!modoSilencioso) notify("⚡ Consultando mercado (Binance)...", "info");
 
-    let actualizados = 0;
-    const criptoPos = posiciones.filter(p => p.tipo === 'CRIPTOMONEDAS' || p.tipo === 'AUTOCUSTODIA');
+    try {
+        let actualizados = 0;
+        const criptoPos = posiciones.filter(p => window.esBTCCartera(p));
+        const precioUnitario = criptoPos.length > 0 ? await window.obtenerPrecioBTC() : null;
+        if (criptoPos.length > 0 && precioUnitario === null) {
+            if (!modoSilencioso) notify("No se pudo obtener BTC/EUR desde Binance", "error");
+            return;
+        }
 
-    for (const pos of criptoPos) {
-        let ticker = pos.ticker.toUpperCase().trim();
-        if (ticker === 'BTC') {
-            const precioUnitario = await window.obtenerPrecioBTC();
-            if (precioUnitario !== null && pos.precioActual !== precioUnitario) {
-                pos.precioActual = precioUnitario;   // actualizamos el precio unitario
+        for (const pos of criptoPos) {
+            if (precioUnitario !== null && Math.abs(window.parseNumeroCartera(pos.precioActual) - precioUnitario) > 0.0001) {
+                pos.tipo = window.normalizarTipoCartera(pos.tipo);
+                pos.precioActual = precioUnitario;   // actualizamos solo BTC/EUR
+                pos.precioFuente = 'Binance BTC/EUR';
+                pos.precioActualizadoEn = new Date().toISOString();
                 actualizados++;
             }
         }
-    }
 
-    if (actualizados > 0) {
-        window.calcularValoresCartera();
-        window.renderizarCartera();
-        if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-        if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
-        if (!modoSilencioso) notify(`✅ Precios actualizados (${actualizados} posiciones)`, "success");
-    } else {
-        if (!modoSilencioso) notify("Todos los precios ya estaban al día", "info");
+        if (actualizados > 0) {
+            window.calcularValoresCartera();
+            window.renderizarCartera();
+            if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
+            if (typeof window.guardarUniversal === 'function') await window.guardarUniversal();
+            if (!modoSilencioso) notify(`✅ Precios actualizados (${actualizados} posiciones BTC)`, "success");
+        } else {
+            if (!modoSilencioso) notify("Todos los precios BTC/EUR ya estaban al día", "info");
+        }
+        if (typeof vibrar === 'function') vibrar('success');
+    } finally {
+        if (btn) btn.style.opacity = '1';
+        if (icon && !modoSilencioso) icon.textContent = '⚡';
     }
-
-    if (btn) btn.style.opacity = '1';
-    if (icon && !modoSilencioso) icon.textContent = '⚡';
-    if (typeof vibrar === 'function') vibrar('success');
 };
 // ── FIN MOTOR CARTERA ─────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
