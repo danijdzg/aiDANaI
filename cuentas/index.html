@@ -2837,10 +2837,430 @@ GUARDAR OPERACIÓN <span class="material-icons">rocket_launch</span>
 </template>
 <script>
 
+// ============================================================
+// MODELO FINANCIERO CENTRAL
+// Se define al inicio para que cualquier carga local/nube tenga
+// helpers disponibles antes de procesar Excel o pintar la interfaz.
+// ============================================================
+window.FinanceModel = (function() {
+    const CARTERA_TIPOS = Object.freeze({
+        BOLSA:          { label: 'Bolsa',             color: '#0A84FF', badge: 'badge-bolsa',   emoji: '📈' },
+        CRIPTOMONEDAS: { label: 'Criptomonedas',     color: '#FF9F1B', badge: 'badge-cripto',  emoji: '🪙' },
+        AUTOCUSTODIA:  { label: 'Autocustodia',      color: '#39FF14', badge: 'badge-custodia',emoji: '🔐' },
+        PLANPENSIONES: { label: 'Plan de Pensiones', color: '#BF5AF2', badge: 'badge-pension', emoji: '🏦' },
+        CROWDFUNDING:  { label: 'Crowdfunding',      color: '#00B8FF', badge: 'badge-bolsa',   emoji: '🤝' },
+        OTRO:          { label: 'Otros',             color: '#888888', badge: '',              emoji: '💼' }
+    });
+
+    function crearId() {
+        try {
+            if (typeof uuid === 'function') return uuid();
+        } catch (e) {}
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+        return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+
+    function limpiarTexto(valor) {
+        return String(valor || '').toUpperCase().trim().replace(/\s+/g, ' ');
+    }
+
+    function nuclearTexto(valor) {
+        return String(valor || '')
+            .toUpperCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Z0-9]/g, '');
+    }
+
+    function quitarAcentos(valor) {
+        return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function getCampo(fila, posiblesNombres, fallback = '') {
+        if (!fila) return fallback;
+        for (const nombre of posiblesNombres) {
+            if (fila[nombre] !== undefined && fila[nombre] !== null && fila[nombre] !== '') {
+                return fila[nombre];
+            }
+        }
+        const normalizados = posiblesNombres.map(n => nuclearTexto(n));
+        const clave = Object.keys(fila).find(k => normalizados.includes(nuclearTexto(k)));
+        const valor = clave ? fila[clave] : fallback;
+        return (valor === undefined || valor === null || valor === '') ? fallback : valor;
+    }
+
+    function parseMoney(valor) {
+        if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
+        if (valor === null || valor === undefined) return 0;
+
+        let raw = String(valor)
+            .trim()
+            .replace(/\u00A0/g, ' ')
+            .replace(/[−–—]/g, '-');
+
+        if (!raw) return 0;
+
+        let negativo = /^\s*\(.*\)\s*$/.test(raw) || raw.includes('-');
+        raw = raw.replace(/[()]/g, '');
+        raw = raw.replace(/[^\d.,+\-]/g, '');
+        raw = raw.replace(/[+\-]/g, '');
+        if (!raw) return 0;
+
+        const coma = raw.lastIndexOf(',');
+        const punto = raw.lastIndexOf('.');
+        let normalizado = raw;
+
+        if (coma !== -1 && punto !== -1) {
+            const separadorDecimal = coma > punto ? ',' : '.';
+            const separadorMiles = separadorDecimal === ',' ? '.' : ',';
+            normalizado = raw
+                .replace(new RegExp('\\' + separadorMiles, 'g'), '')
+                .replace(separadorDecimal, '.');
+        } else if (coma !== -1) {
+            const partes = raw.split(',');
+            const decimales = partes[partes.length - 1] || '';
+            const entero = partes.slice(0, -1).join('');
+            const pareceMiles = partes.length > 2 || (decimales.length === 3 && entero !== '0' && entero.length <= 3);
+            if (pareceMiles) {
+                normalizado = raw.replace(/,/g, '');
+            } else {
+                normalizado = raw.replace(',', '.');
+            }
+        } else if (punto !== -1) {
+            const partes = raw.split('.');
+            const decimales = partes[partes.length - 1] || '';
+            const entero = partes.slice(0, -1).join('');
+            const pareceMiles = partes.length > 2 || (decimales.length === 3 && entero !== '0' && entero.length <= 3);
+            normalizado = pareceMiles ? raw.replace(/\./g, '') : raw;
+        }
+
+        const numero = Number(normalizado);
+        if (!Number.isFinite(numero)) return 0;
+        return negativo ? -Math.abs(numero) : numero;
+    }
+
+    function redondearDinero(valor) {
+        return Math.round(parseMoney(valor) * 100) / 100;
+    }
+
+    function sumarDinero(a, b) {
+        return Math.round((parseMoney(a) + parseMoney(b)) * 100) / 100;
+    }
+
+    function fechaDesdeSerialExcel(serial) {
+        const base = new Date(Math.round((Number(serial) - 25569) * 86400 * 1000));
+        return new Date(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate());
+    }
+
+    function fechaFallback(fallback) {
+        if (fallback === null) return null;
+        const fecha = fallback instanceof Date ? new Date(fallback) : new Date(fallback || Date.now());
+        return isNaN(fecha.getTime()) ? new Date() : fecha;
+    }
+
+    function parseFecha(valor, fallback = new Date()) {
+        if (valor instanceof Date) {
+            return isNaN(valor.getTime()) ? fechaFallback(fallback) : new Date(valor.getFullYear(), valor.getMonth(), valor.getDate());
+        }
+
+        if (typeof valor === 'number') {
+            if (valor > 10000000000) {
+                const fechaTs = new Date(valor);
+                return isNaN(fechaTs.getTime()) ? new Date(fallback) : fechaTs;
+            }
+            if (valor > 10000) return fechaDesdeSerialExcel(valor);
+        }
+
+        const raw = String(valor || '').trim();
+        if (!raw) return fechaFallback(fallback);
+
+        if (/^\d+([.,]\d+)?$/.test(raw)) {
+            const n = parseMoney(raw);
+            if (n > 10000) return fechaDesdeSerialExcel(n);
+        }
+
+        let match = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        if (match) {
+            const fecha = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+            return isNaN(fecha.getTime()) ? fechaFallback(fallback) : fecha;
+        }
+
+        match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+        if (match) {
+            const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+            const fecha = new Date(year, Number(match[2]) - 1, Number(match[1]));
+            return isNaN(fecha.getTime()) ? fechaFallback(fallback) : fecha;
+        }
+
+        const fechaLibre = new Date(raw);
+        return isNaN(fechaLibre.getTime()) ? fechaFallback(fallback) : fechaLibre;
+    }
+
+    function fechaISO(valor) {
+        const fecha = parseFecha(valor, null);
+        if (!fecha || isNaN(fecha.getTime())) return '';
+        const y = fecha.getFullYear();
+        const m = String(fecha.getMonth() + 1).padStart(2, '0');
+        const d = String(fecha.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function detectarDuenoCuenta(nombreCuenta) {
+        const cuenta = limpiarTexto(nombreCuenta);
+        if (cuenta.startsWith('D-')) return 'D';
+        if (cuenta.startsWith('N-')) return 'N';
+        return 'DN';
+    }
+
+    function normalizarTipoMovimiento(tipoRaw, importe, concepto) {
+        const tipo = limpiarTexto(tipoRaw).toLowerCase();
+        if (tipo === 'traspaso') return 'traspaso';
+        if (tipo === 'ingreso') return 'ingreso';
+        if (tipo === 'gasto') return 'gasto';
+        if (limpiarTexto(concepto).includes('TRASPASO')) return 'traspaso';
+        return parseMoney(importe) >= 0 ? 'ingreso' : 'gasto';
+    }
+
+    function buscarInfoCuenta(rawCuenta, mapaCuentas) {
+        const cuentaLimpia = limpiarTexto(rawCuenta);
+        const cuentaNuclear = nuclearTexto(rawCuenta);
+        let infoCuenta = mapaCuentas[cuentaLimpia];
+        if (infoCuenta) return infoCuenta;
+
+        const matchNuclear = Object.keys(mapaCuentas).find(k => mapaCuentas[k].idNuclear === cuentaNuclear);
+        if (matchNuclear) return mapaCuentas[matchNuclear];
+
+        const matchParcial = Object.keys(mapaCuentas).find(k => {
+            const cNuc = mapaCuentas[k].idNuclear;
+            if (cNuc.length < 3 || cuentaNuclear.length < 3) return false;
+            if ('D' + cNuc === cuentaNuclear || 'N' + cNuc === cuentaNuclear) return true;
+            if (cNuc === 'D' + cuentaNuclear || cNuc === 'N' + cuentaNuclear) return true;
+            return cNuc.includes(cuentaNuclear) || cuentaNuclear.includes(cNuc);
+        });
+        return matchParcial ? mapaCuentas[matchParcial] : null;
+    }
+
+    function normalizarTipoCartera(tipo) {
+        const limpio = quitarAcentos(tipo || 'OTRO').toUpperCase().trim().replace(/[\s_-]+/g, '');
+        const alias = {
+            CRIPTO: 'CRIPTOMONEDAS',
+            CRYPTO: 'CRIPTOMONEDAS',
+            CRIPTOMONEDA: 'CRIPTOMONEDAS',
+            CRIPTOMONEDAS: 'CRIPTOMONEDAS',
+            BTC: 'CRIPTOMONEDAS',
+            BITCOIN: 'CRIPTOMONEDAS',
+            PENSION: 'PLANPENSIONES',
+            PENSIONES: 'PLANPENSIONES',
+            PLANPENSION: 'PLANPENSIONES',
+            PLANPENSIONES: 'PLANPENSIONES',
+            FONDO: 'CROWDFUNDING',
+            FONDOS: 'CROWDFUNDING',
+            CROWDFUNDING: 'CROWDFUNDING',
+            CROWDLENDING: 'CROWDFUNDING',
+            AUTOCUSTODIA: 'AUTOCUSTODIA',
+            BOLSA: 'BOLSA',
+            ACCION: 'BOLSA',
+            ACCIONES: 'BOLSA',
+            ETF: 'BOLSA',
+            OTRO: 'OTRO',
+            OTROS: 'OTRO'
+        };
+        return alias[limpio] || (CARTERA_TIPOS[limpio] ? limpio : 'OTRO');
+    }
+
+    function esCriptoCartera(posOTipo) {
+        const tipo = typeof posOTipo === 'object' ? posOTipo.tipo : posOTipo;
+        const normalizado = normalizarTipoCartera(tipo);
+        return normalizado === 'CRIPTOMONEDAS' || normalizado === 'AUTOCUSTODIA';
+    }
+
+    function esBTCCartera(pos) {
+        return esCriptoCartera(pos) && String(pos?.ticker || '').toUpperCase().trim() === 'BTC';
+    }
+
+    function sanitizarPosicionCartera(pos) {
+        const tipo = normalizarTipoCartera(pos?.tipo);
+        const esCripto = esCriptoCartera(tipo);
+        const posicion = {
+            id: String(pos?.id || crearId()),
+            ticker: String(pos?.ticker || pos?.nombre || '').toUpperCase().trim(),
+            nombre: String(pos?.nombre || '').trim(),
+            tipo,
+            cuenta: limpiarTexto(pos?.cuenta),
+            cantidad: esCripto ? parseMoney(pos?.cantidad) : 1,
+            precioCompra: parseMoney(pos?.precioCompra),
+            precioActual: parseMoney(pos?.precioActual),
+            fechaCompra: pos?.fechaCompra || '',
+            notas: String(pos?.notas || '').trim(),
+            precioFuente: pos?.precioFuente || '',
+            precioActualizadoEn: pos?.precioActualizadoEn || ''
+        };
+        if (!posicion.precioFuente) posicion.precioFuente = esBTCCartera(posicion) ? 'Binance BTC/EUR' : 'Manual';
+        return posicion;
+    }
+
+    function posicionCarteraDesdeFila(fila) {
+        const rawFecha = getCampo(fila, ['FECHA_COMPRA','FechaCompra','fecha_compra','FECHA','Fecha','fecha']);
+        const ticker = String(getCampo(fila, ['TICKER','Ticker','ticker']) || '').toUpperCase().trim();
+        const nombre = String(getCampo(fila, ['NOMBRE','Nombre','nombre']) || '').trim();
+        return sanitizarPosicionCartera({
+            id: getCampo(fila, ['ID','Id','id'], crearId()),
+            ticker: ticker || nombre,
+            nombre,
+            tipo: getCampo(fila, ['TIPO','Tipo','tipo'], 'OTRO'),
+            cuenta: getCampo(fila, ['CUENTA','Cuenta','cuenta'], ''),
+            cantidad: getCampo(fila, ['CANTIDAD','Cantidad','cantidad'], 0),
+            precioCompra: getCampo(fila, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA'], 0),
+            precioActual: getCampo(fila, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL'], 0),
+            fechaCompra: rawFecha ? fechaISO(rawFecha) : '',
+            notas: getCampo(fila, ['NOTAS','Notas','notas'], ''),
+            precioFuente: getCampo(fila, ['PRECIO_FUENTE','PrecioFuente','precio_fuente','FUENTE_PRECIO'], ''),
+            precioActualizadoEn: getCampo(fila, ['PRECIO_ACTUALIZADO','PrecioActualizado','precio_actualizado','FECHA_PRECIO'], '')
+        });
+    }
+
+    function puntoHistoricoCarteraDesdeFila(fila) {
+        const fecha = parseFecha(getCampo(fila, ['FECHA','Fecha','fecha'], new Date()));
+        const costeRaw = getCampo(fila, ['COSTE','Coste','coste'], '');
+        const punto = {
+            fecha,
+            ts: fecha.getTime(),
+            valor: parseMoney(getCampo(fila, ['VALOR','Valor','valor'], 0))
+        };
+        if (costeRaw !== '') punto.coste = parseMoney(costeRaw);
+        return punto;
+    }
+
+    function getCantidadCartera(pos) {
+        return esCriptoCartera(pos) ? parseMoney(pos?.cantidad) : 1;
+    }
+
+    function getCostePosicionCartera(pos) {
+        return parseMoney(pos?.precioCompra);
+    }
+
+    function getValorMercadoPosicionCartera(pos) {
+        const precioActual = parseMoney(pos?.precioActual);
+        return esCriptoCartera(pos) ? getCantidadCartera(pos) * precioActual : precioActual;
+    }
+
+    function movimientoDesdeFila(fila, contexto) {
+        const mapaCuentas = contexto?.mapaCuentas || {};
+        const keyCuenta = contexto?.keyCuenta || 'CUENTA';
+        const rawCuenta = getCampo(fila, [keyCuenta, 'CUENTA', 'Cuenta', 'cuenta'], 'DESCONOCIDA');
+        const cuenta = limpiarTexto(rawCuenta);
+        const infoCuenta = buscarInfoCuenta(rawCuenta, mapaCuentas);
+        const rawImporte = getCampo(fila, ['IMPORTE','Importe','importe'], 0);
+        const importe = parseMoney(rawImporte);
+        const concepto = limpiarTexto(getCampo(fila, ['CONCEPTO','Concepto','concepto'], ''));
+        const fecha = parseFecha(getCampo(fila, ['FECHA','Fecha','fecha'], new Date()));
+        return {
+            id: String(getCampo(fila, ['ID','Id','id'], crearId())),
+            ts: fecha.getTime(),
+            fecha,
+            cuenta,
+            tipoCuenta: infoCuenta ? infoCuenta.tipo : 'SIN CLASIFICAR',
+            esInversion: infoCuenta ? infoCuenta.esInversion : false,
+            concepto,
+            importe,
+            descripcion: limpiarTexto(getCampo(fila, ['DESCRIPCION','Descripcion','descripcion','Detalle','detalle'], '')),
+            beneficiario: limpiarTexto(getCampo(fila, ['BENEFICIARIO','Beneficiario','beneficiario'], '')),
+            tipo: normalizarTipoMovimiento(getCampo(fila, ['TIPO','Tipo','tipo'], ''), importe, concepto)
+        };
+    }
+
+    function recurrenteDesdeFila(fila) {
+        const importe = parseMoney(getCampo(fila, ['IMPORTE','Importe','importe'], 0));
+        return {
+            id: getCampo(fila, ['ID','Id','id'], crearId()),
+            fechaProx: getCampo(fila, ['PROXIMA_FECHA','Proxima_Fecha','fechaProx'], ''),
+            frecuencia: getCampo(fila, ['FRECUENCIA','Frecuencia','frecuencia'], ''),
+            diasSemana: getCampo(fila, ['DIAS_SEMANA','Dias_Semana','diasSemana'], ''),
+            tipoRegla: getCampo(fila, ['TIPO_REGLA','Tipo_Regla','tipoRegla'], '') || (importe < 0 ? 'gasto' : 'ingreso'),
+            cuenta: getCampo(fila, ['CUENTA','Cuenta','cuenta'], ''),
+            cuentaDestino: getCampo(fila, ['CUENTA_DESTINO','Cuenta_Destino','cuentaDestino'], ''),
+            importe,
+            concepto: getCampo(fila, ['CONCEPTO','Concepto','concepto'], ''),
+            beneficiario: getCampo(fila, ['BENEFICIARIO','Beneficiario','beneficiario'], ''),
+            descripcion: getCampo(fila, ['DESCRIPCION','Descripcion','descripcion'], '')
+        };
+    }
+
+    function crearSnapshot(origen = {}) {
+        const movimientos = origen.movimientos || window.datos || [];
+        const cuentas = origen.cuentas || window.mapaCuentas || {};
+        const cartera = origen.cartera || window.datosCartera || [];
+        const recurrentes = origen.recurrentes || window.datosRecurrentes || [];
+        const historicoCartera = origen.historicoCartera || window.historicoCartera || [];
+        const totalMovimientos = movimientos.reduce((acc, m) => sumarDinero(acc, m.importe), 0);
+        const totalCarteraCoste = cartera.reduce((acc, p) => sumarDinero(acc, getCostePosicionCartera(p)), 0);
+        const totalCarteraMercado = cartera.reduce((acc, p) => sumarDinero(acc, getValorMercadoPosicionCartera(p)), 0);
+        return {
+            creadoEn: new Date().toISOString(),
+            movimientos,
+            cuentas,
+            cartera,
+            recurrentes,
+            historicoCartera,
+            totales: {
+                movimientos: totalMovimientos,
+                carteraCoste: totalCarteraCoste,
+                carteraMercado: totalCarteraMercado
+            }
+        };
+    }
+
+    return {
+        parseMoney,
+        redondearDinero,
+        sumarDinero,
+        parseFecha,
+        fechaISO,
+        getCampo,
+        texto: { limpiar: limpiarTexto, nuclear: nuclearTexto, sinAcentos: quitarAcentos },
+        cuentas: { buscarInfo: buscarInfoCuenta, detectarDueno: detectarDuenoCuenta },
+        movimientos: { desdeFila: movimientoDesdeFila, normalizarTipo: normalizarTipoMovimiento },
+        recurrentes: { desdeFila: recurrenteDesdeFila },
+        cartera: {
+            tipos: CARTERA_TIPOS,
+            normalizarTipo: normalizarTipoCartera,
+            getMetaTipo: tipo => CARTERA_TIPOS[normalizarTipoCartera(tipo)] || CARTERA_TIPOS.OTRO,
+            parseNumero: parseMoney,
+            esCripto: esCriptoCartera,
+            esBTC: esBTCCartera,
+            sanitizar: sanitizarPosicionCartera,
+            desdeFila: posicionCarteraDesdeFila,
+            historicoDesdeFila: puntoHistoricoCarteraDesdeFila,
+            getCantidad: getCantidadCartera,
+            getCoste: getCostePosicionCartera,
+            getValorMercado: getValorMercadoPosicionCartera,
+            getPnl: pos => getValorMercadoPosicionCartera(pos) - getCostePosicionCartera(pos),
+            getRentabilidad: pos => {
+                const coste = getCostePosicionCartera(pos);
+                return coste > 0 ? ((getValorMercadoPosicionCartera(pos) - coste) / coste) * 100 : 0;
+            }
+        },
+        snapshots: { crear: crearSnapshot }
+    };
+})();
+
+// Aliases legacy: mantienen compatible el resto del archivo y evitan carreras de carga.
+window.CARTERA_TIPOS = window.FinanceModel.cartera.tipos;
+window.normalizarTipoCartera = tipo => window.FinanceModel.cartera.normalizarTipo(tipo);
+window.getMetaTipoCartera = tipo => window.FinanceModel.cartera.getMetaTipo(tipo);
+window.parseNumeroCartera = valor => window.FinanceModel.parseMoney(valor);
+window.esCriptoCartera = pos => window.FinanceModel.cartera.esCripto(pos);
+window.esBTCCartera = pos => window.FinanceModel.cartera.esBTC(pos);
+window.getCantidadCartera = pos => window.FinanceModel.cartera.getCantidad(pos);
+window.getCostePosicionCartera = pos => window.FinanceModel.cartera.getCoste(pos);
+window.getValorMercadoPosicionCartera = pos => window.FinanceModel.cartera.getValorMercado(pos);
+window.getPnlPosicionCartera = pos => window.FinanceModel.cartera.getPnl(pos);
+window.getRentabilidadPosicionCartera = pos => window.FinanceModel.cartera.getRentabilidad(pos);
+window.sanitizarPosicionCartera = pos => window.FinanceModel.cartera.sanitizar(pos);
+
 // --- NUEVA HERRAMIENTA MATEMÁTICA SEGURA ---
 window.sumarDinero = function(a, b) {
     // Multiplica por 100 para operar con enteros (céntimos) y evitar errores de decimales fantasma
-    return Math.round((parseFloat(a || 0) + parseFloat(b || 0)) * 100) / 100;
+    return window.FinanceModel.sumarDinero(a, b);
 };
 // --- HERRAMIENTA DE FUSIÓN DE DATOS (NUBE + MÓVIL) ---
 // NUEVO: SMART MERGE (Fusión Inteligente Fintech)
@@ -2890,6 +3310,7 @@ suscriptores[evento].forEach(cb => cb(datos));
 })();
 // Suscribimos todas las actualizaciones visuales al evento maestro
 window.UIEvents.on('datos:actualizados', function() {
+if (window.FinanceModel) window.estadoFinanciero = window.FinanceModel.snapshots.crear();
 if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
 if (typeof renderizar === 'function') renderizar();
@@ -4072,14 +4493,15 @@ reader.readAsArrayBuffer(blob);
 // 🧠 PROCESADOR MAESTRO V7 + RECURRENTES (FUSIÓN)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
+const FM = window.FinanceModel;
 // 1. LIMPIEZA Y PREPARACIÓN
 window.mapaCuentas = {};
 window.listaCuentasConfig = [];
 window.listaConceptosConfig = [];
 window.listaBeneficiariosConfig = [];
 window.datosRecurrentes = []; // <--- NUEVO: Inicializamos almacén de recurrentes
-const limpiar = (txt) => String(txt || "").toUpperCase().trim().replace(/\s+/g, ' ');
-const nuclear = (txt) => String(txt || "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+const limpiar = FM.texto.limpiar;
+const nuclear = FM.texto.nuclear;
 // 2. LEER HOJA DE CONFIGURACIÓN
 const wsConfigName = wb.SheetNames.find(n => n.toUpperCase().includes("CONFIG"));
 if (wsConfigName) {
@@ -4125,19 +4547,7 @@ if (keyBenef && fila[keyBenef]) window.listaBeneficiariosConfig.push(limpiar(fil
 const wsRecName = wb.SheetNames.find(n => n.toUpperCase().includes("RECURRENTE"));
 if (wsRecName) {
 const rawRec = XLSX.utils.sheet_to_json(wb.Sheets[wsRecName]);
-window.datosRecurrentes = rawRec.map(r => ({
-id: r.ID || r.Id,
-fechaProx: r.PROXIMA_FECHA || r.Proxima_Fecha,
-frecuencia: r.FRECUENCIA || r.Frecuencia,
-diasSemana: r.DIAS_SEMANA || r.Dias_Semana || "",
-tipoRegla: r.TIPO_REGLA || (parseFloat(r.IMPORTE)<0 ? 'gasto' : 'ingreso'), // Recuperar tipo
-cuenta: r.CUENTA || r.Cuenta,
-cuentaDestino: r.CUENTA_DESTINO || "", // Recuperar destino
-importe: parseFloat(r.IMPORTE || r.Importe || 0),
-concepto: r.CONCEPTO || r.Concepto,
-beneficiario: r.BENEFICIARIO || r.Beneficiario,
-descripcion: r.DESCRIPCION || ""
-}));
+window.datosRecurrentes = rawRec.map(r => FM.recurrentes.desdeFila(r));
 } else {
 window.datosRecurrentes = [];
 }
@@ -4185,30 +4595,8 @@ if (infoCuenta) {
 tipoFinal = infoCuenta.tipo;
 esInvFinal = infoCuenta.esInversion;
 }
-// Procesar Fecha Definitivo
-let fechaObj = new Date();
-if (rawFecha instanceof Date) {
-// Caso 1: OneDrive o Local entregan un objeto de fecha puro
-fechaObj = rawFecha;
-} else if (typeof rawFecha === 'number' || (typeof rawFecha === 'string' && !isNaN(Number(rawFecha)) && Number(rawFecha) > 10000)) {
-// Caso 2: Es un número de serie de Excel (ej: 45654)
-const serial = Number(rawFecha);
-const fechaBase = new Date(Math.round((serial - 25569) * 86400 * 1000));
-fechaObj = new Date(fechaBase.getUTCFullYear(), fechaBase.getUTCMonth(), fechaBase.getUTCDate());
-} else if (typeof rawFecha === 'string') {
-// Caso 3: Es un texto ("23/02/2026" o "2026-02-23T00:00:00Z")
-if (rawFecha.includes('/')) {
-const parts = rawFecha.split('/');
-if(parts.length === 3) fechaObj = new Date(parts[2], parts[1]-1, parts[0]);
-else fechaObj = new Date(rawFecha);
-} else {
-fechaObj = new Date(rawFecha);
-}
-}
-// Salvavidas final: Si la fecha es inválida, forzamos a hoy para que la app no colapse
-if (isNaN(fechaObj.getTime())) {
-fechaObj = new Date();
-}
+// Procesar fecha e importe con el modelo financiero central.
+const fechaObj = FM.parseFecha(rawFecha);
 const rawImporte = fila.IMPORTE || fila.Importe || fila.importe || 0;
 return {
 id: String(id),
@@ -4218,7 +4606,7 @@ cuenta: cuentaLimpia,
 tipoCuenta: tipoFinal,
 esInversion: esInvFinal,
 concepto: limpiar(fila.CONCEPTO || fila.Concepto),
-importe: typeof rawImporte === 'string' ? parseFloat(rawImporte.replace(',', '.')) : rawImporte,
+importe: FM.parseMoney(rawImporte),
 descripcion: limpiar(fila.DESCRIPCION || fila.Descripcion || fila.Detalle),
 beneficiario: limpiar(fila.BENEFICIARIO || fila.Beneficiario),
 // ✅ MEJORA: Leer TIPO explícito del Excel primero. Si existe y es válido,
@@ -4231,7 +4619,7 @@ if (tipoRaw === 'gasto')    return 'gasto';
 // Fallback legacy: inferencia por concepto o signo (Excel sin columna TIPO)
 const concRaw = String(fila.CONCEPTO || fila.Concepto || '').toUpperCase().trim();
 if (concRaw.includes('TRASPASO')) return 'traspaso';
-return (parseFloat(rawImporte) >= 0) ? 'ingreso' : 'gasto';
+return (FM.parseMoney(rawImporte) >= 0) ? 'ingreso' : 'gasto';
 })()
 };
 }).filter(d => d.cuenta !== "DESCONOCIDA");
@@ -4253,57 +4641,9 @@ function valCampo(fila, posiblesNombres) {   // ← FUERA del if, bien
 if (wsCarteraName) {
     const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
 
-    window.datosCartera = rawCartera.map(r => {
-        // Fecha de compra robusta
-        const rawF = valCampo(r, ['FECHA_COMPRA','FechaCompra','fecha_compra','FECHA','Fecha','fecha']);
-        let fc = '';
-        if (rawF instanceof Date) {
-            fc = rawF.toISOString().split('T')[0];
-        } else if (typeof rawF === 'number' && rawF > 40000) {
-            const b = new Date(Math.round((rawF - 25569) * 86400 * 1000));
-            fc = b.toISOString().split('T')[0];
-        } else if (typeof rawF === 'string' && rawF) {
-            const limpio = rawF.trim();
-            if (limpio.includes('/')) {
-                const partes = limpio.split('/');
-                if (partes.length === 3) fc = partes[2] + '-' + partes[1].padStart(2,'0') + '-' + partes[0].padStart(2,'0');
-                else fc = '';
-            } else if (limpio.includes('-')) {
-                fc = limpio.split('T')[0];
-            } else {
-                fc = '';
-            }
-        }
-
-        const tickerVal = String(valCampo(r, ['TICKER','Ticker','ticker']) || '').toUpperCase().trim();
-        const nombreVal = String(valCampo(r, ['NOMBRE','Nombre','nombre']) || '').trim();
-        const tipoVal   = window.normalizarTipoCartera(valCampo(r, ['TIPO','Tipo','tipo']) || 'OTRO');
-        const cuentaVal = String(valCampo(r, ['CUENTA','Cuenta','cuenta']) || '').toUpperCase().trim();
-        const cantVal   = window.parseNumeroCartera(valCampo(r, ['CANTIDAD','Cantidad','cantidad']) || 0);
-        const pCompra   = window.parseNumeroCartera(valCampo(r, ['PRECIO_COMPRA','PrecioCompra','precio_compra','PRECIOCOMPRA']) || 0);
-        const pActual   = window.parseNumeroCartera(valCampo(r, ['PRECIO_ACTUAL','PrecioActual','precio_actual','PRECIOACTUAL']) || 0);
-        const notasVal  = String(valCampo(r, ['NOTAS','Notas','notas']) || '').trim();
-        const fuenteVal = String(valCampo(r, ['PRECIO_FUENTE','PrecioFuente','precio_fuente','FUENTE_PRECIO']) || '').trim();
-        const precioFechaVal = String(valCampo(r, ['PRECIO_ACTUALIZADO','PrecioActualizado','precio_actualizado','FECHA_PRECIO']) || '').trim();
-
-        const tickerFinal = tickerVal || nombreVal;
-        const nombreFinal = nombreVal;
-
-        return window.sanitizarPosicionCartera({
-            id:           String(valCampo(r, ['ID','Id','id']) || uuid()),
-            ticker:       tickerFinal,
-            nombre:       nombreFinal,
-            tipo:         tipoVal,
-            cuenta:       cuentaVal,
-            cantidad:     isNaN(cantVal) ? 0 : cantVal,
-            precioCompra: isNaN(pCompra) ? 0 : pCompra,
-            precioActual: isNaN(pActual) ? 0 : pActual,
-            fechaCompra:  fc,
-            notas:        notasVal,
-            precioFuente: fuenteVal,
-            precioActualizadoEn: precioFechaVal
-        });
-    }).filter(p => p.ticker || p.nombre);
+    window.datosCartera = rawCartera
+        .map(r => FM.cartera.desdeFila(r))
+        .filter(p => p.ticker || p.nombre);
 
 } else {
     window.datosCartera = window.datosCartera || [];
@@ -4312,28 +4652,20 @@ if (wsCarteraName) {
 const wsHistCarteraName = wb.SheetNames.find(n => /HISTORICO.*CARTERA|CARTERA.*HISTORICO/i.test(n.trim()));
 if (wsHistCarteraName) {
   const rawHist = XLSX.utils.sheet_to_json(wb.Sheets[wsHistCarteraName], { defval: "" });
-  window.historicoCartera = rawHist.map(r => {
-    let fh = new Date();
-    const rf = r.FECHA || r.Fecha || r.fecha;
-    if (rf instanceof Date) fh = rf;
-    else if (typeof rf === 'number' && rf > 40000) {
-      const b = new Date(Math.round((rf - 25569) * 86400 * 1000));
-      fh = new Date(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
-    } else if (typeof rf === 'string' && rf) {
-      fh = new Date(rf.includes('/') ? rf.split('/').reverse().join('-') : rf);
-    }
-    const costeRaw = r.COSTE ?? r.Coste ?? r.coste ?? '';
-    const puntoHist = {
-      fecha: fh,
-      ts: fh.getTime(),
-      valor: window.parseNumeroCartera(r.VALOR || r.Valor || 0)
-    };
-    if (costeRaw !== '') puntoHist.coste = window.parseNumeroCartera(costeRaw);
-    return puntoHist;
-  }).filter(h => !isNaN(h.ts)).sort((a,b) => a.ts - b.ts);
+  window.historicoCartera = rawHist
+    .map(r => FM.cartera.historicoDesdeFila(r))
+    .filter(h => !isNaN(h.ts))
+    .sort((a,b) => a.ts - b.ts);
 } else {
   window.historicoCartera = window.historicoCartera || [];
 }
+window.estadoFinanciero = FM.snapshots.crear({
+  movimientos: window.datos,
+  cuentas: window.mapaCuentas,
+  recurrentes: window.datosRecurrentes,
+  cartera: window.datosCartera,
+  historicoCartera: window.historicoCartera
+});
 // Actualizar UI de forma reactiva
 window.UIEvents.emitir('datos:actualizados');
 };
@@ -4366,8 +4698,8 @@ if(thFecha) thFecha.style.display = 'none';
 const tsDesde = filtros.desde ? new Date(filtros.desde + 'T00:00:00').getTime() : null;
 const tsHasta = filtros.hasta ? new Date(filtros.hasta + 'T23:59:59').getTime() : null;
 const textoBusq = (filtros.texto || '').toLowerCase();
-const minImporte = filtros.min !== '' ? parseFloat(filtros.min) : null;
-const maxImporte = filtros.max !== '' ? parseFloat(filtros.max) : null;
+const minImporte = filtros.min !== '' ? window.FinanceModel.parseMoney(filtros.min) : null;
+const maxImporte = filtros.max !== '' ? window.FinanceModel.parseMoney(filtros.max) : null;
 // 1. FILTRADO
 let lista = datos.filter(m => {
 if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return false;
@@ -4395,8 +4727,8 @@ return true;
 lista.sort((a, b) => {
 let campo = window.ordenActivo.campo;
 if (campo === 'importe') {
-const valA = parseFloat(a[campo]) || 0;
-const valB = parseFloat(b[campo]) || 0;
+const valA = window.FinanceModel.parseMoney(a[campo]);
+const valB = window.FinanceModel.parseMoney(b[campo]);
 return window.ordenActivo.asc ? (valA - valB) : (valB - valA);
 }
 if (campo === 'ts') {
@@ -4494,7 +4826,7 @@ mesActual.dias.push(diaActual);
 }
 diaActual.movimientos.push(m);
 // Añade esta línea para definir 'imp' antes de usarlo:
-const imp = parseFloat(m.importe) || 0;
+const imp = window.FinanceModel.parseMoney(m.importe);
 if (imp < 0) {
 mesActual.gastos = window.sumarDinero(mesActual.gastos, imp);
 diaActual.gastos = window.sumarDinero(diaActual.gastos, imp);
@@ -4969,7 +5301,7 @@ const dispararErrorVisual = (input) => {
 
 // Validar importe
 const importeVal = inputImporte ? inputImporte.value.trim() : '';
-if (!importeVal || parseFloat(importeVal.replace('€', '').replace(',', '.')) === 0) {
+if (!importeVal || window.FinanceModel.parseMoney(importeVal) === 0) {
     dispararErrorVisual(inputImporte);
 }
 
@@ -5037,8 +5369,7 @@ const benefManual = (document.getElementById('m-beneficiario').value || "").toUp
 if (!cuentaOrigen) throw new Error("Falta la CUENTA");
 if (!importeStr) throw new Error("Falta el IMPORTE");
 if (!concepto) throw new Error("Falta el CONCEPTO");
-let importeLimpio = importeStr.replace('€', '').replace(',', '.').trim();
-let importeNum = parseFloat(importeLimpio);
+let importeNum = window.FinanceModel.parseMoney(importeStr);
 if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
 importeNum = Math.abs(importeNum);
 const detectarDueno = (nombreCuenta) => {
@@ -5341,7 +5672,7 @@ if(window.mapaCuentas[k]) window.mapaCuentas[k].saldoActual = 0;
 // 3. Recorremos TODOS los movimientos para calcular saldo línea a línea
 window.datos.forEach(m => {
 const cta = m.cuenta;
-const imp = parseFloat(m.importe) || 0;
+const imp = window.FinanceModel.parseMoney(m.importe);
 // Si la cuenta no existe en el mapa temporal, la iniciamos
 if (saldosTemporales[cta] === undefined) saldosTemporales[cta] = 0;
 // Sumamos (o restamos) el importe de forma segura
@@ -5482,7 +5813,7 @@ const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
 datosFiltrados.forEach(m => {
 const cta = String(m.cuenta || '').trim();
 if (!cta) return;
-const val = parseFloat(m.importe) || 0;
+const val = window.FinanceModel.parseMoney(m.importe);
 saldos[cta] = window.sumarDinero(saldos[cta] || 0, val);
 });
 if (window.mapaCuentas) {
@@ -5772,6 +6103,7 @@ if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span
 let wb = null;
 try {
 const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
+const FM = window.FinanceModel;
 let datosFinales = [...(window.datos || [])];
 // --- 2. GESTIÓN DE NUEVAS FILAS (Anti-duplicados) ---
 if (nuevasFilas) {
@@ -5790,11 +6122,11 @@ id: f.ID || f.id || uuid(),
 fecha: fechaFinal,
 cuenta: CLEAN(f.CUENTA || f.cuenta),
 concepto: CLEAN(f.CONCEPTO || f.concepto),
-importe: parseFloat(f.IMPORTE || f.importe || 0),
+importe: FM.parseMoney(f.IMPORTE || f.importe || 0),
 descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
 beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
 ts: fechaFinal.getTime(),
-tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
+tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
 };
 });
 filasProcesadas.forEach(f => {
@@ -5828,7 +6160,7 @@ wb = XLSX.utils.book_new();
 const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
 "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
 "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
-"Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
+"Tipo": d.tipo || ((FM.parseMoney(d.importe) >= 0) ? 'ingreso' : 'gasto')
 })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
 Object.keys(hojaMovs).forEach(key => {
 if (hojaMovs[key].t === 'd') hojaMovs[key].z = 'dd/mm/yyyy';
@@ -6076,9 +6408,9 @@ window.renderizarSankey = function(datosPeriodo) {
         const conc = String(m.concepto || "OTROS").toUpperCase().trim();
         if (conc.includes('INICIAL') || m.tipo === 'traspaso' || conc.includes('TRASPASO')) return;
         if (m.tipo === 'ingreso' || m.importe > 0) {
-            totalIngresos += Number(m.importe);
+            totalIngresos += window.FinanceModel.parseMoney(m.importe);
         } else {
-            gastosPorConcepto[conc] = (gastosPorConcepto[conc] || 0) + Math.abs(Number(m.importe));
+            gastosPorConcepto[conc] = (gastosPorConcepto[conc] || 0) + Math.abs(window.FinanceModel.parseMoney(m.importe));
         }
     });
     let totalGastos = Object.values(gastosPorConcepto).reduce((a, b) => a + b, 0);
@@ -6498,15 +6830,15 @@ window.renderizarProyectorFIRE = function(totalCapital, ahorroMensual, gastoMens
     }
     window.echartFIRE = echartFIRE;
     // Recuperamos los datos (Paso 1)
-    const sueldoFijo = parseFloat(localStorage.getItem('aidanai_sueldo')) || 2000;
+    const sueldoFijo = window.FinanceModel.parseMoney(localStorage.getItem('aidanai_sueldo')) || 2000;
     const edadActual = parseInt(localStorage.getItem('aidanai_edad')) || 50;
     // PASO 2: Inyectar datos en el gráfico FIRE
     if (subtitulo) {
         subtitulo.innerHTML = `Calculando intersección de libertad... <br><span style="color:#BF5AF2; font-size:10px;">(Perfil: ${edadActual} años | Ingresos fijos: ${sueldoFijo.toLocaleString('de-DE')} €/mes)</span>`;
     }
     // 1. Blindaje de datos
-    let ahorroReal = parseFloat(ahorroMensual) || 0;
-    let gastoReal = parseFloat(gastoMensual) || 0;
+    let ahorroReal = window.FinanceModel.parseMoney(ahorroMensual);
+    let gastoReal = window.FinanceModel.parseMoney(gastoMensual);
     // Si la app no envía el ahorro, lo deducimos de forma segura
     if (ahorroReal <= 0 && sueldoFijo > 0 && gastoReal > 0) {
         ahorroReal = sueldoFijo - gastoReal;
@@ -6520,7 +6852,7 @@ window.renderizarProyectorFIRE = function(totalCapital, ahorroMensual, gastoMens
     }
     const objetivoFIRE = gastoReal * 300; // 25 años de gastos
     const interesMensual = 0.05 / 12; // 5% anual realista
-    let capitalSimulado = parseFloat(totalCapital) || 0;
+    let capitalSimulado = window.FinanceModel.parseMoney(totalCapital);
     let meses = 0;
     const maxMeses = 12 * 60; // 60 años de proyección máxima
     let datosCapital = [];
@@ -6633,7 +6965,7 @@ window.renderizarRadarScoring = function(kpis) {
     }
     window.radarInstance = radarInstance;
     // Recuperamos los datos (Paso 1)
-    const sueldoFijo = parseFloat(localStorage.getItem('aidanai_sueldo')) || 2000;
+    const sueldoFijo = window.FinanceModel.parseMoney(localStorage.getItem('aidanai_sueldo')) || 2000;
     const edadActual = parseInt(localStorage.getItem('aidanai_edad')) || 50;
     // PASO 3: Inyectar datos en el subtítulo del Scoring
     const scoringInfo = document.getElementById('scoring-perfil-info');
@@ -6789,7 +7121,7 @@ if (window.animacionesActivas[idElemento]) {
 cancelAnimationFrame(window.animacionesActivas[idElemento]);
 }
 // Extraemos el valor de la memoria oculta para no pelear con símbolos
-let valorInicial = parseFloat(el.getAttribute('data-prev')) || 0;
+let valorInicial = window.FinanceModel.parseMoney(el.getAttribute('data-prev'));
 el.setAttribute('data-prev', valorFinal);
 // Si el salto es minúsculo (céntimos), lo ponemos de golpe para ahorrar batería
 if (Math.abs(valorFinal - valorInicial) < 0.01) {
@@ -7355,7 +7687,7 @@ return dateA - dateB;
 // Esto hace que la regla CSS de tu código que dibujaba la caja gigante la ignore por completo.
 let htmlFinal = `<section style="padding-bottom: 100px; padding-top: 5px;">`;
 listaCompleta.forEach(r => {
-const importeNum = parseFloat(r.importe || 0);
+const importeNum = window.FinanceModel.parseMoney(r.importe);
 const esTraspaso = (r.tipoRegla || '').toLowerCase() === 'traspaso';
 const idRecurrente = r.id || r.ID;
 // --- LÓGICA DE COLORES ORIGINALES ---
@@ -7720,7 +8052,7 @@ window.guardarComoRecurrenteUnificado = async function() {
         throw new Error("Rellena los campos obligatorios para la regla");
     }
 
-    let importeNum = parseFloat(importeStr.replace('€', '').replace(',', '.').trim());
+    let importeNum = window.FinanceModel.parseMoney(importeStr);
     if (isNaN(importeNum) || importeNum === 0) throw new Error("Importe inválido");
 
     let tipo = window.modoTransaccionActual || 'gasto';
@@ -8186,7 +8518,7 @@ if (typeof cambiarModo === 'function') cambiarModo('cloud');
 if (typeof oneDrive !== 'undefined') {
 const token = await oneDrive.getToken().catch(() => null);
 if (token) {
-if (typeof iniciarSistema === 'function') iniciarSistema();
+if (typeof iniciarSistema === 'function') await iniciarSistema();
 } else {
 if (typeof mostrarEstado === 'function') notify("⚠️ Nube pausada. Pulsa el botón para conectar.", "warning");
 }
@@ -8259,7 +8591,7 @@ const fechaCorta = `${diaStr}/${mesStr}`;
 let colorImporte = '#32D74B';
 if (p.tipoRegla === 'traspaso') colorImporte = '#0a84ff';
 else if (p.tipoRegla === 'gasto' || p.importe < 0) colorImporte = '#FF453A';
-let importeNum = parseFloat(p.importe) || 0;
+let importeNum = window.FinanceModel.parseMoney(p.importe);
 let importeFmt = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(importeNum));
 let contenido = '';
 if (p.tipoRegla === 'traspaso') {
@@ -8413,7 +8745,7 @@ return a.importe - b.importe;
 let totalIngresos = 0;
 let totalGastos = 0;
 encontrados.forEach(m => {
-const importe = parseFloat(m.importe) || 0;
+const importe = window.FinanceModel.parseMoney(m.importe);
 if (importe > 0) totalIngresos += importe;
 else totalGastos += importe;
 });
@@ -8533,113 +8865,50 @@ document.addEventListener('click', function(e) {
  * 📈 MÓDULO: CARTERA DE INVERSIONES (PRODUCCIÓN 1.0 - ONLY BTC/EUR)
  * ============================================================================
  */
-window.CARTERA_TIPOS = Object.freeze({
-    BOLSA:          { label: 'Bolsa',             color: '#0A84FF', badge: 'badge-bolsa',   emoji: '📈' },
-    CRIPTOMONEDAS: { label: 'Criptomonedas',     color: '#FF9F1B', badge: 'badge-cripto',  emoji: '🪙' },
-    AUTOCUSTODIA:  { label: 'Autocustodia',      color: '#39FF14', badge: 'badge-custodia',emoji: '🔐' },
-    PLANPENSIONES: { label: 'Plan de Pensiones', color: '#BF5AF2', badge: 'badge-pension', emoji: '🏦' },
-    CROWDFUNDING:  { label: 'Crowdfunding',      color: '#00B8FF', badge: 'badge-bolsa',   emoji: '🤝' },
-    OTRO:          { label: 'Otros',             color: '#888888', badge: '',              emoji: '💼' }
-});
+window.CARTERA_TIPOS = window.FinanceModel.cartera.tipos;
 
 window.normalizarTipoCartera = function(tipo) {
-    const limpio = String(tipo || 'OTRO').toUpperCase().trim()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[\s_-]+/g, '');
-    const alias = {
-        CRIPTO: 'CRIPTOMONEDAS',
-        CRYPTO: 'CRIPTOMONEDAS',
-        CRIPTOMONEDA: 'CRIPTOMONEDAS',
-        CRIPTOMONEDAS: 'CRIPTOMONEDAS',
-        BTC: 'CRIPTOMONEDAS',
-        BITCOIN: 'CRIPTOMONEDAS',
-        PENSION: 'PLANPENSIONES',
-        PENSIONES: 'PLANPENSIONES',
-        PLANPENSION: 'PLANPENSIONES',
-        PLANPENSIONES: 'PLANPENSIONES',
-        FONDO: 'CROWDFUNDING',
-        FONDOS: 'CROWDFUNDING',
-        CROWDFUNDING: 'CROWDFUNDING',
-        CROWDLENDING: 'CROWDFUNDING',
-        AUTOCUSTODIA: 'AUTOCUSTODIA',
-        BOLSA: 'BOLSA',
-        ACCION: 'BOLSA',
-        ACCIONES: 'BOLSA',
-        ETF: 'BOLSA',
-        OTRO: 'OTRO',
-        OTROS: 'OTRO'
-    };
-    return alias[limpio] || (window.CARTERA_TIPOS[limpio] ? limpio : 'OTRO');
+    return window.FinanceModel.cartera.normalizarTipo(tipo);
 };
 
 window.getMetaTipoCartera = function(tipo) {
-    const key = window.normalizarTipoCartera(tipo);
-    return window.CARTERA_TIPOS[key] || window.CARTERA_TIPOS.OTRO;
+    return window.FinanceModel.cartera.getMetaTipo(tipo);
 };
 
 window.parseNumeroCartera = function(valor) {
-    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
-    const raw = String(valor ?? '').trim();
-    if (!raw) return 0;
-    let limpio = raw.replace(/[€%\s]/g, '');
-    if (limpio.includes(',') && limpio.includes('.')) {
-        limpio = limpio.replace(/\./g, '').replace(',', '.');
-    } else if (limpio.includes(',')) {
-        limpio = limpio.replace(',', '.');
-    }
-    const n = parseFloat(limpio);
-    return Number.isFinite(n) ? n : 0;
+    return window.FinanceModel.parseMoney(valor);
 };
 
 window.esCriptoCartera = function(posOTipo) {
-    const tipo = typeof posOTipo === 'object' ? posOTipo.tipo : posOTipo;
-    const normalizado = window.normalizarTipoCartera(tipo);
-    return normalizado === 'CRIPTOMONEDAS' || normalizado === 'AUTOCUSTODIA';
+    return window.FinanceModel.cartera.esCripto(posOTipo);
 };
 
 window.esBTCCartera = function(pos) {
-    return window.esCriptoCartera(pos) && String(pos?.ticker || '').toUpperCase().trim() === 'BTC';
+    return window.FinanceModel.cartera.esBTC(pos);
 };
 
 window.getCantidadCartera = function(pos) {
-    return window.esCriptoCartera(pos) ? window.parseNumeroCartera(pos?.cantidad) : 1;
+    return window.FinanceModel.cartera.getCantidad(pos);
 };
 
 window.getCostePosicionCartera = function(pos) {
-    return window.parseNumeroCartera(pos?.precioCompra);
+    return window.FinanceModel.cartera.getCoste(pos);
 };
 
 window.getValorMercadoPosicionCartera = function(pos) {
-    const precioActual = window.parseNumeroCartera(pos?.precioActual);
-    return window.esCriptoCartera(pos) ? window.getCantidadCartera(pos) * precioActual : precioActual;
+    return window.FinanceModel.cartera.getValorMercado(pos);
 };
 
 window.getPnlPosicionCartera = function(pos) {
-    return window.getValorMercadoPosicionCartera(pos) - window.getCostePosicionCartera(pos);
+    return window.FinanceModel.cartera.getPnl(pos);
 };
 
 window.getRentabilidadPosicionCartera = function(pos) {
-    const coste = window.getCostePosicionCartera(pos);
-    return coste > 0 ? (window.getPnlPosicionCartera(pos) / coste) * 100 : 0;
+    return window.FinanceModel.cartera.getRentabilidad(pos);
 };
 
 window.sanitizarPosicionCartera = function(pos) {
-    const tipo = window.normalizarTipoCartera(pos?.tipo);
-    const esCripto = window.esCriptoCartera(tipo);
-    return {
-        id: String(pos?.id || ((typeof uuid === 'function') ? uuid() : ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}`))),
-        ticker: String(pos?.ticker || pos?.nombre || '').toUpperCase().trim(),
-        nombre: String(pos?.nombre || '').trim(),
-        tipo,
-        cuenta: String(pos?.cuenta || '').toUpperCase().trim(),
-        cantidad: esCripto ? window.parseNumeroCartera(pos?.cantidad) : 1,
-        precioCompra: window.parseNumeroCartera(pos?.precioCompra),
-        precioActual: window.parseNumeroCartera(pos?.precioActual),
-        fechaCompra: pos?.fechaCompra || '',
-        notas: String(pos?.notas || '').trim(),
-        precioFuente: pos?.precioFuente || (window.esBTCCartera(pos) ? 'Binance BTC/EUR' : 'Manual'),
-        precioActualizadoEn: pos?.precioActualizadoEn || ''
-    };
+    return window.FinanceModel.cartera.sanitizar(pos);
 };
 
 window.escapeHtmlCartera = function(valor) {
@@ -8661,7 +8930,7 @@ window.obtenerPrecioBTC = async function() {
         if (!response.ok) return null; 
         
         const data = await response.json();
-        window.precioBTC_EUR_Cache = parseFloat(data.price);
+        window.precioBTC_EUR_Cache = Number(data.price);
         return window.precioBTC_EUR_Cache;
     } catch(error) {
         return null;
@@ -8926,7 +9195,7 @@ setTimeout(() => document.getElementById('input-simulador').focus(), 100);
 };
 window.activarSimulador = function() {
 const input = document.getElementById('input-simulador').value;
-const cantidad = parseFloat(input);
+const cantidad = window.FinanceModel.parseMoney(input);
 if (isNaN(cantidad) || cantidad <= 0) {
 notify('⚠️ Introduce un importe válido', 'warning');
 return;
@@ -9221,7 +9490,7 @@ const f = new Date(m.fecha);
 if (f.getFullYear() === año && (f.getMonth() + 1) === mes) {
 if (m.beneficiario === 'DN') {
 const nombreCuenta = (m.cuenta || '').toUpperCase();
-const importe = parseFloat(m.importe) || 0;
+const importe = window.FinanceModel.parseMoney(m.importe);
 const aportacionNeta = importe < 0 ? -importe : 0; // Solo contamos gastos, ignoramos reembolsos
 if (nombreCuenta.startsWith('D-')) {
 totalD += aportacionNeta;
@@ -9276,7 +9545,7 @@ if (movimientos.length === 0) {
 html = '<div style="text-align:center; padding: 30px 10px; color: #666; font-size: 14px;"><i>No hay movimientos registrados.</i></div>';
 } else {
 movimientos.forEach(m => {
-const valorReal = parseFloat(m.importe) || 0;
+const valorReal = window.FinanceModel.parseMoney(m.importe);
 const aportacion = -valorReal;
 totalAportado += aportacion;
 const fechaObj = new Date(m.fecha);
@@ -9330,7 +9599,7 @@ if (lista.length === 0) {
 html += `<div style="text-align:center; font-size: 11px; color: #666; margin-top: 20px;">Sin gastos</div>`;
 } else {
 lista.forEach(m => {
-const valorReal = parseFloat(m.importe) || 0;
+const valorReal = window.FinanceModel.parseMoney(m.importe);
 if (persona === 'D') totalD += (-valorReal);
 else totalN += (-valorReal);
 const esIngreso = valorReal > 0;
@@ -9813,7 +10082,7 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
 
   const dataDonut = Object.keys(grupos).map(tipo => ({
     name: window.getMetaTipoCartera(tipo).label || tipo,
-    value: parseFloat(grupos[tipo].total.toFixed(2)),
+    value: Number(grupos[tipo].total.toFixed(2)),
     itemStyle: { color: colorTipo[tipo] || '#888', shadowBlur: 15, shadowColor: colorTipo[tipo] || '#888' }
   }));
 
@@ -9869,7 +10138,7 @@ window.renderizarEvolCartera = function() {
   if (!chart) chart = echarts.init(container);
 
   const fechas = hist.map(h => new Date(h.ts).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'}));
-  const valores = hist.map(h => parseFloat(h.valor.toFixed(2)));
+  const valores = hist.map(h => Number(h.valor.toFixed(2)));
 
   // Obtener el coste total actual desde el resumen de cartera
   const costeActual = window.resumenCartera ? window.resumenCartera.totalCoste : 0;
