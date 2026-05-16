@@ -3431,10 +3431,38 @@ window.AppRuntime = (function() {
             if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
         });
     }
+    function renderVisibleTab() {
+        const tab = activeTab();
+        if (tab === 'movs' && typeof window.renderizar === 'function') window.renderizar();
+        if (tab === 'patri') {
+            if (typeof window.actualizarPatrimonio === 'function') window.actualizarPatrimonio();
+            if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
+            if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
+            if (typeof window.renderizarGraficoEvolucion === 'function') window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos || []);
+        }
+        if (tab === 'inversiones') {
+            if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+            if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
+        }
+        if (tab === 'presupuesto' && typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
+        if (tab === 'recurrentes' && typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
+    }
+    function refreshAfterDataLoaded() {
+        dashboardSignature = null;
+        scheduleDashboard(true);
+        setTimeout(() => {
+            // Presupuesto no depende de canvas; puede prepararse aunque la pestaña no esté visible.
+            if (typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
+            // Cartera y patrimonio actualizan datos/DOM ligero y dejan sus gráficos listos al entrar.
+            if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+            renderVisibleTab();
+            window.dispatchEvent(new Event('resize'));
+        }, 180);
+    }
     function yieldToUI() {
         return new Promise(resolve => setTimeout(resolve, 0));
     }
-    return { activeTab, isTabActive, invalidateFinanceCaches, shouldSkipDashboard, scheduleDashboard, yieldToUI };
+    return { activeTab, isTabActive, invalidateFinanceCaches, shouldSkipDashboard, scheduleDashboard, refreshAfterDataLoaded, renderVisibleTab, yieldToUI };
 })();
 // 🧠 MEJORA FASE 2: SISTEMA REACTIVO DE INTERFAZ (UI Events)
 // ============================================================
@@ -3460,12 +3488,11 @@ if (window.AppRuntime) window.AppRuntime.invalidateFinanceCaches();
 if (window.FinanceModel) window.estadoFinanciero = window.FinanceModel.snapshots.crear();
 if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-const tabActiva = window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio';
-if (tabActiva === 'movs' && typeof renderizar === 'function') renderizar();
-if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
-else if (typeof actualizarDashboard === 'function') actualizarDashboard();
-if (tabActiva === 'patri' && typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-if (tabActiva === 'recurrentes' && typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
+if (window.AppRuntime) window.AppRuntime.refreshAfterDataLoaded();
+else {
+if (typeof actualizarDashboard === 'function') actualizarDashboard();
+if (typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
+}
 });
 // ============================================================
 // 🛡️ MEJORA B: PROTECCIÓN ANTI DOBLE-TOQUE (Botones de Carga)
@@ -3537,24 +3564,27 @@ window.ChartLifecycle = (function() {
                     if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
                     else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
                 } else if (tabActiva === 'patri') {
+                    if (typeof window.actualizarPatrimonio === 'function') window.actualizarPatrimonio();
                     if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
                     if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
-                    // Si existe evolución histórica
                     const domEvo = document.getElementById('chartPatrimonio');
                     if (domEvo && typeof window.renderizarGraficoEvolucion === 'function') {
-                        window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos);
+                        window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos || []);
                     }
                 } else if (tabActiva === 'salud') {
-				// El radar se actualiza mediante actualizarDashboard, no necesita llamada directa
-				if (typeof window.renderizarProyectorFIRE === 'function') {
-                        // Intentamos recuperar últimos cálculos si existen
-                        const capital = window._lastTotalPatri || 0;
-                        const ahorro = window._lastAhorro || 0;
-                        const gasto = window._lastGasto || 0;
-                        window.renderizarProyectorFIRE(capital, ahorro, gasto);
-                    }
+                    if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
+                    else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+                } else if (tabActiva === 'inversiones') {
+                    if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+                    if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
+                } else if (tabActiva === 'presupuesto') {
+                    if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
+                    if (typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
+                } else if (tabActiva === 'movs') {
+                    if (typeof window.renderizar === 'function') window.renderizar();
+                } else if (tabActiva === 'recurrentes') {
+                    if (typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
                 }
-                // Forzamos un resize para ajustar al ancho del móvil
                 window.dispatchEvent(new Event('resize'));
             }, 100);
         }
@@ -9445,6 +9475,8 @@ const gastos2026 = {}; // { concepto: total_ytd }
 let totalGastos2025 = 0;
 let totalGastos2026 = 0;
 let mesesConDatos2025 = new Set();
+let mesesConDatos2026 = new Set();
+let anioBasePresupuesto = anioAnterior;
 datos.forEach(m => {
 if (typeof pasaFiltroPropietario === 'function' && !pasaFiltroPropietario(m)) return;   // 📌 NUEVO
 // 1. LIMPIEZA INICIAL: Ignoramos ingresos, traspasos y saldos iniciales
@@ -9482,12 +9514,20 @@ mesesConDatos2025.add(mes);
 } else if (anio === anioActual) {
 gastos2026[conc] = (gastos2026[conc] || 0) + gasto;
 totalGastos2026 += gasto;
+mesesConDatos2026.add(mes);
 }
 });
-// Cuántos meses COMPLETOS de 2025 tenemos (para normalizar)
+// Si no hay año anterior, usamos el año actual como base para no dejar Presupuesto vacío tras cargar datos.
+if (totalGastos2025 === 0 && totalGastos2026 > 0) {
+Object.keys(gastos2026).forEach(conc => { gastos2025[conc] = gastos2026[conc]; });
+totalGastos2025 = totalGastos2026;
+mesesConDatos2025 = mesesConDatos2026;
+anioBasePresupuesto = anioActual;
+}
+// Cuántos meses reales tenemos para normalizar
 const mesesReales2025 = Math.max(mesesConDatos2025.size, 1);
 // ── PRESUPUESTO 2026 ────────────────────────────────────────────
-// Extrapolamos el gasto mensual promedio de 2025 → anualizado
+// Extrapolamos el gasto mensual promedio de la base disponible → anualizado
 const factorAnualizacion = 12 / mesesReales2025;
 const presupuestoAnual2026 = totalGastos2025 * factorAnualizacion;
 // Conceptos relevantes (top N que cubran el 90% del gasto)
@@ -9508,7 +9548,7 @@ if (!contPres) return;
 if (totalGastos2025 === 0) {
 contPres.innerHTML = '<div style="text-align:center;padding:20px;color:#555;font-size:12px;">Sin datos de 2025 para proyectar</div>';
 } else {
-if (subtitPres) subtitPres.textContent = `Basado en ${mesesReales2025} mes${mesesReales2025>1?'es':''} reales de ${anioAnterior}`;
+if (subtitPres) subtitPres.textContent = `Basado en ${mesesReales2025} mes${mesesReales2025>1?'es':''} reales de ${anioBasePresupuesto}`;
 const maxVal = (conceptosFiltrados.length > 0 ? conceptosFiltrados[0][1] : 0) * factorAnualizacion || 1;
 const presupuestoMensual = presupuestoAnual2026 / 12;
 // KPIs superiores
@@ -9561,7 +9601,7 @@ htmlPres += `
 <span class="budget-total-valor">${FMT_EUR0.format(presupuestoAnual2026)}</span>
 </div>
 <div style="font-size:10px;color:#555;text-align:center;padding-top:6px;">
-Dato ejecutado ${anioAnterior}: ${FMT_EUR0.format(totalGastos2025)} en ${mesesReales2025} mes${mesesReales2025>1?'es':''}
+Dato base ${anioBasePresupuesto}: ${FMT_EUR0.format(totalGastos2025)} en ${mesesReales2025} mes${mesesReales2025>1?'es':''}
 </div>
 `;
 contPres.innerHTML = htmlPres;
@@ -10751,6 +10791,12 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+
+
+
+
+
+
 
 
 
