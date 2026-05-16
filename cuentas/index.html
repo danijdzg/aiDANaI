@@ -4278,9 +4278,14 @@ this.lastETag = metaJson.eTag || null;
 }
 if (!resContent.ok) throw new Error(`Error descargando desde OneDrive`);
 const arrayBuffer = await resContent.arrayBuffer();
-const wbWorker = window.AppXlsxWorker ? await window.AppXlsxWorker.read(arrayBuffer.slice(0)) : null;
-if (wbWorker) return wbWorker;
+let wbWorker = null;
+if (window.AppXlsxWorker) {
+try { wbWorker = await window.AppXlsxWorker.read(arrayBuffer.slice(0)); }
+catch (workerError) { console.warn('Worker XLSX no disponible, usando lectura principal:', workerError); }
+}
 if (window.AppAssets) await window.AppAssets.xlsx();
+// Aunque el Worker lea el libro, procesarLibroLeido necesita XLSX.utils en la ventana principal.
+if (wbWorker) return wbWorker;
 // CLAVE: cellDates=true obliga a que se lea IGUAL que en el modo local
 return XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
 }
@@ -4619,7 +4624,11 @@ notify('Leyendo archivo local...', 'loading');
 const reader = new FileReader();
 reader.onload = async (e) => {
 try {
-const wbWorker = window.AppXlsxWorker ? await window.AppXlsxWorker.read(e.target.result.slice(0)) : null;
+let wbWorker = null;
+if (window.AppXlsxWorker) {
+try { wbWorker = await window.AppXlsxWorker.read(e.target.result.slice(0)); }
+catch (workerError) { console.warn('Worker XLSX no disponible, usando lectura principal:', workerError); }
+}
 if (window.AppAssets) await window.AppAssets.xlsx();
 const data = new Uint8Array(e.target.result);
 const wb = wbWorker || XLSX.read(data, { type: 'array', cellDates: true });
@@ -4641,6 +4650,19 @@ reader.readAsArrayBuffer(blob);
 // 🧠 PROCESADOR MAESTRO V7 + RECURRENTES (FUSIÓN)
 // ==========================================
 window.procesarLibroLeido = function(wb) {
+if (typeof XLSX === 'undefined') {
+    if (window.AppAssets && typeof window.AppAssets.xlsx === 'function') {
+        window.AppAssets.xlsx()
+            .then(() => window.procesarLibroLeido(wb))
+            .catch(error => {
+                console.error('No se pudo cargar SheetJS:', error);
+                if (typeof notify === 'function') notify('❌ No se pudo cargar el lector de Excel', 'error');
+            });
+    } else if (typeof notify === 'function') {
+        notify('❌ Lector de Excel no disponible', 'error');
+    }
+    return;
+}
 const FM = window.FinanceModel;
 // 1. LIMPIEZA Y PREPARACIÓN
 window.mapaCuentas = {};
@@ -10710,6 +10732,8 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+
+
 
 
 
