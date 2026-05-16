@@ -2181,7 +2181,7 @@ DN
 </button>
 </div>
 <div class="h-group h-center" style="display: flex; align-items: center; gap: 8px;">
-<div id="semaforo-dot" style="width: 12px; height: 12px; border-radius: 50%; background-color: #39FF14; box-shadow: 0 0 8px #39FF14; transition: all 0.3s ease; flex-shrink: 0;"></div>
+<div id="semaforo-dot" style="width: 12px; height: 12px; border-radius: 50%; background-color: #FF2E4D; box-shadow: 0 0 8px #FF2E4D; transition: all 0.3s ease; flex-shrink: 0;"></div>
 <button class="btn-mini-head tool-yellow" id="mode-local" onclick="cambiarModo('local')">
 <span class="material-icons">folder</span>
 </button>
@@ -4141,28 +4141,32 @@ return sala.length > 0;
 } catch(e) { return false; }
 },
 actualizarSemaforo: function(color) {
-this.estadoSemaforo = color;
-window.estadoSemaforo = color;
-const dot = document.getElementById('semaforo-dot');
-if (dot) {
-// Si hay internet pero hay cosas pendientes, forzamos estado naranja (Aviso)
-if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
-color = 'naranja';
-}
-if (!navigator.onLine || color === 'rojo' || color === 'error') {
-dot.style.backgroundColor = '#FF2E4D'; // Rojo Error
-dot.style.boxShadow = '0 0 10px #FF2E4D';
-dot.classList.remove('parpadeo-neon');
-} else if (color === 'naranja' || color === 'cargando') {
-dot.style.backgroundColor = '#FF9F1C'; // Naranja Guardando
-dot.style.boxShadow = '0 0 15px #FF9F1C';
-dot.classList.add('parpadeo-neon');
-} else {
-dot.style.backgroundColor = '#39FF14'; // Verde Neón OK
-dot.style.boxShadow = '0 0 10px #39FF14';
-dot.classList.remove('parpadeo-neon');
-}
-}
+    this.estadoSemaforo = color;
+    window.estadoSemaforo = color;
+    const dot = document.getElementById('semaforo-dot');
+    if (dot) {
+        // Si hay internet, verde pero hay pendientes → amarillo
+        if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
+            color = 'amarillo';
+        }
+        if (!navigator.onLine || color === 'rojo' || color === 'error' || color === 'sinDatos') {
+            dot.style.backgroundColor = '#FF2E4D'; // Rojo: sin BD o sin conexión
+            dot.style.boxShadow = '0 0 10px #FF2E4D';
+            dot.classList.remove('parpadeo-neon');
+        } else if (color === 'naranja' || color === 'cargando') {
+            dot.style.backgroundColor = '#FF9F1C'; // Naranja: guardando
+            dot.style.boxShadow = '0 0 15px #FF9F1C';
+            dot.classList.add('parpadeo-neon');
+        } else if (color === 'amarillo' || color === 'warning') {
+            dot.style.backgroundColor = '#FFD60A'; // Amarillo: pendientes sin guardar
+            dot.style.boxShadow = '0 0 10px #FFD60A';
+            dot.classList.remove('parpadeo-neon');
+        } else {
+            dot.style.backgroundColor = '#39FF14'; // Verde: todo OK
+            dot.style.boxShadow = '0 0 10px #39FF14';
+            dot.classList.remove('parpadeo-neon');
+        }
+    }
 },
 setGuardando: function(estado) {
 this.isSaving = estado;
@@ -4887,6 +4891,14 @@ window.estadoFinanciero = FM.snapshots.crear({
 });
 // Actualizar UI de forma reactiva
 window.UIEvents.emitir('datos:actualizados');
+// ✅ BD cargada: actualizar semáforo según estado de pendientes
+if (window.AppState) {
+    if (window.AppState.hayPendientes()) {
+        window.AppState.actualizarSemaforo('amarillo'); // Hay movimientos sin sincronizar
+    } else {
+        window.AppState.actualizarSemaforo('verde');    // Todo limpio
+    }
+}
 };
 // ==========================================
 // IMPRESCINDIBLE: El filtro que usa el Dashboard para sumar
