@@ -18,6 +18,25 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
+    // Silencia únicamente un falso positivo frecuente de canales async de extensiones/navegador.
+    // No tapa errores reales de la aplicación: OneDrive, Excel, gráficos o guardado siguen saliendo en consola.
+    (function() {
+        const ASYNC_CHANNEL_NOISE = 'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received';
+        function isAsyncChannelNoise(value) {
+            const message = value && value.message ? value.message : String(value || '');
+            return message.includes(ASYNC_CHANNEL_NOISE);
+        }
+        window.addEventListener('unhandledrejection', function(event) {
+            if (isAsyncChannelNoise(event.reason)) {
+                event.preventDefault();
+            }
+        });
+        window.addEventListener('error', function(event) {
+            if (isAsyncChannelNoise(event.error || event.message)) {
+                event.preventDefault();
+            }
+        }, true);
+    })();
     // Carga diferida: mantiene un único index.html, pero despierta librerías pesadas solo cuando hacen falta.
     window.AppAssets = (function() {
         const urls = {
@@ -10732,6 +10751,7 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+
 
 
 
