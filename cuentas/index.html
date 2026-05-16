@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com https://cdn.sheetjs.com https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'self' https://login.microsoftonline.com https://login.live.com; worker-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com https://cdn.sheetjs.com https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'self' https://login.microsoftonline.com https://login.live.com; worker-src 'self' blob:;">
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,9 +17,89 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script defer src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script defer src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script>
+    // Carga diferida: mantiene un único index.html, pero despierta librerías pesadas solo cuando hacen falta.
+    window.AppAssets = (function() {
+        const urls = {
+            xlsx: 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+            msal: 'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
+            echarts: 'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js'
+        };
+        const globals = { xlsx: 'XLSX', msal: 'msal', echarts: 'echarts' };
+        const promises = {};
+        function ensure(name) {
+            const globalName = globals[name];
+            if (globalName && window[globalName]) return Promise.resolve(window[globalName]);
+            if (promises[name]) return promises[name];
+            promises[name] = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = urls[name];
+                script.async = true;
+                script.onload = () => resolve(globalName ? window[globalName] : true);
+                script.onerror = () => {
+                    delete promises[name];
+                    reject(new Error('No se pudo cargar ' + name));
+                };
+                document.head.appendChild(script);
+            });
+            return promises[name];
+        }
+        return {
+            ensure,
+            xlsx: () => ensure('xlsx'),
+            msal: () => ensure('msal'),
+            echarts: () => ensure('echarts'),
+            url: (name) => urls[name]
+        };
+    })();
+    window.AppXlsxWorker = (function() {
+        let worker = null;
+        function getWorker() {
+            if (worker) return worker;
+            if (!window.Worker || !window.Blob || !window.URL || !window.AppAssets) return null;
+            const code = `
+                let xlsxReady = false;
+                self.onmessage = async (event) => {
+                    const { id, type, buffer, url } = event.data || {};
+                    try {
+                        if (!xlsxReady) { importScripts(url); xlsxReady = true; }
+                        if (type === 'read') {
+                            const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+                            self.postMessage({ id, ok: true, wb });
+                        }
+                    } catch (error) {
+                        self.postMessage({ id, ok: false, error: error && error.message ? error.message : String(error) });
+                    }
+                };
+            `;
+            worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'application/javascript' })));
+            return worker;
+        }
+        function read(buffer) {
+            const w = getWorker();
+            if (!w) return Promise.resolve(null);
+            return new Promise((resolve, reject) => {
+                const id = 'xlsx-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+                const onMessage = (event) => {
+                    if (!event.data || event.data.id !== id) return;
+                    w.removeEventListener('message', onMessage);
+                    if (event.data.ok) resolve(event.data.wb);
+                    else reject(new Error(event.data.error || 'Error leyendo Excel'));
+                };
+                w.addEventListener('message', onMessage);
+                w.postMessage({ id, type: 'read', buffer, url: window.AppAssets.url('xlsx') }, [buffer]);
+            });
+        }
+        return { read };
+    })();
+    window.ensureEChartsReady = function(retry) {
+        if (window.echarts) return true;
+        window.AppAssets.echarts().then(retry).catch(() => {
+            if (typeof notify === 'function') notify('No se pudieron cargar los gráficos', 'error');
+        });
+        return false;
+    };
+    </script>
     <style>
  /* --- ESCUDO DE PRODUCCIÓN PARA MÓVILES --- */
 html, body {
@@ -3292,6 +3372,51 @@ window.fusionarMovimientos = function(movimientosNube, movimientosLocales) {
 };
 // --- FIN HERRAMIENTA DE FUSIÓN DE DATOS ---
 // ============================================================
+// ============================================================
+// 🚀 APP RUNTIME: CACHÉ, RENDIMIENTO Y PINTADO INTELIGENTE
+// ============================================================
+window.AppRuntime = (function() {
+    let dataVersion = 0;
+    let dashboardSignature = null;
+    let dashboardScheduled = false;
+    const idle = window.requestIdleCallback || function(cb) { return setTimeout(() => cb({ timeRemaining: () => 16 }), 80); };
+    function activeTab() {
+        const active = document.querySelector('.view-section.active');
+        return active && active.id ? active.id.replace('tab-', '') : 'inicio';
+    }
+    function isTabActive(tab) { return activeTab() === tab; }
+    function invalidateFinanceCaches() {
+        dataVersion++;
+        dashboardSignature = null;
+        window._datosEvoCache = null;
+    }
+    function dashboardKey() {
+        const period = document.getElementById('dash-period')?.value || '';
+        const start = document.getElementById('d-start')?.value || '';
+        const end = document.getElementById('d-end')?.value || '';
+        const user = (typeof filtroUsuarioActual !== 'undefined') ? filtroUsuarioActual : 'todos';
+        return [dataVersion, user, period, start, end, window.simuladorImpacto || 0, (window.datos || []).length, (window.datosCartera || []).length].join('|');
+    }
+    function shouldSkipDashboard() {
+        const key = dashboardKey();
+        if (dashboardSignature === key) return true;
+        dashboardSignature = key;
+        return false;
+    }
+    function scheduleDashboard(force) {
+        if (force) dashboardSignature = null;
+        if (dashboardScheduled) return;
+        dashboardScheduled = true;
+        idle(() => {
+            dashboardScheduled = false;
+            if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+        });
+    }
+    function yieldToUI() {
+        return new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return { activeTab, isTabActive, invalidateFinanceCaches, shouldSkipDashboard, scheduleDashboard, yieldToUI };
+})();
 // 🧠 MEJORA FASE 2: SISTEMA REACTIVO DE INTERFAZ (UI Events)
 // ============================================================
 window.UIEvents = (function() {
@@ -3303,20 +3428,25 @@ suscriptores[evento].push(callback);
 },
 emitir: function(evento, datos) {
 if (suscriptores[evento]) {
-suscriptores[evento].forEach(cb => cb(datos));
+suscriptores[evento].forEach(cb => {
+try { cb(datos); } catch (err) { console.error('UIEvents error:', evento, err); }
+});
 }
 }
 };
 })();
-// Suscribimos todas las actualizaciones visuales al evento maestro
+// Suscribimos todas las actualizaciones visuales al evento maestro sin repintar pantallas ocultas
 window.UIEvents.on('datos:actualizados', function() {
+if (window.AppRuntime) window.AppRuntime.invalidateFinanceCaches();
 if (window.FinanceModel) window.estadoFinanciero = window.FinanceModel.snapshots.crear();
 if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-if (typeof renderizar === 'function') renderizar();
-if (typeof actualizarDashboard === 'function') actualizarDashboard();
-if (typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-if (typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
+const tabActiva = window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio';
+if (tabActiva === 'movs' && typeof renderizar === 'function') renderizar();
+if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
+else if (typeof actualizarDashboard === 'function') actualizarDashboard();
+if (tabActiva === 'patri' && typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+if (tabActiva === 'recurrentes' && typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 });
 // ============================================================
 // 🛡️ MEJORA B: PROTECCIÓN ANTI DOBLE-TOQUE (Botones de Carga)
@@ -3351,11 +3481,13 @@ window.ChartLifecycle = (function() {
     const registry = {
         'inicio': ['chart-Sankey'],
         'patri':  ['chart-Sunburst', 'chart-TreeMap', 'chartPatrimonio'],
-        'salud':  ['chartRadar', 'chart-FIRE']
+        'salud':  ['chartRadar', 'chart-FIRE'],
+        'inversiones': ['chart-cartera-donut', 'chart-cartera-evol']
     };
     return {
         // Elimina de RAM todo lo que no pertenezca a la pestaña actual
         limpiarMemoria: function(tabDestino) {
+            if (typeof echarts === 'undefined') return;
             const graficosEnTab = registry[tabDestino] || [];
             // Recorremos todos los posibles contenedores de gráficos
             const todosLosIds = Object.values(registry).flat();
@@ -3383,7 +3515,8 @@ window.ChartLifecycle = (function() {
             // Pequeño delay para dejar que el DOM respire tras la animación de pestaña
             setTimeout(() => {
                 if (tabActiva === 'inicio') {
-                    if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+                    if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
+                    else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
                 } else if (tabActiva === 'patri') {
                     if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
                     if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
@@ -4026,10 +4159,13 @@ constructor() {
 this.fileId = localStorage.getItem("aidanai_file_id");
 this.lastETag = null;
 this.msalInstance = null;
-this._msalReady = this._inicializarMsal();
+this._msalReady = null;
 }
 async _inicializarMsal() {
-if (typeof msal === 'undefined') {
+if (this.msalInstance) return this.msalInstance;
+if (window.AppAssets && typeof window.AppAssets.msal === 'function') {
+await window.AppAssets.msal();
+} else if (typeof msal === 'undefined') {
 await new Promise(resolve => {
 const check = setInterval(() => {
 if (typeof msal !== 'undefined') {
@@ -4040,12 +4176,17 @@ resolve();
 });
 }
 this.msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+return this.msalInstance;
+}
+async _ensureMsalReady() {
+if (!this._msalReady) this._msalReady = this._inicializarMsal();
+return this._msalReady;
 }
 // ==========================================
 // 🛡️ OBTENER TOKEN (CON RENOVACIÓN SILENCIOSA ANTI-CADUCIDAD)
 // ==========================================
 async getToken() {
-await this._msalReady;
+await this._ensureMsalReady();
 const cuentas = this.msalInstance.getAllAccounts();
 if (cuentas.length === 0) {
 throw new Error("No hay ninguna sesión iniciada en OneDrive.");
@@ -4072,7 +4213,7 @@ throw new Error("Sesión caducada de Microsoft. Debes volver a iniciar sesión."
 }
 }
 async login() {
-await this._msalReady;
+await this._ensureMsalReady();
 try {
 await this.msalInstance.handleRedirectPromise().catch(()=>{});
 const resp = await this.msalInstance.loginPopup({
@@ -4087,6 +4228,7 @@ throw e;
 }
 // --- 2. LOCALIZADOR ---
 async getFileId() {
+if (!this.msalInstance) await this._ensureMsalReady();
 if (this.fileId) return this.fileId;
 const cached = localStorage.getItem("aidanai_file_id");
 if(cached) { this.fileId = cached; return cached; }
@@ -4136,6 +4278,9 @@ this.lastETag = metaJson.eTag || null;
 }
 if (!resContent.ok) throw new Error(`Error descargando desde OneDrive`);
 const arrayBuffer = await resContent.arrayBuffer();
+const wbWorker = window.AppXlsxWorker ? await window.AppXlsxWorker.read(arrayBuffer.slice(0)) : null;
+if (wbWorker) return wbWorker;
+if (window.AppAssets) await window.AppAssets.xlsx();
 // CLAVE: cellDates=true obliga a que se lea IGUAL que en el modo local
 return XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
 }
@@ -4346,8 +4491,9 @@ document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'n
 // El botón de guardar cambia según el modo
 const btnGuardar = document.getElementById('btn-guardar');
 if (btnGuardar) btnGuardar.style.display = modoNube ? 'none' : 'flex';
-renderizar();
-actualizarDashboard();
+if ((window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio') === 'movs' && typeof renderizar === 'function') renderizar();
+if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
+else if (typeof actualizarDashboard === 'function') actualizarDashboard();
 }
 
 // ==========================================
@@ -4471,10 +4617,12 @@ async function cargarDesdeNube(esSilencioso = false) {
 function leerExcel(blob) {
 notify('Leyendo archivo local...', 'loading');
 const reader = new FileReader();
-reader.onload = (e) => {
+reader.onload = async (e) => {
 try {
+const wbWorker = window.AppXlsxWorker ? await window.AppXlsxWorker.read(e.target.result.slice(0)) : null;
+if (window.AppAssets) await window.AppAssets.xlsx();
 const data = new Uint8Array(e.target.result);
-const wb = XLSX.read(data, { type: 'array', cellDates: true });
+const wb = wbWorker || XLSX.read(data, { type: 'array', cellDates: true });
 // Procesamos los datos igual que si vinieran de la nube
 procesarLibroLeido(wb);
 notify('✅ Archivo Local Cargado', 'success');
@@ -5918,6 +6066,7 @@ if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
 }
 }
 function renderizarGraficoEvolucion(movimientos) {
+if (!window.ensureEChartsReady(() => renderizarGraficoEvolucion(movimientos))) return;
 const container = document.getElementById('chartPatrimonio');
 const boxGrafico = document.getElementById('box-grafico');
 // Validación de seguridad
@@ -6102,6 +6251,8 @@ if (btn) btn.innerHTML = '<span class="material-icons spin">sync</span> GUARDAND
 if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
 let wb = null;
 try {
+if (window.AppAssets) await window.AppAssets.xlsx();
+if (window.AppRuntime) await window.AppRuntime.yieldToUI();
 const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
 const FM = window.FinanceModel;
 let datosFinales = [...(window.datos || [])];
@@ -6242,6 +6393,7 @@ while (!exito && intentos < maxRetries) {
 try {
 intentos++;
 if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
+if (window.AppRuntime) await window.AppRuntime.yieldToUI();
 const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
 await oneDrive.saveFile(wbout, "aidanai-ctas.xlsx");
 exito = true;
@@ -6346,6 +6498,7 @@ localStorage.removeItem('aidanai_buzon');
 if (window.AppState) window.AppState.actualizarSemaforo('ok');
 if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
 } else {
+if (window.AppRuntime) await window.AppRuntime.yieldToUI();
 XLSX.writeFile(wb, "aidanai-ctas.xlsx");
 if (window.AppState) window.AppState.actualizarSemaforo('ok');
 }
@@ -6389,6 +6542,7 @@ return true;
 // 🌊 GRÁFICO SANKEY (RÍOS DE DINERO) - [OPTIMIZADO RAM]
 // ==========================================
 window.renderizarSankey = function(datosPeriodo) {
+    if (!window.ensureEChartsReady(() => window.renderizarSankey(datosPeriodo))) return;
     const container = document.getElementById('chart-Sankey');
     if (!container) return;
     if (!datosPeriodo || datosPeriodo.length === 0) {
@@ -6546,6 +6700,7 @@ window.renderizarSankey = function(datosPeriodo) {
 // ==========================================
 window.tiposExcluidos = window.tiposExcluidos || new Set();
 window.renderTreeMap = function() {
+    if (!window.ensureEChartsReady(() => window.renderTreeMap())) return;
     const container = document.getElementById('chart-TreeMap');
     const filterContainer = document.getElementById('treemap-filters');
     if (!container || !filterContainer) return;
@@ -6661,6 +6816,7 @@ window.renderTreeMap = function() {
 // 💎 RAYO X PATRIMONIAL (MODO NEÓN CLEAN) - [OPTIMIZADO]
 // ==========================================
 window.renderizarSunburstPatrimonio = function() {
+    if (!window.ensureEChartsReady(() => window.renderizarSunburstPatrimonio())) return;
     // 1. OBTENER CONTENEDOR
     const container = document.getElementById('chart-Sunburst');
     if (!container) return;
@@ -6820,6 +6976,7 @@ window.renderizarSunburstPatrimonio = function() {
 // 📊 SCORING FINANCIERO: PENTÁGONO PRO (CYBERPUNK EDITION) - [OPTIMIZADO RAM]
 // ==========================================
 window.renderizarProyectorFIRE = function(totalCapital, ahorroMensual, gastoMensual) {
+    if (!window.ensureEChartsReady(() => window.renderizarProyectorFIRE(totalCapital, ahorroMensual, gastoMensual))) return;
     const container = document.getElementById('chart-FIRE');
     const subtitulo = document.getElementById('fire-subtitle');
     if (!container) return;
@@ -6954,6 +7111,7 @@ areaStyle: {
     }
 };
 window.renderizarRadarScoring = function(kpis) {
+    if (!window.ensureEChartsReady(() => window.renderizarRadarScoring(kpis))) return;
     // Escudo de seguridad por si los datos no llegan cargados aún
     if (!kpis) kpis = { meses: 0, tasaAhorro: 0, inversiones: 0, patrimonio: 0, libertad: 0, gastoMedio: 0 };
     const chartDom = document.getElementById('chartRadar');
@@ -7179,6 +7337,7 @@ window.actualizarDashboard();
 // 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
 // =========================================================
 window.actualizarDashboard = function() {
+if (window.AppRuntime && window.AppRuntime.shouldSkipDashboard()) return;
 // 1. SEGURIDAD: Si no hay datos, salimos sin romper nada
 if (!window.datos || window.datos.length === 0) {
 animarCifra('d-ing', 0, 'moneda');
@@ -7326,11 +7485,12 @@ if (ingresoTotalUltimoAno > 0) {
 tasaAhorroEstructural = ((ingresoTotalUltimoAno - gastoTotalUltimoAno) / ingresoTotalUltimoAno) * 100;
 ahorroMensualMedio = (ingresoTotalUltimoAno - gastoTotalUltimoAno) / 12;
 }
-// 8. RENDERIZADO DE GRÁFICOS
-if (typeof window.renderizarSankey === 'function') {
+// 8. RENDERIZADO DE GRÁFICOS SOLO EN LA PESTAÑA VISIBLE
+const tabActivaDashboard = window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio';
+if (tabActivaDashboard === 'inicio' && typeof window.renderizarSankey === 'function') {
 window.renderizarSankey(window.datosResumen);
 }
-if (typeof renderizarGraficoEvolucion === 'function') {
+if (tabActivaDashboard === 'patri' && typeof renderizarGraficoEvolucion === 'function') {
 renderizarGraficoEvolucion(datosUsuario);
 }
 // Cachear KPIs para uso desde otras pestañas (e.g. Salud)
@@ -7341,10 +7501,10 @@ window._lastAhorro = ahorroMensualMedio;
 window._lastMesesCobertura = mesesCobertura;
 window._lastTasaAhorro = tasaAhorroEstructural;
 window._lastLibertad = pctLibertad;
-if (typeof renderizarProyectorFIRE === 'function') {
+if (tabActivaDashboard === 'salud' && typeof renderizarProyectorFIRE === 'function') {
 renderizarProyectorFIRE(totalLiquidez + totalInversion, ahorroMensualMedio, gastoMensualMedio);
 }
-if (typeof window.renderizarRadarScoring === 'function') {
+if (tabActivaDashboard === 'salud' && typeof window.renderizarRadarScoring === 'function') {
 window.renderizarRadarScoring({
 meses: mesesCobertura,
 tasaAhorro: tasaAhorroEstructural,
@@ -7354,13 +7514,13 @@ libertad: pctLibertad,
 gastoMedio: gastoMensualMedio
 });
 }
-// 🚀 9. CÁLCULO DEL PRESUPUESTO ANUAL (¡NUEVO Y OFICIAL!)
-if (typeof window.calcularPresupuestoYComparativa === 'function') {
+// 🚀 9. CÁLCULO DEL PRESUPUESTO ANUAL (solo cuando el usuario mira esa pestaña)
+if (tabActivaDashboard === 'presupuesto' && typeof window.calcularPresupuestoYComparativa === 'function') {
 window.calcularPresupuestoYComparativa();
 }
-// 11. ALERTAS DE RECIBOS PRÓXIMOS
-if (window.AppInitializer && typeof window.AppInitializer.revisarRecibosProximos === 'function') {
-window.AppInitializer.revisarRecibosProximos();
+// 11. ALERTAS DE RECIBOS PRÓXIMOS, diferidas para no bloquear el primer pintado
+if (tabActivaDashboard === 'inicio' && window.AppInitializer && typeof window.AppInitializer.revisarRecibosProximos === 'function') {
+setTimeout(() => window.AppInitializer.revisarRecibosProximos(), 250);
 }
 };
 // ==========================================
@@ -7500,13 +7660,15 @@ function actualizarInfoBackup(hechoHoy) {
 // ==========================================
 // 📥 FUNCIÓN DE EMERGENCIA: BACKUP LOCAL (CORREGIDO 3 HOJAS)
 // ==========================================
-function descargarBackupLocal() {
+async function descargarBackupLocal() {
 if (!window.datos || window.datos.length === 0) {
 // ✅ FIX BUG-1: mostrarToast no existe en este app. Usar mostrarNotificacion.
 notify("⚠️ No hay datos para descargar", "warning");
 return;
 }
 try {
+if (window.AppAssets) await window.AppAssets.xlsx();
+if (window.AppRuntime) await window.AppRuntime.yieldToUI();
 // 1. Crear el libro de Excel
 const wb = XLSX.utils.book_new();
 // --- HOJA 1: MOVIMIENTOS ---
@@ -7574,6 +7736,7 @@ if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
 XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
 // 4. Descarga Final
 const fechaHoy = new Date().toISOString().slice(0,10).replace(/-/g, "");
+if (window.AppRuntime) await window.AppRuntime.yieldToUI();
 XLSX.writeFile(wb, `aidanai_backup_LOCAL_${fechaHoy}.xlsx`, { compression: true });
 // ✅ FIX BUG-1 (cont): Actualizar el indicador visual "backup hecho hoy"
 if (typeof actualizarInfoBackup === 'function') actualizarInfoBackup(true);
@@ -8456,6 +8619,8 @@ window.desbloquearApp = function() {
 // ──────────────────────────────────────────────────────────────────────
 window.AppInitializer = {
 iniciar: async function() {
+if (this._iniciado) return;
+this._iniciado = true;
 // 1. MOTOR GRÁFICO DE FONDO (SpaceEngine)
 if (typeof SpaceEngine !== 'undefined') SpaceEngine.start();
     // 1b. Restaurar filtro de usuario persistido
@@ -8500,7 +8665,8 @@ configurarSeguridad: function() {
 configurarCargaDatos: async function() {
 // A) Configurar botón oculto de subida de Excel local
 const fileInput = document.getElementById('file-input');
-if (fileInput) {
+if (fileInput && !fileInput.dataset.boundLoader) {
+fileInput.dataset.boundLoader = '1';
 fileInput.addEventListener('change', (e) => {
 if (e.target.files.length > 0) {
 if (typeof leerExcel === 'function') leerExcel(e.target.files[0]);
@@ -10071,6 +10237,7 @@ window.toggleCarteraGroup = function(id) {
 
 // ── GRÁFICO DONUT ─────────────────────────────────────────────────────
 window.renderizarDonutCartera = function(grupos, colorTipo) {
+  if (!window.ensureEChartsReady(() => window.renderizarDonutCartera(grupos, colorTipo))) return;
   const container = document.getElementById('chart-cartera-donut');
   const elCenter  = document.getElementById('cartera-donut-val');
   if (!container || typeof echarts === 'undefined') return;
@@ -10121,6 +10288,7 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
 
 // ── GRÁFICO EVOLUCIÓN HISTÓRICA ───────────────────────────────────────
 window.renderizarEvolCartera = function() {
+  if (!window.ensureEChartsReady(() => window.renderizarEvolCartera())) return;
   const hist = window.historicoCartera || [];
   const card = document.getElementById('card-evol-cartera');
   const container = document.getElementById('chart-cartera-evol');
@@ -10542,3 +10710,25 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
