@@ -7624,7 +7624,7 @@ for (let i = 0; i < maxFilas; i++) {
 const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
 XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
 
-// --- HOJA 3: RECURRENTES (Corregido con parseFecha funcional) ---
+// --- HOJA 3: RECURRENTES (Versión limpia y corregida para Producción) ---
 const listaRec = window.datosRecurrentes || [];
 const filasRec = listaRec.map(r => ({
     "ID": r.id,
@@ -7640,18 +7640,16 @@ const filasRec = listaRec.map(r => ({
     "DESCRIPCION": r.descripcion || ""
 }));
 const wsRec = XLSX.utils.json_to_sheet(filasRec, { header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"] });
+
+// 🟢 MAGIA FECHAS: Máscara visual DD/MM/YYYY para recurrentes locales
 Object.keys(wsRec).forEach(key => { if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy'; });
 XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
-// 🟢 MAGIA FECHAS: Máscara visual DD/MM/YYYY para recurrentes locales
-Object.keys(wsRec).forEach(key => {
-if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
-});
-XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
+
 // 4. Descarga Final
 const fechaHoy = new Date().toISOString().slice(0,10).replace(/-/g, "");
 if (window.AppRuntime) await window.AppRuntime.yieldToUI();
 XLSX.writeFile(wb, `aidanai_backup_LOCAL_${fechaHoy}.xlsx`, { compression: true });
-// ✅ FIX BUG-1 (cont): Actualizar el indicador visual "backup hecho hoy"
+
 if (typeof actualizarInfoBackup === 'function') actualizarInfoBackup(true);
 notify("✅ Backup completo (3 hojas) descargado", "success");
 } catch (error) {
