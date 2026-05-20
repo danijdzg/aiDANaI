@@ -1755,7 +1755,7 @@ scroll-behavior: smooth;
 }
 /* 2. CIFRAS BANCARIAS PERFECTAS (Tabular Nums) */
 /* Fuerza a los números a ocupar el mismo espacio, evitando temblores visuales */
-h1, h2, h3, .importe, .kpi-value, .saldo, input[type="number" inputmode="decimal" ], .numero {
+h1, h2, h3, .importe, .kpi-value, .saldo, input[type="number"], input[inputmode="decimal"], .numero {
 font-variant-numeric: tabular-nums !important;
 letter-spacing: -0.5px !important; /* Le da un toque más compacto y pro */
 }
@@ -2005,11 +2005,13 @@ body #fab-main:active {
     /* Forzar layout en columna única */
     #modal-cartera-pos > div:first-of-type+div>div:first-of-type,
     #modal-cartera-pos .cockpit-grid {
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 6px !important;
-        padding: 0 8px !important;
-    }
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    padding: 0 8px !important;
+    max-height: calc(100dvh - 140px) !important; /* Limita la rejilla para que no pise el footer */
+    overflow-y: auto !important;                 /* Activa el scroll interno si el teclado sube */
+}
     /* Compactar campos */
     #modal-cartera-pos .precio-input-wrap {
         width: 100% !important;
@@ -2100,29 +2102,7 @@ body #fab-main:active {
 .contenido-alerta-amoled {
     padding: 16px 16px 12px 16px;
 }
-/* ══════════════════════════════════════════════════════════════
-   SWIPE HORIZONTAL ENTRE PESTAÑAS
-   Se activa solo cuando JS añade swipe-dir-left / swipe-dir-right
-   al body. En el resto de navegaciones sigue usando aparecerSuave.
-══════════════════════════════════════════════════════════════ */
-@keyframes swipeDesdeIzquierda {
-    from { opacity: 0; transform: translateX(45px); }
-    to   { opacity: 1; transform: translateX(0);    }
-}
-@keyframes swipeDesdeDerecha {
-    from { opacity: 0; transform: translateX(-45px); }
-    to   { opacity: 1; transform: translateX(0);     }
-}
 
-/* Swipe izquierda → pestaña siguiente entra desde la derecha */
-body.swipe-dir-left .view-section.active {
-    animation: swipeDesdeIzquierda 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards !important;
-}
-
-/* Swipe derecha → pestaña anterior entra desde la izquierda */
-body.swipe-dir-right .view-section.active {
-    animation: swipeDesdeDerecha 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards !important;
-}
 </style>
 </head>
 <body>
@@ -3639,113 +3619,7 @@ window.irPestana = function(p) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 // --- FIN PERFORMANCE MANAGER ---
-// ══════════════════════════════════════════════════════════════
-// SWIPE HORIZONTAL ENTRE PESTAÑAS
-// Navega entre las pestañas principales con un deslizamiento
-// horizontal. Compatible con el Pull-to-Refresh existente
-// (que trabaja en vertical) y con todos los modales.
-// ══════════════════════════════════════════════════════════════
-(function () {
 
-    // ── 1. ORDEN DE LAS PESTAÑAS (debe coincidir con la barra) ──
-    const TABS = ['inicio', 'movs', 'patri', 'salud', 'inversiones', 'presupuesto'];
-
-    // ── 2. UMBRALES DEL GESTO ──────────────────────────────────
-    const MIN_DIST  = 55;   // px horizontales mínimos para activar
-    const MAX_TIEMPO = 420; // ms máximos (swipe rápido, no arrastre lento)
-    const MIN_RATIO = 1.6;  // el eje X debe dominar al menos 1.6× sobre Y
-
-    let x0 = 0, y0 = 0, t0 = 0, swipeActivo = false;
-
-    // ── 3. GUARDIA: detecta si hay algún modal abierto ─────────
-    function hayModalAbierto() {
-        // Modales con clase .active
-        if (document.querySelector('.modal-overlay.active')) return true;
-        if (document.querySelector('#spotlight-modal.active'))  return true;
-        if (document.querySelector('#modal-extracto.active'))   return true;
-        // Panel de filtros expandido (pestaña Diario)
-        if (document.getElementById('panel-filtros')?.classList.contains('open')) return true;
-        // Modal de desglose (presupuesto - usa display inline)
-        const desglose = document.getElementById('modal-desglose-cuentas');
-        if (desglose && desglose.style.display !== 'none' && desglose.style.display !== '') return true;
-        // Modal de confirmación genérico
-        const confirm = document.getElementById('modal-confirmacion');
-        if (confirm && confirm.style.display !== 'none' && confirm.style.display !== '') return true;
-        return false;
-    }
-
-    // ── 4. GUARDIA: detecta zonas con scroll horizontal propio ─
-    // (chips de filtros rápidos, barras de herramientas, etc.)
-    function enScrollHorizontal(el) {
-        while (el && el !== document.body) {
-            const ox = window.getComputedStyle(el).overflowX;
-            if ((ox === 'auto' || ox === 'scroll') && el.scrollWidth > el.clientWidth + 2) {
-                return true;
-            }
-            el = el.parentElement;
-        }
-        return false;
-    }
-
-    // ── 5. APLICA CLASE DIRECCIONAL → la elimina tras la animación
-    function marcarDireccion(dir) {
-        document.body.classList.remove('swipe-dir-left', 'swipe-dir-right');
-        document.body.classList.add('swipe-dir-' + dir);
-        setTimeout(() => {
-            document.body.classList.remove('swipe-dir-left', 'swipe-dir-right');
-        }, 450);
-    }
-
-    // ── 6. REGISTRAR EN .app-main (no en document) ─────────────
-    // Así no colisiona con el Pull-to-Refresh, que escucha
-    // en document y actúa solo cuando hay movimiento vertical.
-    const appMain = document.querySelector('.app-main');
-    if (!appMain) return; // salida segura si el DOM aún no existe
-
-    appMain.addEventListener('touchstart', function (e) {
-        if (e.touches.length !== 1) { swipeActivo = false; return; }
-        x0 = e.touches[0].clientX;
-        y0 = e.touches[0].clientY;
-        t0 = Date.now();
-        // Invalidamos si el toque empezó dentro de un scroll horizontal
-        swipeActivo = !enScrollHorizontal(e.target);
-    }, { passive: true });
-
-    appMain.addEventListener('touchend', function (e) {
-        if (!swipeActivo) return;
-        if (hayModalAbierto()) return;
-
-        const dx = e.changedTouches[0].clientX - x0;
-        const dy = e.changedTouches[0].clientY - y0;
-        const dt = Date.now() - t0;
-
-        // Verificar los tres umbrales
-        if (Math.abs(dx) < MIN_DIST)                           return; // muy corto
-        if (dt > MAX_TIEMPO)                                   return; // demasiado lento
-        if (Math.abs(dx) / Math.abs(dy || 1) < MIN_RATIO)     return; // demasiado diagonal
-
-        // Pestaña actual
-        const tabActiva = document.querySelector('.view-section.active');
-        if (!tabActiva) return;
-        const actual = tabActiva.id.replace('tab-', '');
-        const idx = TABS.indexOf(actual);
-        if (idx === -1) return;
-
-        if (dx < 0 && idx < TABS.length - 1) {
-            // ← swipe izquierda: avanza al siguiente
-            marcarDireccion('left');
-            irPestana(TABS[idx + 1]);
-            if (navigator.vibrate) navigator.vibrate(8); // feedback háptico suave
-        } else if (dx > 0 && idx > 0) {
-            // → swipe derecha: retrocede al anterior
-            marcarDireccion('right');
-            irPestana(TABS[idx - 1]);
-            if (navigator.vibrate) navigator.vibrate(8);
-        }
-    }, { passive: true });
-
-})();
-// ── FIN SWIPE ENTRE PESTAÑAS ───────────────────────────────────
 // ==========================================
 // 🔔 SISTEMA DE NOTIFICACIONES UNIFICADO (Y SEMÁFORO)
 // ==========================================
@@ -3970,13 +3844,14 @@ const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
 blob.set(salt, 0);
 blob.set(iv, SALT_LEN);
 blob.set(new Uint8Array(cifrado), SALT_LEN + IV_LEN);
-// --- FIX: Iteración manual en lugar de operador spread (...blob) ---
-let binaryStr = '';
-const len = blob.length;
-for (let i = 0; i < len; i++) {
-binaryStr += String.fromCharCode(blob[i]);
-}
-return btoa(binaryStr);
+return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+        // Extrae la cadena Base64 pura eliminando el prefijo Data URL
+        resolve(reader.result.split(',')[1]);
+    };
+    reader.readAsDataURL(new Blob([blob]));
+});
 }
 async function desencriptar(b64, password) {
 const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
@@ -4033,8 +3908,6 @@ window.datosPropietario = [];
 window.datosResumen = [];
 window.mapaCuentas = {};
 window.idEnEdicion = null;
-// Declaración global unificada y segura
-window.filtroUsuarioActual = 'todos';
 // 🔄 SINCRONIZADOR DE FILTRO DE USUARIO (Getter/Setter reactivo)
 Object.defineProperty(window, 'filtroUsuarioActual', {
     get() {
@@ -5056,7 +4929,6 @@ diaActual = { key: keyDia, fechaObj: d, movimientos: [], gastos: 0, ingresos: 0,
 mesActual.dias.push(diaActual);
 }
 diaActual.movimientos.push(m);
-// Añade esta línea para definir 'imp' antes de usarlo:
 const imp = window.FinanceModel.parseMoney(m.importe);
 if (imp < 0) {
 mesActual.gastos = window.sumarDinero(mesActual.gastos, imp);
@@ -5453,59 +5325,7 @@ window.addEventListener('click', function(event) {
 // window.cerrarModal() → TypeError en runtime. La exponemos en window para que
 // ambas llamadas (cerrarModal() local y window.cerrarModal()) funcionen.
 window.cerrarModal = cerrarModal;
-// ══════════════════════════════════════════════════════
-// 👆 SWIPE-DOWN PARA CERRAR EL FORMULARIO
-// Funciona solo arrastrando desde la cabecera del cockpit
-// para no interferir con el scroll de los campos de abajo.
-// ══════════════════════════════════════════════════════
-(function() {
-const modal   = document.getElementById('modal-manual');
-const handle  = modal ? modal.querySelector('.cockpit-header') : null;
-if (!modal || !handle) return;
-let startY      = 0;
-let isDragging  = false;
-handle.addEventListener('touchstart', function(e) {
-startY     = e.touches[0].clientY;
-isDragging = true;
-// Quitamos la transición CSS mientras el dedo se mueve
-// para que el seguimiento sea instantáneo
-modal.style.transition = 'none';
-}, { passive: true });
-handle.addEventListener('touchmove', function(e) {
-if (!isDragging) return;
-const dy = e.touches[0].clientY - startY;
-// Solo permitimos deslizar HACIA ABAJO (dy > 0)
-if (dy > 0) {
-modal.style.transform = `translateX(-50%) translateY(${dy}px)`;
-}
-}, { passive: true });
-handle.addEventListener('touchend', function(e) {
-if (!isDragging) return;
-isDragging = false;
-const dy = e.changedTouches[0].clientY - startY;
-// Restauramos la transición suave para lo que viene después
-modal.style.transition = 'transform 0.3s ease';
-if (dy > 120) {
-// El usuario soltó tras bajar más de 120px → cerramos
-modal.style.transform = 'translateX(-50%) translateY(100%)';
-setTimeout(function() {
-// Dejamos que la animación termine (300ms) y luego
-// llamamos a cerrarModal que limpia los campos
-window.cerrarModal();
-// Reseteamos el transform para la próxima apertura
-modal.style.transition = '';
-modal.style.transform  = '';
-}, 300);
-} else {
-// El usuario soltó antes del umbral → vuelve a su sitio
-modal.style.transform = 'translateX(-50%) translateY(0)';
-setTimeout(function() {
-modal.style.transition = '';
-modal.style.transform  = '';
-}, 300);
-}
-}, { passive: true });
-})();
+
 // --- GENERADOR DE IDs CANÓNICO (única implementación en toda la app) ---
 const uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // ==========================================
@@ -5629,7 +5449,7 @@ else {
 if (modoActual === 'gasto' || modoActual === 'pago') importeNum = -Math.abs(importeNum);
 let benefFinal = benefManual || detectarDueno(cuentaOrigen);
 movimientosParaLocal.push({
-id: idExistente || generarID(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: concepto,
+id: idExistente || window.FinanceModel.crearId(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: concepto,
 importe: importeNum, descripcion: desc, beneficiario: benefFinal,
 tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: timestampInterno
 });
@@ -6424,7 +6244,7 @@ XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(datosConfig), "Configur
 const listaRec = window.datosRecurrentes || [];
 const filasRec = listaRec.length > 0 ? listaRec.map(r => ({
 "ID": r.id,
-"PROXIMA_FECHA": new Date(r.fechaProx), // Transformamos a Fecha Real
+"PROXIMA_FECHA": window.FinanceModel.parseFecha(r.fechaProx),
 "FRECUENCIA": r.frecuencia,
 "DIAS_SEMANA": r.diasSemana || "", "TIPO_REGLA": r.tipoRegla || "gasto",
 "CUENTA": r.cuenta, "CUENTA_DESTINO": r.cuentaDestino || "",
@@ -6434,7 +6254,7 @@ const filasRec = listaRec.length > 0 ? listaRec.map(r => ({
 const wsRec = XLSX.utils.json_to_sheet(filasRec, {
 header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
 });
-// 🟢 MAGIA FECHAS: Máscara visual DD/MM/FFFFFFA para recurrentes en OneDrive
+// 🟢 MAGIA FECHAS: Máscara visual DD/MM/YYYY para recurrentes en OneDrive
 Object.keys(wsRec).forEach(key => {
 if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
 });
@@ -6519,36 +6339,44 @@ XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datosFinales.map(d => 
 "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
 "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario, "Tipo": d.tipo
 })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] }), "Movimientos");
-// 4. RECONSTRUIMOS EL EXCEL (Configuracion)
-const dc2 = [["CUENTA","TIPO","ES_INVERSION","CONCEPTO","BENEFICIARIO"]];
+// 4. RECONSTRUIMOS EL EXCEL (Configuracion) - CORREGIDO CON COLUMNA DE SEGURIDAD
+const dc2 = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO", "SEC_PIN_HASH"]];
 const lc2 = Object.entries(window.mapaCuentas||{}), rc2 = window.listaConceptosConfig||[], rb2 = window.listaBeneficiariosConfig||[];
 const mf2 = Math.max(lc2.length, rc2.length, rb2.length);
-for(let i=0;i<mf2;i++){const c=lc2[i];dc2.push([c?CLEAN(c[0]):"",c?CLEAN(c[1].tipo):"",c?(c[1].esInversion?"SI":"NO"):"",rc2[i]?CLEAN(rc2[i]):"",rb2[i]?CLEAN(rb2[i]):""]);}
-XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dc2), "Configuracion");
-// 5. RECONSTRUIMOS EL EXCEL (Recurrentes)
-const lr2 = window.datosRecurrentes||[];
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lr2.map(r=>({ID:r.id,PROXIMA_FECHA:r.fechaProx,FRECUENCIA:r.frecuencia,DIAS_SEMANA:r.diasSemana||"",TIPO_REGLA:r.tipoRegla||"gasto",CUENTA:r.cuenta,CUENTA_DESTINO:r.cuentaDestino||"",IMPORTE:r.importe,CONCEPTO:r.concepto,BENEFICIARIO:r.beneficiario||"",DESCRIPCION:r.descripcion||""})),{header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]}), "Recurrentes");
-// ── RECONSTRUIR HOJA CARTERA ──────────────────────────────────────
-if (window.datosCartera && window.datosCartera.length > 0) {
-    const filasCartera = window.datosCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
-        "ID": p.id,
-        "TICKER": p.ticker,
-        "NOMBRE": p.nombre,
-        "TIPO": p.tipo,
-        "CUENTA": p.cuenta,
-        "CANTIDAD": p.cantidad,
-        "PRECIO_COMPRA": p.precioCompra,
-        "PRECIO_ACTUAL": p.precioActual,
-        "PRECIO_FUENTE": p.precioFuente || "",
-        "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "",
-        "FECHA_COMPRA": p.fechaCompra || "",
-        "NOTAS": p.notas || ""
-    }));
-    const wsCartera = XLSX.utils.json_to_sheet(filasCartera, {
-        header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"]
-    });
-    XLSX.utils.book_append_sheet(wb, wsCartera, "Cartera");
+for(let i=0; i<mf2; i++){
+    const c = lc2[i];
+    const pinHash = (i === 0) ? (localStorage.getItem('aidanai_pw_v3') || "") : "";
+    dc2.push([
+        c ? CLEAN(c[0]) : "",
+        c ? CLEAN(c[1].tipo) : "",
+        c ? (c[1].esInversion ? "SI" : "NO") : "",
+        rc2[i] ? CLEAN(rc2[i]) : "",
+        rb2[i] ? CLEAN(rb2[i]) : "",
+        pinHash
+    ]);
 }
+XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dc2), "Configuracion");
+
+// 5. RECONSTRUIMOS EL EXCEL (Recurrentes) - CORREGIDO CON FECHAS REALES Y MÁSCARA VISUAL
+const lr2 = window.datosRecurrentes||[];
+const filasRec2 = lr2.length > 0 ? lr2.map(r=>({
+    ID: r.id,
+    PROXIMA_FECHA: window.FinanceModel.parseFecha(r.fechaProx),
+    FRECUENCIA: r.frecuencia,
+    DIAS_SEMANA: r.diasSemana||"",
+    TIPO_REGLA: r.tipoRegla||"gasto",
+    CUENTA: r.cuenta,
+    CUENTA_DESTINO: r.cuentaDestino||"",
+    IMPORTE: r.importe,
+    CONCEPTO: r.concepto,
+    BENEFICIARIO: r.beneficiario||"",
+    DESCRIPCION: r.descripcion||""
+})) : [];
+const wsRec2 = XLSX.utils.json_to_sheet(filasRec2, {header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]});
+Object.keys(wsRec2).forEach(key => { 
+    if (wsRec2[key].t === 'd') wsRec2[key].z = 'dd/mm/yyyy'; 
+});
+XLSX.utils.book_append_sheet(wb, wsRec2, "Recurrentes");
 
 // ── RECONSTRUIR HOJA HISTÓRICO_CARTERA ─────────────────────────────
 if (window.historicoCartera && window.historicoCartera.length > 0) {
@@ -7768,51 +7596,53 @@ const filasMovimientos = window.datos.map(mov => ({
 const wsMovs = XLSX.utils.json_to_sheet(filasMovimientos, {
 header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"]
 });
-// 🟢 MAGIA FECHAS: Máscara visual DD/MM/FFFFFFA para copias de seguridad
+// 🟢 MAGIA FECHAS: Máscara visual DD/MM/YYYY para copias de seguridad
 Object.keys(wsMovs).forEach(key => {
 if (wsMovs[key].t === 'd') wsMovs[key].z = 'dd/mm/yyyy';
 });
 XLSX.utils.book_append_sheet(wb, wsMovs, "Movimientos");
-// --- HOJA 2: CONFIGURACIÓN (Limpia y compatible) ---
+// --- HOJA 2: CONFIGURACIÓN (Limpia, compatible y segura con PIN) ---
 const listaCuentas = Object.entries(window.mapaCuentas || {});
-// Intentamos coger las listas de donde estén (a veces cambian de nombre según versión)
 const rawConceptos = window.listaConceptosConfig || window.listaConceptos || [];
 const rawBeneficiarios = window.listaBeneficiariosConfig || window.listaBeneficiarios || [];
 const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
 const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
-// Cabecera estándar
-const datosConfig = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO"]];
+
+const datosConfig = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO", "SEC_PIN_HASH"]];
 for (let i = 0; i < maxFilas; i++) {
-const c = listaCuentas[i];
-datosConfig.push([
-c ? CLEAN(c[0]) : "",
-c ? CLEAN(c[1].tipo) : "",
-c ? (c[1].esInversion ? "SI" : "NO") : "", // Normalizado a SI/NO
-rawConceptos[i] ? CLEAN(rawConceptos[i]) : "",
-rawBeneficiarios[i] ? CLEAN(rawBeneficiarios[i]) : ""
-]);
+    const c = listaCuentas[i];
+    const pinHash = (i === 0) ? (localStorage.getItem('aidanai_pw_v3') || "") : "";
+    datosConfig.push([
+        c ? CLEAN(c[0]) : "",
+        c ? CLEAN(c[1].tipo) : "",
+        c ? (c[1].esInversion ? "SI" : "NO") : "",
+        rawConceptos[i] ? CLEAN(rawConceptos[i]) : "",
+        rawBeneficiarios[i] ? CLEAN(rawBeneficiarios[i]) : "",
+        pinHash
+    ]);
 }
 const wsConfig = XLSX.utils.aoa_to_sheet(datosConfig);
 XLSX.utils.book_append_sheet(wb, wsConfig, "Configuracion");
-// --- HOJA 3: RECURRENTES (¡AÑADIDA!) ---
+
+// --- HOJA 3: RECURRENTES (Corregido con parseFecha funcional) ---
 const listaRec = window.datosRecurrentes || [];
 const filasRec = listaRec.map(r => ({
-"ID": r.id,
-"PROXIMA_FECHA": new Date(r.fechaProx), // Transformamos a Fecha Real
-"FRECUENCIA": r.frecuencia,
-"DIAS_SEMANA": r.diasSemana || "",
-"TIPO_REGLA": r.tipoRegla || "gasto",
-"CUENTA": r.cuenta,
-"CUENTA_DESTINO": r.cuentaDestino || "",
-"IMPORTE": r.importe,
-"CONCEPTO": r.concepto,
-"BENEFICIARIO": r.beneficiario || "",
-"DESCRIPCION": r.descripcion || ""
+    "ID": r.id,
+    "PROXIMA_FECHA": window.FinanceModel.parseFecha(r.fechaProx), 
+    "FRECUENCIA": r.frecuencia,
+    "DIAS_SEMANA": r.diasSemana || "",
+    "TIPO_REGLA": r.tipoRegla || "gasto",
+    "CUENTA": r.cuenta,
+    "CUENTA_DESTINO": r.cuentaDestino || "",
+    "IMPORTE": r.importe,
+    "CONCEPTO": r.concepto,
+    "BENEFICIARIO": r.beneficiario || "",
+    "DESCRIPCION": r.descripcion || ""
 }));
-const wsRec = XLSX.utils.json_to_sheet(filasRec, {
-header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
-});
-// 🟢 MAGIA FECHAS: Máscara visual DD/MM/FFFFFFA para recurrentes locales
+const wsRec = XLSX.utils.json_to_sheet(filasRec, { header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"] });
+Object.keys(wsRec).forEach(key => { if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy'; });
+XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
+// 🟢 MAGIA FECHAS: Máscara visual DD/MM/YYYY para recurrentes locales
 Object.keys(wsRec).forEach(key => {
 if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
 });
@@ -8023,15 +7853,9 @@ htmlFinal += `
     </span>
   </div>
 <div style="display: flex; justify-content: space-between; margin-top: 4px; border-top: 1px dotted rgba(255,255,255,0.15); padding-top: 8px;">
-<span onclick="window.editarRecurrente('${idRecurrente}')" style="color: #0A84FF; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-✏️ EDITAR
-</span>
-<span onclick="window.duplicarRecurrente('${idRecurrente}')" style="color: #39FF14; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-📄 DUPLICAR
-</span>
-<span onclick="window.borrarRecurrente('${idRecurrente}')" style="color: #FF2E4D; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-🗑️ BORRAR
-</span>
+<span onclick="window.editarRecurrente('${Security.escapeHTML(idRecurrente)}')" style="color: #0A84FF; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;"> ✏️ EDITAR </span>
+<span onclick="window.duplicarRecurrente('${Security.escapeHTML(idRecurrente)}')" style="color: #39FF14; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;"> 📄 DUPLICAR </span>
+<span onclick="window.borrarRecurrente('${Security.escapeHTML(idRecurrente)}')" style="color: #FF2E4D; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px;"> 🗑️ BORRAR </span>
 </div>
 </div>
 `;
@@ -9112,51 +8936,6 @@ document.addEventListener('click', function(e) {
  * 📈 MÓDULO: CARTERA DE INVERSIONES (PRODUCCIÓN 1.0 - ONLY BTC/EUR)
  * ============================================================================
  */
-window.CARTERA_TIPOS = window.FinanceModel.cartera.tipos;
-
-window.normalizarTipoCartera = function(tipo) {
-    return window.FinanceModel.cartera.normalizarTipo(tipo);
-};
-
-window.getMetaTipoCartera = function(tipo) {
-    return window.FinanceModel.cartera.getMetaTipo(tipo);
-};
-
-window.parseNumeroCartera = function(valor) {
-    return window.FinanceModel.parseMoney(valor);
-};
-
-window.esCriptoCartera = function(posOTipo) {
-    return window.FinanceModel.cartera.esCripto(posOTipo);
-};
-
-window.esBTCCartera = function(pos) {
-    return window.FinanceModel.cartera.esBTC(pos);
-};
-
-window.getCantidadCartera = function(pos) {
-    return window.FinanceModel.cartera.getCantidad(pos);
-};
-
-window.getCostePosicionCartera = function(pos) {
-    return window.FinanceModel.cartera.getCoste(pos);
-};
-
-window.getValorMercadoPosicionCartera = function(pos) {
-    return window.FinanceModel.cartera.getValorMercado(pos);
-};
-
-window.getPnlPosicionCartera = function(pos) {
-    return window.FinanceModel.cartera.getPnl(pos);
-};
-
-window.getRentabilidadPosicionCartera = function(pos) {
-    return window.FinanceModel.cartera.getRentabilidad(pos);
-};
-
-window.sanitizarPosicionCartera = function(pos) {
-    return window.FinanceModel.cartera.sanitizar(pos);
-};
 
 window.escapeHtmlCartera = function(valor) {
     return String(valor ?? '').replace(/[&<>"']/g, ch => ({
