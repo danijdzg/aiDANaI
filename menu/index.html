@@ -5,13 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>aiDANaI-Menú</title>
 
-    <!-- PWA y SEO -->
     <link rel="icon" type="image/png" href="icon-192.png">
     <meta name="theme-color" content="#000000"/>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
 
-    <!-- Fuentes -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500;1,600&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
@@ -435,6 +433,7 @@
         }
 
         .orbit-item:hover {
+            transform: rotate(var(--angle)) translateY(var(--orbit-radius)) rotate(calc(-1 * var(--angle))) scale(1.12);
             box-shadow: 0 0 25px var(--accent-glow);
             filter: brightness(1.2);
             z-index: 10;
@@ -467,13 +466,11 @@
 </head>
 <body>
 
-    <!-- Splash Screen -->
     <div id="splash" class="splash" role="status" aria-live="polite">
         <img src="icon-512.png" id="splash-logo" class="splash__logo" alt="Logo aiDANaI">
         <span class="splash__text">Iniciando...</span>
     </div>
 
-    <!-- Overlay de transición de navegación -->
     <div id="nav-overlay" class="nav-overlay" role="status" aria-live="polite" aria-label="Abriendo aplicación">
         <div id="nav-overlay-icon" class="nav-overlay__icon"></div>
         <span id="nav-overlay-label" class="nav-overlay__label">Abriendo</span>
@@ -487,7 +484,6 @@
     <canvas id="starfield" class="starfield"></canvas>
     <div class="galaxy-overlay"></div>
 
-    <!-- Overlay de cierre -->
     <div id="close-overlay" class="close-overlay" role="button" aria-label="Cerrar menú"></div>
     <button id="close-btn" class="close-btn" aria-label="Cerrar menú">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -503,7 +499,6 @@
         </div>
     </div>
 
-    <!-- Hint primera vez -->
     <div id="fab-hint" class="fab-hint" role="status" aria-live="polite">Toca para abrir</div>
 
     <div id="menu-container" class="menu-container" role="navigation" aria-label="Menú principal">
@@ -553,12 +548,12 @@
                 <span class="orbit-item__label">Gym</span>
             </a>
 
-            <a href="https://danijdzg.github.io/aiDANaI/cuentas/" class="orbit-item" id="item-cuentas-prueba" aria-label="Abrir Cuentas V2">
+            <a href="https://danijdzg.github.io/aiDANaI/cuentas/" class="orbit-item" id="item-cuentas-prueba" aria-label="Abrir Cuentas">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                 </svg>
-                <span class="orbit-item__label">Ctas V2</span>
+                <span class="orbit-item__label">Cuentas</span>
             </a>
         </div>
 
@@ -582,19 +577,17 @@
             RESIZE_DEBOUNCE_MS: 200,
             NAV_VIBRATION: [10, 50, 10],
             MENU_VIBRATION: 10,
-            SWIPE_THRESHOLD_Y: 50,
-            SWIPE_THRESHOLD_X: 60,
             ITEM_NAMES: {
                 'item-agenda':         'Agenda',
                 'item-cuentas':        'Cuentas',
                 'item-DaniCalc':       'Calculadora',
                 'item-gym':            'Gym',
-                'item-cuentas-prueba': 'Cuentas V2',
+                'item-cuentas-prueba': 'Cuentas',
             }
         };
 
         const QUOTES_BANK = [
-            { text: "La creatividad es la inteligencia divirtiéndose.", author: "Albert Einstein" },
+            { text: "La creatividad es la intelligence divirtiéndose.", author: "Albert Einstein" },
             { text: "El único modo de hacer un gran trabajo es amar lo que haces.", author: "Steve Jobs" },
             { text: "El futuro pertenece a quienes creen en la belleza de sus sueños.", author: "Eleanor Roosevelt" },
             { text: "No cuentes los días, haz que los días cuenten.", author: "Muhammad Ali" },
@@ -817,6 +810,16 @@
         };
         initQuotes();
 
+        // Micro-precarga al hacer *hover* o mantener pulsado los botones del menú
+        elements.orbitItems.forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                const link = document.createElement('link');
+                link.rel = 'prefetch';
+                link.href = item.getAttribute('href');
+                document.head.appendChild(link);
+            }, { once: true });
+        });
+
         // --- GESTIÓN DEL MENÚ ---
         const angleStep = 360 / elements.orbitItems.length;
         elements.orbitItems.forEach((item, i) => item.style.setProperty('--angle', `${angleStep * i}deg`));
@@ -858,7 +861,7 @@
             }
         });
 
-        // --- NAVEGACIÓN PWA CON TRANSICIÓN ---
+        // --- NAVEGACIÓN PWA CON TRANSICIÓN IRREVERSIBLE ---
         elements.orbitItems.forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -875,27 +878,12 @@
 
                 if ('vibrate' in navigator && !state.prefersReducedMotion) navigator.vibrate(CONFIG.NAV_VIBRATION);
 
+                // Reemplazamos el historial de navegación para que la salida sea total e irreversible
                 setTimeout(() => {
-                    window.location.href = url;
+                    window.location.replace(url);
                 }, state.prefersReducedMotion ? 150 : 550);
             });
         });
-
-        // --- SOPORTE GESTOS SWIPE ---
-        let touchStart = { x: 0, y: 0 };
-        window.addEventListener('touchstart', (e) => {
-            touchStart.y = e.touches[0].clientY;
-            touchStart.x = e.touches[0].clientX;
-        }, { passive: true });
-
-        window.addEventListener('touchend', (e) => {
-            const dy = touchStart.y - e.changedTouches[0].clientY;
-            const dx = Math.abs(touchStart.x - e.changedTouches[0].clientX);
-            if (Math.abs(dy) > CONFIG.SWIPE_THRESHOLD_Y && dx < CONFIG.SWIPE_THRESHOLD_X) {
-                if (dy > 0 && !state.menuOpen) openMenu();
-                if (dy < 0 && state.menuOpen)  closeMenu();
-            }
-        }, { passive: true });
     });
     </script>
 </body>
