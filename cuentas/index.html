@@ -5352,7 +5352,7 @@ const dispararErrorVisual = (input) => {
 
 // Validar importe
 const importeVal = inputImporte ? inputImporte.value.trim() : '';
-if (!importeVal || window.FinanceModel.parseMoney(importeVal) === 0) {
+if (!importeVal || parseFloat(importeVal.replace('€', '').replace(',', '.')) === 0) {
     dispararErrorVisual(inputImporte);
 }
 
@@ -5420,7 +5420,8 @@ const benefManual = (document.getElementById('m-beneficiario').value || "").toUp
 if (!cuentaOrigen) throw new Error("Falta la CUENTA");
 if (!importeStr) throw new Error("Falta el IMPORTE");
 if (!concepto) throw new Error("Falta el CONCEPTO");
-let importeNum = window.FinanceModel.parseMoney(importeStr);
+let importeLimpio = importeStr.replace('€', '').replace(',', '.').trim();
+let importeNum = parseFloat(importeLimpio);
 if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
 importeNum = Math.abs(importeNum);
 const detectarDueno = (nombreCuenta) => {
@@ -5470,7 +5471,7 @@ window.datos = window.datos.filter(m => m.id !== idExistente);
 movimientosParaLocal.forEach(m => window.datos.push(m));
 // La emisión la hace guardarUniversal al terminar. No emitir aquí para evitar doble renderizado.
 // 🚀 SUBIDA A LA NUBE
-await window.guardarUniversal(movimientosParaLocal);
+await window.guardarUniversal();
 if (typeof window.cerrarModal === 'function') window.cerrarModal();
 // Notificación de éxito
 window.mostrarToast("Guardado con éxito", "success");
@@ -6150,15 +6151,11 @@ window.guardarUniversal = async function(nuevasFilas) {
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
 
     let wb = null;
-    let datosFinales = [...(window.datos || [])]; // <-- SOLUCIÓN: Declarada aquí arriba es visible para try y catch
-    
     try {
-        if (window.AppAssets) await window.AppAssets.xlsx();
-        if (window.AppRuntime) await window.AppRuntime.yieldToUI();
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
-        const FM = window.FinanceModel;
+        let datosFinales = [...(window.datos || [])];
         
-        // Eliminamos el 'let' de aquí adentro para usar la variable del ámbito superior
+        // --- 2. GESTIÓN DE NUEVAS FILAS (Anti-duplicados) ---
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
             const filasProcesadas = nuevasFilas.map(f => {
@@ -6175,11 +6172,11 @@ window.guardarUniversal = async function(nuevasFilas) {
                     fecha: fechaFinal,
                     cuenta: CLEAN(f.CUENTA || f.cuenta),
                     concepto: CLEAN(f.CONCEPTO || f.concepto),
-                    importe: FM.parseMoney(f.IMPORTE || f.importe || 0),
+                    importe: parseFloat(f.IMPORTE || f.importe || 0),
                     descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
                     beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
                     ts: fechaFinal.getTime(),
-                    tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
+                    tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
                 };
             });
 
@@ -6214,7 +6211,7 @@ wb = XLSX.utils.book_new();
 const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
 "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
 "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
-"Tipo": d.tipo || ((FM.parseMoney(d.importe) >= 0) ? 'ingreso' : 'gasto')
+"Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
 })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
 Object.keys(hojaMovs).forEach(key => {
 if (hojaMovs[key].t === 'd') hojaMovs[key].z = 'dd/mm/yyyy';
