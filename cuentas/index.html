@@ -2296,15 +2296,15 @@ DN
    <div id="subview-patrimonio-balance" class="patrimonio-subview">
         
     <div class="master-card" style="margin-top: 10px; border-color: rgba(52, 199, 89, 0.4); background: linear-gradient(180deg, rgba(52, 199, 89, 0.03) 0%, rgba(0,0,0,0.5) 100%);">
-        <div class="card-header">
-            <span class="card-title" style="color: var(--c-success)!important;">💼 PATRIMONIO NETO TOTAL</span>
-            <span style="font-size:10px; color:#666; font-weight:600;">Bancos + Inversiones - Pasivos</span>
-        </div>
-        <div style="text-align: center; padding: 15px 0;">
-            <div id="total-patri-valor" style="font-size: 32px; font-weight: 900; color: #fff; letter-spacing: -1px;">0,00 €</div>
-            <div id="total-patri-cambio" style="font-size: 11px; margin-top: 4px; font-weight: 700;">---</div>
-        </div>
+    <div class="card-header">
+        <span class="card-title" style="color: var(--c-success)!important;">💼 PATRIMONIO NETO TOTAL</span>
+        <span style="font-size:10px; color:#666; font-weight:600;">Bancos + Inversiones - Pasivos</span>
     </div>
+    <div style="text-align: center; padding: 15px 0;">
+        <div id="total-patri-valor" style="font-size: 32px; font-weight: 900; color: #fff; letter-spacing: -1px;">0,00 €</div>
+        <div id="total-patri-cambio" style="font-size: 11px; margin-top: 4px; font-weight: 700; color: #888;">---</div>
+    </div>
+</div>
 
     <div class="master-card" style="margin-top: 15px;">
         <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #fff; display: flex; align-items: center; gap: 8px;">
@@ -2916,7 +2916,19 @@ GUARDAR OPERACIÓN <span class="material-icons">rocket_launch</span>
     </div>
 </template>
 <script>
-
+// ── FILTRO DEFENSIVO CONTRA ERRORES FANTASMA DE EXTENSIONES ─────────────────
+window.addEventListener('unhandledrejection', function(event) {
+    if (event.reason && event.reason.message) {
+        const msg = event.reason.message;
+        // Interceptamos el error exacto del canal de mensajes cerrado por extensiones
+        if (msg.includes('A listener indicated an asynchronous response') || 
+            msg.includes('message channel closed before a response was received')) {
+            event.preventDefault(); // Evita que el error salte a la consola
+            return;
+        }
+    }
+});
+// ────────────────────────────────────────────────────────────────────────────
 // ============================================================
 // MODELO FINANCIERO CENTRAL
 // Se define al inicio para que cualquier carga local/nube tenga
@@ -5915,23 +5927,22 @@ if(icono) icono.style.color = '#666';
 }
 }
 function actualizarPatrimonio() {
-    // 1. Localizar elementos (CORREGIDO PARA TU TARJETA MASTER-CARD)
+    // 1. Localizar elementos de la interfaz
     const contenedorLista = document.getElementById('lista-grupos-patrimonio');
-    const elTotalDetalle = document.getElementById('total-patri-valor'); // Forzado al ID real de tu tarjeta
-    const elTotalCambio = document.getElementById('total-patri-cambio');   // Forzado al ID del desglose estático '---'
+    const elTotalDetalle = document.getElementById('total-patri-valor'); 
+    const elTotalCambio = document.getElementById('total-patri-cambio');   
     const elTotalHome = document.getElementById('d-patri-total');
     
-    // 2. Seguridad
+    // 2. Control de seguridad por si no hay datos cargados
     if (!datos || datos.length === 0) {
         if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
         return;
     }
 
-    // 3. Cálculos en memoria
+    // 3. Cálculos en memoria filtrados por el propietario actual
     const saldos = {};
     const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
     
-    // Calcular saldos de cuentas desde el histórico
     datosFiltrados.forEach(m => {
         const cta = String(m.cuenta || '').trim();
         if (!cta) return;
@@ -5952,7 +5963,7 @@ function actualizarPatrimonio() {
         });
     }
 
-    // Separar matemáticamente los balances para el string de desglose
+    // Separar matemáticamente los balances para el desglose de la tarjeta
     let totalBancos = 0;
     let totalPasivos = 0;
     Object.keys(saldos).forEach(cta => {
@@ -5970,7 +5981,7 @@ function actualizarPatrimonio() {
         totalInversiones = window.resumenCartera.totalValor;
     }
 
-    // FÓRMULA MAESTRA DE TU TARJETA: Bancos + Inversiones - Pasivos
+    // FÓRMULA MATEMÁTICA REAL: Bancos + Inversiones - Pasivos
     const sumaTotal = totalBancos + totalInversiones - totalPasivos;
 
     const grupos = {};
@@ -5987,27 +5998,28 @@ function actualizarPatrimonio() {
         grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
     });
 
-    // 4. Actualizar Totales (UI Superior con Efecto Odómetro e inyección de datos)
+    // 4. Inyección en la UI Superior (Efecto Odómetro y Desglose de Leyenda)
     if (elTotalDetalle) {
         window.animarCifra('total-patri-valor', sumaTotal, 'moneda');
     }
 
     if (elTotalCambio) {
-        // Activación del indicador estático '---' transformándolo en el desglose premium codificado por colores
+        // Formateador interno rápido sin decimales para la leyenda limpia
         const fmtMini = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+        
+        // Pintado exacto de los tres pilares de tu patrimonio
         elTotalCambio.innerHTML = `
             <span style="color:#0A84FF;">Bancos:</span> ${fmtMini(totalBancos)} | 
             <span style="color:#BF5AF2;">Inv:</span> ${fmtMini(totalInversiones)} 
             ${totalPasivos > 0 ? `| <span style="color:#FF2E4D;">Pasivos:</span> -${fmtMini(totalPasivos)}` : ''}
         `;
-        elTotalCambio.style.color = '#888';
     }
 
     if (elTotalHome) {
         window.animarCifra('d-patri-total', sumaTotal, 'moneda');
     }
 
-    // 5. PINTADO ORDENADO POR IMPORTE
+    // 5. Pintado y ordenación del listado inferior por importes descascarados
     if (contenedorLista) {
         if (Object.keys(grupos).length === 0) {
             contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
