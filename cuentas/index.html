@@ -6141,58 +6141,62 @@ function accionFab(tipo) {
 // 💾 GUARDADO MAESTRO BLINDADO (V6: Rendimiento + AES-GCM)
 // ==========================================
 window.guardarUniversal = async function(nuevasFilas) {
-// --- 1. SEMÁFORO DE SEGURIDAD (MUTEX) ---
-if (window.AppState && window.AppState.isSaving) {
-return false;
-}
-const btn = document.getElementById('btn-guardar');
-const originalText = btn ? btn.innerHTML : 'GUARDAR';
-const btnModal = document.getElementById('btn-modal-action');
-// Bloquear estado para que nadie toque el archivo
-window.AppState.setGuardando(true);
-if (btn) btn.innerHTML = '<span class="material-icons spin">sync</span> GUARDANDO...';
-if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
-let wb = null;
-try {
-if (window.AppAssets) await window.AppAssets.xlsx();
-if (window.AppRuntime) await window.AppRuntime.yieldToUI();
-const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
-const FM = window.FinanceModel;
-let datosFinales = [...(window.datos || [])];
-// --- 2. GESTIÓN DE NUEVAS FILAS (Anti-duplicados) ---
-if (nuevasFilas) {
-if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
-const filasProcesadas = nuevasFilas.map(f => {
-let fechaFinal = new Date();
-const rawFecha = f.FECHA || f.fecha;
-if (typeof rawFecha === 'string' && rawFecha.includes('-')) {
-const [y, m, d] = rawFecha.split('-').map(Number);
-fechaFinal = new Date(y, m - 1, d);
-} else {
-fechaFinal = new Date(rawFecha || Date.now());
-}
-return {
-id: f.ID || f.id || uuid(),
-fecha: fechaFinal,
-cuenta: CLEAN(f.CUENTA || f.cuenta),
-concepto: CLEAN(f.CONCEPTO || f.concepto),
-importe: FM.parseMoney(f.IMPORTE || f.importe || 0),
-descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
-beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
-ts: fechaFinal.getTime(),
-tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
-};
-});
-filasProcesadas.forEach(f => {
-const indice = datosFinales.findIndex(m => m.id === f.id);
-if (indice === -1) {
-datosFinales.unshift(f);
-} else {
-datosFinales[indice] = f;
-}
-});
-datosFinales.sort((a, b) => b.ts - a.ts);
-}
+    // --- 1. SEMÁFORO DE SEGURIDAD (MUTEX) ---
+    if (window.AppState && window.AppState.isSaving) {
+        return false;
+    }
+    const btn = document.getElementById('btn-guardar');
+    const originalText = btn ? btn.innerHTML : 'GUARDAR';
+    const btnModal = document.getElementById('btn-modal-action');
+
+    window.AppState.setGuardando(true);
+    if (btn) btn.innerHTML = '<span class="material-icons spin">sync</span> GUARDANDO...';
+    if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
+
+    let wb = null;
+    let datosFinales = [...(window.datos || [])]; // <-- SOLUCIÓN: Declarada aquí arriba es visible para try y catch
+    
+    try {
+        if (window.AppAssets) await window.AppAssets.xlsx();
+        if (window.AppRuntime) await window.AppRuntime.yieldToUI();
+        const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
+        const FM = window.FinanceModel;
+        
+        // Eliminamos el 'let' de aquí adentro para usar la variable del ámbito superior
+        if (nuevasFilas) {
+            if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
+            const filasProcesadas = nuevasFilas.map(f => {
+                let fechaFinal = new Date();
+                const rawFecha = f.FECHA || f.fecha;
+                if (typeof rawFecha === 'string' && rawFecha.includes('-')) {
+                    const [y, m, d] = rawFecha.split('-').map(Number);
+                    fechaFinal = new Date(y, m - 1, d);
+                } else {
+                    fechaFinal = new Date(rawFecha || Date.now());
+                }
+                return {
+                    id: f.ID || f.id || uuid(),
+                    fecha: fechaFinal,
+                    cuenta: CLEAN(f.CUENTA || f.cuenta),
+                    concepto: CLEAN(f.CONCEPTO || f.concepto),
+                    importe: FM.parseMoney(f.IMPORTE || f.importe || 0),
+                    descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
+                    beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
+                    ts: fechaFinal.getTime(),
+                    tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
+                };
+            });
+
+            filasProcesadas.forEach(f => {
+                const indice = datosFinales.findIndex(m => m.id === f.id);
+                if (indice === -1) {
+                    datosFinales.unshift(f);
+                } else {
+                    datosFinales[indice] = f;
+                }
+            });
+            datosFinales.sort((a, b) => b.ts - a.ts);
+        }
 // --- 3. ENCRIPTADO LOCAL (AES-GCM) ---
 const pinSession = PinSecurity.getSession();
 if (pinSession && typeof CryptoSystem !== 'undefined') {
@@ -8341,10 +8345,14 @@ window.addEventListener('offline', () => {
 notify('📵 Sin conexión — trabajando en local', 'error');
 if(window.AppState) window.AppState.actualizarSemaforo('rojo');
 });
+// Listener nativo para vaciar colas de espera en cuanto el dispositivo detecte internet
 window.addEventListener('online', () => {
-notify('📶 Conexión restaurada', 'success');
-if(window.AppState) window.AppState.actualizarSemaforo('verde');
+    if (typeof window.sincronizarSalaEspera === 'function') {
+        console.log("🌐 Conexión restaurada detectada. Ejecutando sincronización de sala de espera...");
+        window.sincronizarSalaEspera();
+    }
 });
+
 // ─────────────────────────────────────────────────────────────
 // 6. TECLADO VIRTUAL — Ajustar viewport cuando aparece
 //    En móvil el teclado reduce el viewport. Si un input
