@@ -10197,148 +10197,127 @@ window.actualizarDashCartera = function() {
 
 // ── MÓDULO 3: RENDERIZAR PESTAÑA CARTERA ─────────────────────────────
 window.renderizarCartera = function() {
-  const fmt  = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-  const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
-  const r = window.resumenCartera;
-  const sinDatos = document.getElementById('cartera-sin-datos');
-  const cardPos  = document.getElementById('card-posiciones');
+    const fmt = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+    const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
+    const r = window.resumenCartera;
+    
+    // Si no hay datos, limpiamos el total principal por seguridad
+    if (!r || r.numPosiciones === 0) {
+        const elVal = document.getElementById('inv-total-valor');
+        const elPlus = document.getElementById('inv-total-plusvalia');
+        if (elVal) elVal.innerText = '0,00 €';
+        if (elPlus) elPlus.innerText = '+0,00% (Plusvalía Latente)';
+        
+        const lista = document.getElementById('contenedor-tabla-inversiones'); // Selector HTML real
+        if (lista) lista.innerHTML = '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+        return;
+    }
 
-  if (!r || r.numPosiciones === 0) {
-    if (sinDatos) sinDatos.style.display = 'block';
-    if (cardPos)  cardPos.style.display  = 'none';
-    ['inv-total-valor','inv-total-pnl','inv-coste-total','inv-rent-total','inv-num-pos'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.innerText = '---';
+    // 1. ACTUALIZAR KPIs PRINCIPALES DEL ENCABEZADO DE CARTERA
+    const elTotalVal = document.getElementById('inv-total-valor');
+    const elPlusvaliaLatente = document.getElementById('inv-total-plusvalia'); // Selector HTML real
+
+    if (elTotalVal) {
+        elTotalVal.innerText = fmt(r.totalValor);
+        elTotalVal.style.color = '#39FF14'; // Color verde neón premium
+    }
+    
+    if (elPlusvaliaLatente) {
+        const signo = r.plusvalia >= 0 ? '+' : '';
+        elPlusvaliaLatente.innerText = `${signo}${fmt2(r.plusvalia)} (${signo}${r.rentabilidad.toFixed(2)}%)`;
+        elPlusvaliaLatente.style.color = r.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
+    }
+
+    // 2. AGRUPAR POSICIONES POR TIPO
+    const grupos = {};
+    const colorTipo = Object.fromEntries(Object.entries(window.CARTERA_TIPOS).map(([k, v]) => [k, v.color]));
+    
+    const posicionesFiltradas = (window.datosCartera || []).filter(p => {
+        if (typeof pasaFiltroPropietario !== 'function') return true;
+        return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
+    }).map(p => window.sanitizarPosicionCartera(p));
+
+    posicionesFiltradas.forEach(pos => {
+        const tipo = window.normalizarTipoCartera(pos.tipo);
+        if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
+        const valPos = window.getValorMarket = window.getValorMercadoPosicionCartera(pos);
+        grupos[tipo].total += valPos;
+        grupos[tipo].posiciones.push(pos);
     });
-    return;
-  }
-  if (sinDatos) sinDatos.style.display = 'none';
-  if (cardPos)  cardPos.style.display  = 'block';
 
-  // KPIs principales
-  const elTotalVal  = document.getElementById('inv-total-valor');
-  const elTotalPnl  = document.getElementById('inv-total-pnl');
-  const elCosteT    = document.getElementById('inv-coste-total');
-  const elRentT     = document.getElementById('inv-rent-total');
-  const elNumPos    = document.getElementById('inv-num-pos');
+    // 3. GENERAR EL LISTADO HTML DINÁMICO
+    let html = '';
+    Object.keys(grupos).sort().forEach(tipo => {
+        const g = grupos[tipo];
+        const meta = window.getMetaTipoCartera(tipo);
+        const color = meta.color || '#888';
+        const badgeClass = meta.badge || '';
+        const emoji = meta.emoji || '💼';
+        const tipoLabel = window.escapeHtmlCartera(meta.label || tipo);
+        const groupId = 'grp-' + tipo.replace(/[^a-zA-Z0-9]/g, '');
 
-  if (elTotalVal)  { elTotalVal.innerText = fmt(r.totalValor); elTotalVal.style.color = '#39FF14'; }
-  if (elCosteT)    elCosteT.innerText     = fmt(r.totalCoste);
-  if (elNumPos)    elNumPos.innerText     = r.numPosiciones;
-  if (elTotalPnl)  {
-    const signo = r.plusvalia >= 0 ? '+' : '';
-    elTotalPnl.innerText   = signo + fmt2(r.plusvalia) + '  (' + signo + r.rentabilidad.toFixed(2) + '%)';
-    elTotalPnl.style.color = r.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
-  }
-  if (elRentT) {
-    const signo = r.rentabilidad >= 0 ? '+' : '';
-    elRentT.innerText   = signo + r.rentabilidad.toFixed(2) + '%';
-    elRentT.style.color = r.rentabilidad >= 0 ? '#39FF14' : '#FF2E4D';
-  }
-
-  // Agrupar posiciones por tipo
-  const grupos = {};
-  const colorTipo = Object.fromEntries(Object.entries(window.CARTERA_TIPOS).map(([k, v]) => [k, v.color]));
-	  // 📌 NUEVO: filtrar posiciones por usuario activo
-  const posicionesFiltradas = (window.datosCartera || []).filter(p => {
-    if (typeof pasaFiltroPropietario !== 'function') return true;
-    return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
-  }).map(p => window.sanitizarPosicionCartera(p));
-
-  posicionesFiltradas.forEach(pos => {
-      const tipo = window.normalizarTipoCartera(pos.tipo);
-    if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
-    const valPos = window.getValorMercadoPosicionCartera(pos);
-    grupos[tipo].total += valPos;
-    grupos[tipo].posiciones.push(pos);
-  });
-
-  // Renderizar lista de posiciones
-  let html = '';
-  Object.keys(grupos).sort().forEach(tipo => {
-    const g = grupos[tipo];
-    const meta = window.getMetaTipoCartera(tipo);
-    const color = meta.color || '#888';
-    const badgeClass = meta.badge || '';
-    const emoji = meta.emoji || '💼';
-    const tipoLabel = window.escapeHtmlCartera(meta.label || tipo);
-    const groupId = 'grp-' + tipo.replace(/[^a-zA-Z0-9]/g, '');
-    html += `
-    <div style="border-bottom:1px solid #111;">
-      <div class="cartera-section-header" onclick="window.toggleCarteraGroup('${groupId}')">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:18px;">${emoji}</span>
-          <span class="cartera-section-title" style="color:${color};">${tipoLabel}</span>
-          <span style="font-size:9px; color:#555; font-weight:700;">(${g.posiciones.length})</span>
-        </div>
-        <span class="cartera-section-total" style="color:${color};">${fmt(g.total)} <span style="font-size:10px; opacity:0.6;">(${((g.total / (r.totalValor || 1)) * 100).toFixed(1)}%)</span></span>
-      </div>
-      <div id="${groupId}">`;
-      const totalValorCartera = r.totalValor || 1; // evita división por cero
-    g.posiciones.sort((a,b) => {
-  const vA = window.getValorMercadoPosicionCartera(a), vB = window.getValorMercadoPosicionCartera(b);
-  if (window.ordenCartera === 'pnl')  return window.getPnlPosicionCartera(b) - window.getPnlPosicionCartera(a);
-  if (window.ordenCartera === 'rent') return window.getRentabilidadPosicionCartera(b) - window.getRentabilidadPosicionCartera(a);
-  if (window.ordenCartera === 'fecha') return (b.fechaCompra||'').localeCompare(a.fechaCompra||'');
-  return vB - vA;
-}).forEach(pos => {
-          const valPos  = window.getValorMercadoPosicionCartera(pos);
-const pesoPct = (valPos / totalValorCartera) * 100;
-const alertaPeso = pesoPct > 40 ? '🔴' : pesoPct > 25 ? '🟡' : '';
-          const cosPos  = window.getCostePosicionCartera(pos);
-          const pnlPos  = window.getPnlPosicionCartera(pos);
-          let rentPos = window.getRentabilidadPosicionCartera(pos);
-          const fCompra = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
-          if (fCompra && !isNaN(fCompra.getTime())) {
-            const years = (new Date() - fCompra) / (1000 * 60 * 60 * 24 * 365.25);
-            if (years > 0.08) {
-              rentPos = (Math.pow(1 + (rentPos/100), 1/years) - 1) * 100;
-            }
-          }
-          const pnlSig  = pnlPos >= 0 ? '+' : '';
-          const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
-          const cant = window.getCantidadCartera(pos);
-          const cantStr = cant >= 1 ? cant.toFixed(2) : cant.toFixed(6);
-
-          // ✨ NUEVA LÓGICA DIFERENCIADA POR TIPO DE ACTIVO
-          const esCripto = window.esCriptoCartera(pos);
-			const esPrecioAuto = window.esBTCCartera(pos); // solo BTC/EUR tiene precio automático
-const precioIcon = esPrecioAuto ? '<span style="color:#00B8FF; font-size:10px; margin-left:4px;" title="Precio automático vía Binance">⚡</span>' : '<span style="color:#888; font-size:9px; margin-left:4px;" title="Precio manual">✏️</span>';
-          const tickerTxt = window.escapeHtmlCartera(pos.ticker || pos.nombre);
-          const nombreTxt = window.escapeHtmlCartera(pos.nombre || '');
-          const fuenteTxt = window.escapeHtmlCartera(pos.precioFuente || (esPrecioAuto ? 'Binance BTC/EUR' : 'Manual'));
-          const fechaPrecioTxt = pos.precioActualizadoEn ? new Date(pos.precioActualizadoEn).toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-          const precioInfo = fechaPrecioTxt ? `${fuenteTxt} · ${fechaPrecioTxt}` : fuenteTxt;
-          const posIdJs = window.escapeJsCartera(pos.id);
-          html += `
-          <div class="cartera-pos-row" onclick="window.editarPosicion('${posIdJs}')">
-            <div style="flex:1; min-width:0; padding-right:8px;">
-              <div class="cartera-ticker">${alertaPeso}${tickerTxt}${precioIcon}</div>
-              ${pos.nombre && pos.ticker ? `<div class="cartera-nombre">${nombreTxt}</div>` : ''}
-              ${esCripto ? `<div class="cartera-cantidad">${cantStr} × ${fmt2(pos.precioActual)}</div>` : ''}
-              <span class="cartera-tipo-badge ${badgeClass}">${tipoLabel}</span>
+        html += `
+        <div style="border-bottom:1px solid #111; margin-bottom: 10px;">
+            <div class="cartera-section-header" onclick="window.toggleCarteraGroup('${groupId}')" style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:rgba(255,255,255,0.02); cursor:pointer;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">${emoji}</span>
+                    <span class="cartera-section-title" style="color:${color}; font-weight:900; font-size:11px; text-transform:uppercase;">${tipoLabel}</span>
+                    <span style="font-size:9px; color:#555; font-weight:700;">(${g.posiciones.length})</span>
+                </div>
+                <span class="cartera-section-total" style="color:${color}; font-weight:800; font-size:13px;">${fmt(g.total)} <span style="font-size:10px; opacity:0.6;">(${((g.total / (r.totalValor || 1)) * 100).toFixed(1)}%)</span></span>
             </div>
-            <div style="text-align:right; flex-shrink:0;">
-              <div class="cartera-valor" style="color:#fff;">${fmt2(valPos)}</div>
-              <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%${pos.fechaCompra && (new Date() - new Date(pos.fechaCompra)) > 2592000000 ? ' an.' : ''})</div>
-              <div style="font-size:9px; color:#555; margin-top:2px;">${pos.fechaCompra ? pos.fechaCompra.split('-').reverse().join('/') + ' · ' : ''}Invertido: ${fmt2(pos.precioCompra)}</div>
-              <div style="font-size:9px; color:#555; margin-top:2px;">Precio: ${precioInfo}</div>
-<div class="pos-weight-pct">${((valPos / totalValorCartera) * 100).toFixed(1)}% cartera</div>
-<div class="pos-weight-bar-bg">
-  <div class="pos-weight-bar-fill" style="width:${Math.min((valPos / totalValorCartera) * 100, 100).toFixed(1)}%; background:${color};"></div>
-</div>
-            </div>
-          </div>`;
+            <div id="${groupId}" style="display:block;">`;
+
+        const totalValorCartera = r.totalValor || 1;
+        g.posiciones.sort((a,b) => window.getValorMercadoPosicionCartera(b) - window.getValorMercadoPosicionCartera(a)).forEach(pos => {
+            const valPos = window.getValorMercadoPosicionCartera(pos);
+            const pesoPct = (valPos / totalValorCartera) * 100;
+            const alertaPeso = pesoPct > 40 ? '🔴 ' : pesoPct > 25 ? '🟡 ' : '';
+            const pnlPos = window.getPnlPosicionCartera(pos);
+            let rentPos = window.getRentabilidadPosicionCartera(pos);
+            
+            const pnlSig = pnlPos >= 0 ? '+' : '';
+            const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
+            const cant = window.getCantidadCartera(pos);
+            const cantStr = cant >= 1 ? cant.toFixed(2) : cant.toFixed(6);
+            
+            const esCripto = window.esCriptoCartera(pos);
+            const esPrecioAuto = window.esBTCCartera(pos);
+            const precioIcon = esPrecioAuto ? '<span style="color:#00B8FF; font-size:10px; margin-left:4px;">⚡</span>' : '<span style="color:#888; font-size:9px; margin-left:4px;">✏️</span>';
+            
+            const tickerTxt = window.escapeHtmlCartera(pos.ticker || pos.nombre);
+            const nombreTxt = window.escapeHtmlCartera(pos.nombre || '');
+            const fuenteTxt = window.escapeHtmlCartera(pos.precioFuente || (esPrecioAuto ? 'Binance BTC/EUR' : 'Manual'));
+            const posIdJs = window.escapeJsCartera(pos.id);
+
+            html += `
+            <div class="cartera-pos-row" onclick="window.editarPosicion('${posIdJs}')" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+                <div style="flex:1; min-width:0; padding-right:8px;">
+                    <div class="cartera-ticker" style="font-size:13px; font-weight:900; color:#fff;">${alertaPeso}${tickerTxt}${precioIcon}</div>
+                    ${pos.nombre && pos.ticker ? `<div class="cartera-nombre" style="font-size:10px; color:#888;">${nombreTxt}</div>` : ''}
+                    ${esCripto ? `<div class="cartera-cantidad" style="font-size:10px; color:#666;">${cantStr} × ${fmt2(pos.precioActual)}</div>` : ''}
+                    <span class="cartera-tipo-badge ${badgeClass}">${tipoLabel}</span>
+                </div>
+                <div style="text-align:right; flex-shrink:0;">
+                    <div class="cartera-valor" style="font-size:14px; font-weight:800; color:#fff;">${fmt2(valPos)}</div>
+                    <div class="cartera-pnl ${pnlClass}" style="font-size:11px; font-weight:700;">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%)</div>
+                    <div style="font-size:9px; color:#555; margin-top:2px;">Invertido: ${fmt2(pos.precioCompra)}</div>
+                    <div class="pos-weight-pct" style="font-size:9px; font-weight:700; color:rgba(255,214,10,0.75); margin-top:2px;">${pesoPct.toFixed(1)}% cartera</div>
+                </div>
+            </div>`;
+        });
+        html += `</div></div>`;
     });
-    html += `</div></div>`;
-  });
 
-  const lista = document.getElementById('lista-posiciones-cartera');
-  if (lista) lista.innerHTML = html || '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+    // 4. INYECTAR EN EL CONTENEDOR CORRECTO DEL HTML ACTUAL
+    const lista = document.getElementById('contenedor-tabla-inversiones'); // Vinculado a tu contenedor real
+    if (lista) {
+        lista.innerHTML = html || '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+    }
 
-  // Gráfico Donut distribución
-  window.renderizarDonutCartera(grupos, colorTipo);
-  // Gráfico evolución histórica
-  window.renderizarEvolCartera();
+    // 5. REDIBUJAR LOS GRÁFICOS COMPLEMENTARIOS
+    window.renderizarDonutCartera(grupos, colorTipo);
+    window.renderizarEvolCartera();
 };
 
 // Toggle secciones de la lista
