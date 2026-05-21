@@ -5915,125 +5915,160 @@ if(icono) icono.style.color = '#666';
 }
 }
 function actualizarPatrimonio() {
-    // 1. Localizar elementos (CORREGIDO)
+    // 1. Localizar elementos (CORREGIDO PARA TU TARJETA MASTER-CARD)
     const contenedorLista = document.getElementById('lista-grupos-patrimonio');
-const elTotalDetalle = document.getElementById('total-patrimonio-neto'); // ID nuevo enlazado
-const elTotalHome = document.getElementById('d-patri-total');
+    const elTotalDetalle = document.getElementById('total-patri-valor'); // Forzado al ID real de tu tarjeta
+    const elTotalCambio = document.getElementById('total-patri-cambio');   // Forzado al ID del desglose estático '---'
+    const elTotalHome = document.getElementById('d-patri-total');
     
     // 2. Seguridad
     if (!datos || datos.length === 0) {
         if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
         return;
     }
-// 3. Cálculos en memoria
-const saldos = {};
-const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
-datosFiltrados.forEach(m => {
-const cta = String(m.cuenta || '').trim();
-if (!cta) return;
-const val = window.FinanceModel.parseMoney(m.importe);
-saldos[cta] = window.sumarDinero(saldos[cta] || 0, val);
-});
-if (window.mapaCuentas) {
-Object.keys(window.mapaCuentas).forEach(ctaKey => {
-const info = window.mapaCuentas[ctaKey];
-if (!info || !info.tieneCartera) return;
-if (filtroUsuarioActual !== 'todos') {
-const letra = ctaKey.charAt(0).toUpperCase();
-if (filtroUsuarioActual === 'D' && letra !== 'D') return;
-if (filtroUsuarioActual === 'N' && letra !== 'N') return;
-}
-saldos[ctaKey] = info.costeTotal !== undefined ? info.costeTotal : (info.saldoActual || 0);
-});
-}
-const grupos = {};
-let sumaTotal = 0;
-// Agrupar saldos
-Object.keys(saldos).forEach(cta => {
-if (Math.abs(saldos[cta]) >= 0.01) sumaTotal = window.sumarDinero(sumaTotal, saldos[cta]);
-});
-Object.keys(saldos).forEach(cta => {
-const saldo = saldos[cta];
-if (Math.abs(saldo) < 0.01) return;
-const ctaKey = cta.trim().toUpperCase();
-const mapa = window.mapaCuentas || {};
-const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
-const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
-if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { nombre: nombreGrupo, total: 0, cuentas: [], esInversion: config.esInversion };
-grupos[nombreGrupo].total = window.sumarDinero(grupos[nombreGrupo].total, saldo);
-grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
-});
-// 4. Actualizar Totales (UI Superior con Efecto Odómetro)
-const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg';
-if (elTotalDetalle) {
-window.animarCifra('total-patri-valor', sumaTotal, 'moneda');
-elTotalDetalle.className = 'kpi-value ' + claseColor;
-}
-if (elTotalHome) {
-window.animarCifra('d-patri-total', sumaTotal, 'moneda');
-elTotalHome.className = 'kpi-value ' + claseColor;
-}
-// 5. PINTADO ORDENADO POR IMPORTE
-if (contenedorLista) {
-if (Object.keys(grupos).length === 0) {
-contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
-return;
-}
-let htmlFinal = '';
-// --- CAMBIO CLAVE: CONVERTIR A ARRAY Y ORDENAR POR TOTAL ---
-const listaGrupos = Object.values(grupos);
-// Ordenamos: Mayor dinero primero
-listaGrupos.sort((a, b) => b.total - a.total);
-listaGrupos.forEach(grupo => {
-const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF';
-// Si es inversión borde morado, si no blanco
-const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
-const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
-const groupId = grupo.nombre.replace(/[^a-zA-Z0-9]/g, '');
-// Generar HTML cuentas (Ordenadas por valor también)
-let htmlCuentas = '';
-grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
-const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
-htmlCuentas += `
-<div class="patri-account-item" onclick="verExtractoPatrimonio('${c.nombre}')" style="border-bottom: 1px solid #333;">
-<div class="patri-acc-name-col">
-<span class="patri-acc-name" style="color:#FFFFFF; font-size:13px;">${c.nombre}</span>
-<div class="patri-progress-bar-bg" style="background:#222;">
-<div class="patri-progress-bar-fill" style="width:${Math.abs(pctCuenta)}%; background:${colorVal}; opacity:1;"></div>
-</div>
-</div>
-<div class="patri-acc-val-col">
-<div class="patri-acc-val" style="color:${colorVal}">${FMT_PCT.format(c.valor)}€</div>
-<div class="patri-acc-pct" style="color:var(--c-warning); font-size:10px;">${pctCuenta}%</div>
-</div>
-</div>
-`;
-});
-htmlFinal += `
-<div class="patri-group-card" style="${borderStyle} background:#000; border:1px solid #222;">
-<div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; background:#0a0a0a; border-bottom:1px solid #222;">
-<div style="display:flex; gap:8px; align-items:center;">
-<span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${grupo.nombre}</span>
-<span style="color:var(--c-warning); border:1px solid var(--c-warning); padding:1px 6px; border-radius:4px; font-size:9px; font-weight:800">${pctGrupo}%</span>
-</div>
-<div style="display:flex; align-items:center; gap:10px">
-<span class="patri-group-total" style="color:#FFFFFF;">${FMT_PCT.format(grupo.total)}€</span>
-<span class="material-icons" id="icon-${groupId}" style="font-size:20px; color:#FFFFFF;">expand_more</span>
-</div>
-</div>
-<div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">
-${htmlCuentas}
-</div>
-</div>
-`;
-});
-contenedorLista.innerHTML = htmlFinal;
-}
-// Refrescar plusvalía latente (cartera)
-if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
-  window.actualizarPlusvaliaPatrimonio();
-}
+
+    // 3. Cálculos en memoria
+    const saldos = {};
+    const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+    
+    // Calcular saldos de cuentas desde el histórico
+    datosFiltrados.forEach(m => {
+        const cta = String(m.cuenta || '').trim();
+        if (!cta) return;
+        const val = window.FinanceModel.parseMoney(m.importe);
+        saldos[cta] = window.sumarDinero(saldos[cta] || 0, val);
+    });
+
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(ctaKey => {
+            const info = window.mapaCuentas[ctaKey];
+            if (!info || !info.tieneCartera) return;
+            if (filtroUsuarioActual !== 'todos') {
+                const letra = ctaKey.charAt(0).toUpperCase();
+                if (filtroUsuarioActual === 'D' && letra !== 'D') return;
+                if (filtroUsuarioActual === 'N' && letra !== 'N') return;
+            }
+            saldos[ctaKey] = info.costeTotal !== undefined ? info.costeTotal : (info.saldoActual || 0);
+        });
+    }
+
+    // Separar matemáticamente los balances para el string de desglose
+    let totalBancos = 0;
+    let totalPasivos = 0;
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        if (saldo < 0) {
+            totalPasivos += Math.abs(saldo);
+        } else {
+            totalBancos += saldo;
+        }
+    });
+
+    // Capturar valor en tiempo real de la Cartera Activa de Inversiones
+    let totalInversiones = 0;
+    if (window.resumenCartera && typeof window.resumenCartera.totalValor === 'number') {
+        totalInversiones = window.resumenCartera.totalValor;
+    }
+
+    // FÓRMULA MAESTRA DE TU TARJETA: Bancos + Inversiones - Pasivos
+    const sumaTotal = totalBancos + totalInversiones - totalPasivos;
+
+    const grupos = {};
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        if (Math.abs(saldo) < 0.01) return;
+        const ctaKey = cta.trim().toUpperCase();
+        const mapa = window.mapaCuentas || {};
+        const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
+        const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
+        
+        if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { nombre: nombreGrupo, total: 0, cuentas: [], esInversion: config.esInversion };
+        grupos[nombreGrupo].total = window.sumarDinero(grupos[nombreGrupo].total, saldo);
+        grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
+    });
+
+    // 4. Actualizar Totales (UI Superior con Efecto Odómetro e inyección de datos)
+    if (elTotalDetalle) {
+        window.animarCifra('total-patri-valor', sumaTotal, 'moneda');
+    }
+
+    if (elTotalCambio) {
+        // Activación del indicador estático '---' transformándolo en el desglose premium codificado por colores
+        const fmtMini = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+        elTotalCambio.innerHTML = `
+            <span style="color:#0A84FF;">Bancos:</span> ${fmtMini(totalBancos)} | 
+            <span style="color:#BF5AF2;">Inv:</span> ${fmtMini(totalInversiones)} 
+            ${totalPasivos > 0 ? `| <span style="color:#FF2E4D;">Pasivos:</span> -${fmtMini(totalPasivos)}` : ''}
+        `;
+        elTotalCambio.style.color = '#888';
+    }
+
+    if (elTotalHome) {
+        window.animarCifra('d-patri-total', sumaTotal, 'moneda');
+    }
+
+    // 5. PINTADO ORDENADO POR IMPORTE
+    if (contenedorLista) {
+        if (Object.keys(grupos).length === 0) {
+            contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
+            return;
+        }
+        let htmlFinal = '';
+
+        const listaGrupos = Object.values(grupos);
+        listaGrupos.sort((a, b) => b.total - a.total);
+        
+        listaGrupos.forEach(grupo => {
+            const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF';
+            const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
+            const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
+            const groupId = grupo.nombre.replace(/[^a-zA-Z0-9]/g, '');
+
+            let htmlCuentas = '';
+            grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
+                const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+                const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
+                htmlCuentas += `
+                    <div class="patri-account-item" onclick="verExtractoPatrimonio('${c.nombre}')" style="border-bottom: 1px solid #333;">
+                        <div class="patri-acc-name-col">
+                            <span class="patri-acc-name" style="color:#FFFFFF; font-size:13px;">${c.nombre}</span>
+                            <div class="patri-progress-bar-bg" style="background:#222;">
+                                <div class="patri-progress-bar-fill" style="width:${Math.abs(pctCuenta)}%; background:${colorVal}; opacity:1;"></div>
+                            </div>
+                        </div>
+                        <div class="patri-acc-val-col">
+                            <div class="patri-acc-val" style="color:${colorVal}">${FMT_PCT.format(c.valor)}€</div>
+                            <div class="patri-acc-pct" style="color:var(--c-warning); font-size:10px;">${pctCuenta}%</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            htmlFinal += `
+                <div class="patri-group-card" style="${borderStyle} background:#000; border:1px solid #222;">
+                    <div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; background:#0a0a0a; border-bottom:1px solid #222;">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${grupo.nombre}</span>
+                            <span style="color:var(--c-warning); border:1px solid var(--c-warning); padding:1px 6px; border-radius:4px; font-size:9px; font-weight:800">${pctGrupo}%</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px">
+                            <span class="patri-group-total" style="color:#FFFFFF;">${FMT_PCT.format(grupo.total)}€</span>
+                            <span class="material-icons" id="icon-${groupId}" style="font-size:20px; color:#FFFFFF;">expand_more</span>
+                        </div>
+                    </div>
+                    <div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">
+                        ${htmlCuentas}
+                    </div>
+                </div>
+            `;
+        });
+        contenedorLista.innerHTML = htmlFinal;
+    }
+
+    // Refrescar plusvalía latente (cartera)
+    if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
+        window.actualizarPlusvaliaPatrimonio();
+    }
 }
 function renderizarGraficoEvolucion(movimientos) {
 if (!window.ensureEChartsReady(() => renderizarGraficoEvolucion(movimientos))) return;
