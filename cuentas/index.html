@@ -5381,7 +5381,7 @@ if (chkRecurrente && chkRecurrente.checked) {
 const btnGuardar = document.getElementById('btn-modal-action');
 if (btnGuardar) btnGuardar.innerText = '⏳ GUARDANDO REGLA...';
 try {
-await window.guardarComoRecurrenteUnificado();
+await window.guardarComoRecurrenteUnificado(window.modoTransaccionActual || 'gasto');
 } catch(e) {
 console.error(e);
 window.mostrarToast(e.message, "error"); // Usamos el Toast de la Mejora A
@@ -8095,17 +8095,28 @@ window.alternarDiasDiarioUnificado = function() {
     const cajaDias = document.getElementById('m-dias-semana-box');
     if (cajaDias) cajaDias.style.display = (frecuencia === 'Diario') ? 'block' : 'none';
 };
-
-window.guardarComoRecurrenteUnificado = async function() {
+window.guardarComoRecurrenteUnificado = async function(modoForzado = null) {
     const idEdit = document.getElementById('m-id').value;
     const importeStr = document.getElementById('m-cantidad').value;
     const fecha = document.getElementById('m-fecha').value;
     const cta = document.getElementById('m-cuenta').value;
-    const ctaDest = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
+    
+    // Capturamos la cuenta destino
+    let ctaDest = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
     const conc = document.getElementById('m-concepto').value;
     const benef = document.getElementById('m-beneficiario').value;
     const desc = document.getElementById('m-desc').value;
     const frec = document.getElementById('m-frecuencia-recurrente').value;
+    
+    // DETERMINAR TIPO CORRECTO
+    // Si viene un parámetro (modoForzado), usamos ese. Si no, el global.
+    let tipo = modoForzado || window.modoTransaccionActual || 'gasto';
+
+    // ¡CRUCIAL! Si no es traspaso, vaciamos la cuenta destino para evitar que el sistema
+    // interprete que es una transferencia de dinero entre cuentas.
+    if (tipo !== 'traspaso') {
+        ctaDest = '';
+    }
     
     let diasStr = '';
     if (frec === 'Diario') {
@@ -8120,7 +8131,6 @@ window.guardarComoRecurrenteUnificado = async function() {
     let importeNum = window.FinanceModel.parseMoney(importeStr);
     if (isNaN(importeNum) || importeNum === 0) throw new Error("Importe inválido");
 
-    let tipo = window.modoTransaccionActual || 'gasto';
     let importeGuardar = tipo === 'gasto' ? -Math.abs(importeNum) : Math.abs(importeNum);
 
     if (!window.datosRecurrentes) window.datosRecurrentes = [];
@@ -8132,7 +8142,7 @@ window.guardarComoRecurrenteUnificado = async function() {
         diasSemana: diasStr,
         tipoRegla: tipo,
         cuenta: cta,
-        cuentaDestino: ctaDest,
+        cuentaDestino: ctaDest, // Ahora llegará vacía si no es traspaso
         concepto: conc,
         beneficiario: benef,
         descripcion: desc,
@@ -8155,6 +8165,7 @@ window.guardarComoRecurrenteUnificado = async function() {
     notify("✅ Regla fija guardada", "success");
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 };
+
 // === FIN LÓGICA UNIFICADA RECURRENTES ===
 // --- FUNCIÓN MEJORADA: AGREGAR RECURRENTE (CON SOPORTE PARA TRASPASOS) ---
 window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
