@@ -2312,25 +2312,25 @@ DN
     <div class="patrimonio-desglose-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 12px; margin-top: 5px; font-size: 12px;">
         <div style="background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
             <span style="display:block; font-size:9px; text-transform:uppercase; color:#888; font-weight:700; margin-bottom:2px;">Liquidez</span>
-            <span id="d-patri-liquidez" class="value-privacy-blur" style="font-weight: bold; color: #fff; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
+            <span id="d-liquidez-val" class="value-privacy-blur" style="font-weight: bold; color: #fff; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
         </div>
         <div style="background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
             <span style="display:block; font-size:9px; text-transform:uppercase; color:#888; font-weight:700; margin-bottom:2px;">Inversión</span>
-            <span id="d-patri-inversion" class="value-privacy-blur" style="font-weight: bold; color: #0a84ff; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
+            <span id="d-inversion-val" class="value-privacy-blur" style="font-weight: bold; color: #0a84ff; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
         </div>
         <div style="background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
             <span style="display:block; font-size:9px; text-transform:uppercase; color:#888; font-weight:700; margin-bottom:2px;">Autocustodia</span>
-            <span id="d-patri-autocustodia" class="value-privacy-blur" style="font-weight: bold; color: #ff9f0a; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
+            <span id="d-autocustodia-val" class="value-privacy-blur" style="font-weight: bold; color: #ff9f0a; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
         </div>
         <div style="background: rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
             <span style="display:block; font-size:9px; text-transform:uppercase; color:#888; font-weight:700; margin-bottom:2px;">Propiedad</span>
-            <span id="d-patri-propiedad" class="value-privacy-blur" style="font-weight: bold; color: #bf5af2; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
+            <span id="d-propiedad-val" class="value-privacy-blur" style="font-weight: bold; color: #bf5af2; font-size: 13px; transition: filter 0.2s ease;">0,00 €</span>
         </div>
     </div>
 
     <div style="margin-top: 10px; padding: 8px 12px; background: rgba(255,255,255,0.01); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.04); font-size: 12px;">
         <span style="font-size: 9px; color: #666; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">Plusvalía Latente</span>
-        <span id="total-patri-plusvalia" class="value-privacy-blur" style="font-weight: bold; font-size: 13px; color: #34c759; transition: filter 0.2s ease;">0,00 € (+0.00%)</span>
+        <span id="total-patri-plusvalia" class="value-privacy-blur" style="font-weight: bold; font-size: 13px; transition: filter 0.2s ease;">0,00 € (+0.00%)</span>
     </div>
 </div>
 
@@ -7531,10 +7531,50 @@ if (window.simuladorImpacto && window.simuladorImpacto > 0) {
     totalPatrimonio -= window.simuladorImpacto;
 }
 
-const elPatri = document.getElementById('d-patri-total');
-if(elPatri) {
-    animarCifra('d-patri-total', totalPatrimonio, 'moneda');
-    elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
+// Actualización del Patrimonio Total mediante animación nativa
+animarCifra('d-patri-total', totalPatrimonio, 'moneda');
+
+// 🟢 ANIMACIÓN COHESIVA: Actualiza los 4 desgloses de la rejilla visual en tiempo real
+animarCifra('d-liquidez-val', totalLiquidez, 'moneda');
+animarCifra('d-inversion-val', totalInversion, 'moneda');
+animarCifra('d-autocustodia-val', totalAutocustodia, 'moneda');
+animarCifra('d-propiedad-val', totalPropiedad, 'moneda');
+
+// NUEVO: Calcular y actualizar la tarjeta de Liquidez + Inversión en Inicio
+const totalMetalico = totalLiquidez + totalInversion;
+animarCifra('d-metalico', totalMetalico, 'moneda');
+
+// 📈 CÁLCULO DE PLUSVALÍA LATENTE CRITERIO USUARIO (DN / D / N)
+let totalCosteCartera = 0;
+let totalValorCartera = 0;
+
+if (window.datosCartera && Array.isArray(window.datosCartera)) {
+    window.datosCartera.forEach(pos => {
+        if (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') {
+            const cuentaPos = String(pos.cuenta || "").toUpperCase().trim();
+            // Filtrado estricto por la letra inicial de la cuenta asociada a la posición
+            if (filtroUsuarioActual === 'D' && !cuentaPos.startsWith('D')) return;
+            if (filtroUsuarioActual === 'N' && !cuentaPos.startsWith('N')) return;
+        }
+        
+        const cantidad = parseFloat(pos.cantidad || 0);
+        const precioCompra = parseFloat(pos.precioCompra || 0);
+        const precioActual = parseFloat(pos.precioActual || pos.precioCompra || 0);
+        
+        totalCosteCartera += (cantidad * precioCompra);
+        totalValorCartera += (cantidad * precioActual);
+    });
+}
+
+const plusvaliaMonto = totalValorCartera - totalCosteCartera;
+const plusvaliaPct = totalCosteCartera > 0 ? (plusvaliaMonto / totalCosteCartera) * 100 : 0;
+
+const elPatriPlusvalia = document.getElementById('total-patri-plusvalia');
+if (elPatriPlusvalia) {
+    const signo = plusvaliaMonto >= 0 ? '+' : '';
+    elPatriPlusvalia.innerText = `${window.FinanceModel.formatMoney(plusvaliaMonto)} (${signo}${plusvaliaPct.toFixed(2)}%)`;
+    // Aplicación del color del semáforo correspondiente
+    elPatriPlusvalia.style.color = plusvaliaMonto >= 0 ? '#34c759' : '#ff3b30'; 
 }
 
 // 🟢 MOTOR DE ANIMACIÓN UNIFICADO: Lanza el contador visual estilo Fintech para cada categoría
@@ -9616,7 +9656,7 @@ window.detenerAnimacionCargaNumeros = function() {
     const elementos = document.querySelectorAll('.scrambling-number');
     elementos.forEach(el => el.classList.remove('scrambling-number'));
 };
-// ✅ INTERRUPTOR MULTI-ACTIVOS DE PRIVACIDAD GLOBAL
+// ✅ INTERRUPTOR DE PRIVACIDAD PARA EL PANEL MULTI-ACTIVOS
 window.togglePrivacidadGlobal = function() {
     const btnOjo = document.getElementById('btn-toggle-privacidad');
     const elementosSaldos = document.querySelectorAll('.value-privacy-blur');
