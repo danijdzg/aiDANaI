@@ -6491,7 +6491,7 @@ window.guardarUniversal = async function(nuevasFilas) {
         if (window.AppState) window.AppState.actualizarSemaforo('ok');
     }
 
-    // --- 6. ACTUALIZAR UI LOCAL ---
+    // ── 6. ACTUALIZAR UI LOCAL ────────────────────────────────────────
     window.datos = datosFinales;
     window.UIEvents.emitir('datos:actualizados');
     setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
@@ -6499,6 +6499,7 @@ window.guardarUniversal = async function(nuevasFilas) {
 
 } catch (errorCritico) {
     console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
+    // --- 7. FALLO: BUZÓN DE SALIDA (OFFLINE QUEUE) ---
     if (nuevasFilas) {
         const buzonAnterior = JSON.parse(localStorage.getItem('aidanai_buzon') || '[]');
         const filasArray = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
@@ -6523,7 +6524,9 @@ window.guardarUniversal = async function(nuevasFilas) {
     if (btnModal) btnModal.innerHTML = 'GUARDAR';
     setTimeout(() => { if (btn) btn.innerHTML = originalText; }, 2000);
 }
-};
+}; // <-- Aquí cierra de forma segura e impecable window.guardarUniversal
+
+
 // ==========================================
 // ⚙️ PROCESADOR AUTOMÁTICO DE MOVIMIENTOS RECURRENTES (ADAPTADO)
 // ==========================================
@@ -6541,7 +6544,7 @@ window.procesarRecurrentes = async function() {
     for (let regla of window.datosRecurrentes) {
         if (!regla.frecuencia) continue;
         
-        // Obtención ultra-segura del día de cobro (por si viene como número directo o dentro de fechaProx)
+        // Obtención ultra-segura del día de cobro (por número directo o fechaProx)
         let diaRegla = regla.dia ? parseInt(regla.dia) : null;
         if (!diaRegla && regla.fechaProx) {
             const dObj = new Date(regla.fechaProx);
@@ -6550,27 +6553,24 @@ window.procesarRecurrentes = async function() {
             }
         }
         
-        // Si no se puede determinar un día de cobro válido, saltamos la regla
         if (!diaRegla) continue; 
         
         const ultimaEjecucion = regla.ultima_ejecucion || "";
         const claveMesAnio = `${anioActual}-${String(mesActual).padStart(2, '0')}`;
         
-        // Si ya ha sido procesada y ejecutada en el mes actual, la saltamos
+        // Si ya ha sido procesada este mes, la saltamos
         if (ultimaEjecucion.startsWith(claveMesAnio)) {
             continue; 
         }
         
         let tocaEjecutar = false;
         if (regla.frecuencia === 'mensual') {
-            // Si ya ha llegado el día del mes o ya lo hemos pasado
             if (diaActual >= diaRegla) {
                 tocaEjecutar = true;
             }
         }
         
         if (tocaEjecutar) {
-            // Fijamos la fecha con el día correspondiente de la regla a las 12:00h
             const fechaEfectiva = new Date(anioActual, mesActual - 1, diaRegla, 12, 0, 0);
             const importeNum = parseFloat(regla.importe || 0);
             
@@ -6588,10 +6588,10 @@ window.procesarRecurrentes = async function() {
             
             nuevosMovs.push(nuevoMov);
             
-            // Marcamos la regla con el sello de ejecución de hoy para evitar duplicados
+            // Marcamos el sello de ejecución
             regla.ultima_ejecucion = `${anioActual}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`;
             
-            // Desplazamos la fecha de visualización del Excel al mes siguiente para mantener coherencia estética
+            // Desplazamos la fecha estética al mes siguiente
             const proximoMes = mesActual === 12 ? 1 : mesActual + 1;
             const proximoAnio = mesActual === 12 ? anioActual + 1 : anioActual;
             regla.fechaProx = `${proximoAnio}-${String(proximoMes).padStart(2, '0')}-${String(diaRegla).padStart(2, '0')}`;
@@ -6599,20 +6599,16 @@ window.procesarRecurrentes = async function() {
     }
     
     if (nuevosMovs.length > 0) {
-        // Inyectamos las nuevas operaciones en el histórico local
         if (!window.datos) window.datos = [];
         window.datos.push(...nuevosMovs);
-        
-        // Reordenamos el histórico cronológicamente
         window.datos.sort((a, b) => b.ts - a.ts);
         
-        // Forzamos el redibujado de la interfaz inmediatamente
         if (typeof renderizar === 'function') renderizar();
         if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
         if (typeof actualizarDashboard === 'function') actualizarDashboard();
         
-        // 🔥 LLAMADA DISPARADORA DEL MOTOR DE RECURRENTES
-        await window.procesarRecurrentes();
+        // Subimos a OneDrive los cambios
+        await window.guardarUniversal();
         
         if (typeof window.mostrarToast === 'function') {
             window.mostrarToast(`✅ Autogenerados ${nuevosMovs.length} movimientos recurrentes.`, "success");
