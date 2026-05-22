@@ -6471,25 +6471,25 @@ window.guardarUniversal = async function(nuevasFilas) {
                         } catch(syncErr) {
                             throw new Error("No se pudo resolver el conflicto.");
                         }
+                    // ✅ REEMPLAZA ÚNICAMENTE ESE SEGMENTO POR ESTE:
                     } else {
                         if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
                     }
                 }
             }
-        }
+            
+            if (!exito) throw new Error("Fallo conexión OneDrive.");
+            
+            // Éxito: limpiamos el buzón offline
+            localStorage.removeItem('aidanai_buzon');
+            if (window.AppState) window.AppState.actualizarSemaforo('ok');
+            if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
 
-        if (!exito) throw new Error("Fallo conexión OneDrive.");
-        
-        // Éxito: limpiamos el buzón offline
-        localStorage.removeItem('aidanai_buzon');
-        if (window.AppState) window.AppState.actualizarSemaforo('ok');
-        if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
-        
-    } else {
-        if (window.AppRuntime) await window.AppRuntime.yieldToUI();
-        XLSX.writeFile(wb, "aidanai-ctas.xlsx");
-        if (window.AppState) window.AppState.actualizarSemaforo('ok');
-    }
+        } else { // <--- Ahora el else se conecta perfectamente con "if (usarNube)"
+            if (window.AppRuntime) await window.AppRuntime.yieldToUI();
+            XLSX.writeFile(wb, "aidanai-ctas.xlsx");
+            if (window.AppState) window.AppState.actualizarSemaforo('ok');
+        }
 
     // ── 6. ACTUALIZAR UI LOCAL ────────────────────────────────────────
     window.datos = datosFinales;
