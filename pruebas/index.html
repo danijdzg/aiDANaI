@@ -5405,11 +5405,11 @@ window.cerrarModal = cerrarModal;
 // --- GENERADOR DE IDs CANÓNICO (única implementación en toda la app) ---
 const uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO (BLINDADO + FECHA ESPAÑOLA + 8 COLUMNAS + SALA ESPERA)
+// 🛡️ GUARDAR MOVIMIENTO (GRABACIÓN DIRECTA EN LA NUBE - ESTILO INDEXXX)
 // ==========================================
 window.guardarManual = async function() {
 if (document.getElementById('btn-modal-action').disabled) return;
-// ========== VALIDACIÓN VISUAL (desde versión B) ==========
+// ========== VALIDACIÓN VISUAL ==========
 const inputImporte = document.getElementById('m-cantidad');
 const inputConcepto = document.getElementById('m-concepto');
 let hayErrorVisual = false;
@@ -5432,7 +5432,7 @@ if (!importeVal || window.FinanceModel.parseMoney(importeVal) === 0) {
     dispararErrorVisual(inputImporte);
 }
 
-// Validar concepto solo si NO es traspaso (en traspaso se fuerza "TRASPASO")
+// Validar concepto solo si NO es traspaso
 const modoActualTemp = window.modoTransaccionActual || 'gasto';
 if (modoActualTemp !== 'traspaso') {
     const conceptoVal = inputConcepto ? inputConcepto.value : '';
@@ -5443,201 +5443,139 @@ if (modoActualTemp !== 'traspaso') {
 
 if (hayErrorVisual) {
     window.mostrarToast("Rellena los campos en rojo", "warning");
-    return; // Salimos sin bloquear el botón ni continuar
+    return;
 }
 // ========== FIN VALIDACIÓN VISUAL ==========
-// 1. BLOQUEAMOS EL BOTÓN AL INSTANTE CON LA NUEVA FUNCIÓN (Mejora B)
+
 window.toggleBotonCarga('btn-modal-action', true);
-// --- VIBRACIÓN ---
+
 try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){}
+
 // --- INTERCEPTOR RECURRENTE ---
 const chkRecurrente = document.getElementById('m-es-recurrente');
 if (chkRecurrente && chkRecurrente.checked) {
-// Cambiamos el texto temporalmente para saber que es recurrente
-const btnGuardar = document.getElementById('btn-modal-action');
-if (btnGuardar) btnGuardar.innerText = '⏳ GUARDANDO REGLA...';
-try {
-await window.guardarComoRecurrenteUnificado();
-} catch(e) {
-console.error(e);
-window.mostrarToast(e.message, "error"); // Usamos el Toast de la Mejora A
-} finally {
-// DESBLOQUEAMOS EL BOTÓN
-window.toggleBotonCarga('btn-modal-action', false);
-}
-return; // Cortamos aquí para que NO se anote como movimiento de hoy
+    const btnGuardar = document.getElementById('btn-modal-action');
+    if (btnGuardar) btnGuardar.innerText = '⏳ GUARDANDO REGLA...';
+    try {
+        await window.guardarComoRecurrenteUnificado();
+    } catch(e) {
+        console.error(e);
+        window.mostrarToast(e.message, "error");
+    } finally {
+        window.toggleBotonCarga('btn-modal-action', false);
+    }
+    return;
 }
 // --- FIN INTERCEPTOR ---
+
 const modoActual = window.modoTransaccionActual || 'gasto';
 const generarID = () => typeof uuid === 'function' ? uuid() : crypto.randomUUID();
 let movimientosParaLocal = [];
+
 try {
-const elId = document.getElementById('m-id');
-const idExistente = elId ? elId.value : "";
-// 📅 OBTENER Y FORMATEAR LA FECHA
-const fechaCruda = document.getElementById('m-fecha').value;
-if (!fechaCruda) throw new Error("Falta la FECHA");
-let fechaParaExcel = new Date();
-if (fechaCruda.includes('-')) {
-const partes = fechaCruda.split('-');
-fechaParaExcel = new Date(partes[0], partes[1] - 1, partes[2]);
-}
-const fechaFormateada = fechaParaExcel;
-const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
-const cuentaOrigen = document.getElementById('m-cuenta').value;
-const elDestino = document.getElementById('m-cuenta-destino');
-const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
-let concepto = document.getElementById('m-concepto').value;
-if (modoActual === 'traspaso') concepto = "TRASPASO";
-const importeStr = document.getElementById('m-cantidad').value;
-const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
-const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
-// Validaciones (usamos throw para saltar al catch y no bloquear el botón)
-if (!cuentaOrigen) throw new Error("Falta la CUENTA");
-if (!importeStr) throw new Error("Falta el IMPORTE");
-if (!concepto) throw new Error("Falta el CONCEPTO");
-let importeNum = window.FinanceModel.parseMoney(importeStr);
-if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
-importeNum = Math.abs(importeNum);
-const detectarDueno = (nombreCuenta) => {
-const c = String(nombreCuenta).toUpperCase().trim();
-if (c.startsWith("D-")) return "D";
-if (c.startsWith("N-")) return "N";
-return "DN";
-};
-// 🅰️ TRASPASO
-if (modoActual === 'traspaso') {
-if (!cuentaDestino) throw new Error("Selecciona CUENTA DESTINO");
-if (cuentaOrigen === cuentaDestino) throw new Error("Origen y Destino iguales");
-movimientosParaLocal.push({
-id: generarID(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: "TRASPASO",
-importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: timestampInterno
-});
-movimientosParaLocal.push({
-id: generarID(), fecha: fechaFormateada, cuenta: cuentaDestino, concepto: "TRASPASO",
-importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: timestampInterno
-});
-}
-// 🅱️ GASTO O INGRESO
-else {
-if (modoActual === 'gasto' || modoActual === 'pago') importeNum = -Math.abs(importeNum);
-let benefFinal = benefManual || detectarDueno(cuentaOrigen);
-movimientosParaLocal.push({
-id: idExistente || window.FinanceModel.crearId(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: concepto,
-importe: importeNum, descripcion: desc, beneficiario: benefFinal,
-tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: timestampInterno
-});
-}
-// 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA
-if (idExistente) {
-const movOriginal = window.datos.find(m => m.id === idExistente);
-if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
-const desc = movOriginal.descripcion || '';
-let cuentaHermana = '';
-if (desc.includes('>> A:')) cuentaHermana = desc.split('>> A:')[1].split('|')[0].trim();
-else if (desc.includes('<< DE:')) cuentaHermana = desc.split('<< DE:')[1].split('|')[0].trim();
-window.datos = window.datos.filter(m => {
-if (m.id === idExistente) return false;
-if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.cuenta === cuentaHermana) return false;
-return true;
-});
-} else {
-window.datos = window.datos.filter(m => m.id !== idExistente);
-}
-}
-movimientosParaLocal.forEach(m => window.datos.push(m));
-// La emisión la hace guardarUniversal al terminar. No emitir aquí para evitar doble renderizado.
-// 🚀 SUBIDA A LA NUBE
-await window.guardarUniversal(movimientosParaLocal);
-if (typeof window.cerrarModal === 'function') window.cerrarModal();
-// Notificación de éxito
-window.mostrarToast("Guardado con éxito", "success");
-if (typeof vibrar === 'function') {
-if (modoActual === 'traspaso') vibrar('traspaso');
-else if (modoActual === 'gasto' || modoActual === 'pago') vibrar('gasto');
-else vibrar('ingreso');
-}
+    const elId = document.getElementById('m-id');
+    const idExistente = elId ? elId.value : "";
+    
+    // 📅 OBTENER Y FORMATEAR LA FECHA
+    const fechaCruda = document.getElementById('m-fecha').value;
+    if (!fechaCruda) throw new Error("Falta la FECHA");
+    let fechaParaExcel = new Date();
+    if (fechaCruda.includes('-')) {
+        const partes = fechaCruda.split('-');
+        fechaParaExcel = new Date(partes[0], partes[1] - 1, partes[2]);
+    }
+    const fechaFormateada = fechaParaExcel;
+    const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
+    const cuentaOrigen = document.getElementById('m-cuenta').value;
+    const elDestino = document.getElementById('m-cuenta-destino');
+    const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
+    let concepto = document.getElementById('m-concepto').value;
+    if (modoActual === 'traspaso') concepto = "TRASPASO";
+    const importeStr = document.getElementById('m-cantidad').value;
+    const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
+    const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
+    
+    if (!cuentaOrigen) throw new Error("Falta la CUENTA");
+    if (!importeStr) throw new Error("Falta el IMPORTE");
+    if (!concepto) throw new Error("Falta el CONCEPTO");
+    
+    let importeNum = window.FinanceModel.parseMoney(importeStr);
+    if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
+    importeNum = Math.abs(importeNum);
+    
+    const detectarDueno = (nombreCuenta) => {
+        const c = String(nombreCuenta).toUpperCase().trim();
+        if (c.startsWith("D-")) return "D";
+        if (c.startsWith("N-")) return "N";
+        return "DN";
+    };
+    
+    // 🅰️ TRASPASO
+    if (modoActual === 'traspaso') {
+        if (!cuentaDestino) throw new Error("Selecciona CUENTA DESTINO");
+        if (cuentaOrigen === cuentaDestino) throw new Error("Origen y Destino iguales");
+        movimientosParaLocal.push({
+            id: generarID(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: "TRASPASO",
+            importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
+            beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: timestampInterno
+        });
+        movimientosParaLocal.push({
+            id: generarID(), fecha: fechaFormateada, cuenta: cuentaDestino, concepto: "TRASPASO",
+            importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
+            beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: timestampInterno
+        });
+    }
+    // 🅱️ GASTO O INGRESO
+    else {
+        if (modoActual === 'gasto' || modoActual === 'pago') importeNum = -Math.abs(importeNum);
+        let benefFinal = benefManual || detectarDueno(cuentaOrigen);
+        movimientosParaLocal.push({
+            id: idExistente || window.FinanceModel.crearId(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: concepto,
+            importe: importeNum, descripcion: desc, beneficiario: benefFinal,
+            tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: timestampInterno
+        });
+    }
+    
+    // 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA
+    if (idExistente) {
+        const movOriginal = window.datos.find(m => m.id === idExistente);
+        if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
+            const desc = movOriginal.descripcion || '';
+            let cuentaHermana = '';
+            if (desc.includes('>> A:')) cuentaHermana = desc.split('>> A:')[1].split('|')[0].trim();
+            else if (desc.includes('<< DE:')) cuentaHermana = desc.split('<< DE:')[1].split('|')[0].trim();
+            window.datos = window.datos.filter(m => {
+                if (m.id === idExistente) return false;
+                if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.cuenta === cuentaHermana) return false;
+                return true;
+            });
+        } else {
+            window.datos = window.datos.filter(m => m.id !== idExistente);
+        }
+    }
+    
+    movimientosParaLocal.forEach(m => window.datos.push(m));
+    
+    // 🚀 SUBIDA DIRECTA A LA NUBE
+    await window.guardarUniversal(movimientosParaLocal);
+    
+    if (typeof window.cerrarModal === 'function') window.cerrarModal();
+    window.mostrarToast("Guardado con éxito", "success");
+    
+    if (typeof vibrar === 'function') {
+        if (modoActual === 'traspaso') vibrar('traspaso');
+        else if (modoActual === 'gasto' || modoActual === 'pago') vibrar('gasto');
+        else vibrar('ingreso');
+    }
 } catch (error) {
-console.error("❌ Fallo en el proceso de guardado:", error);
-// Si el error es de validación (falta importe, cuenta...), se lo decimos al usuario sin sala de espera
-if (error.message.startsWith("Falta") || error.message.includes("Selecciona") || error.message.includes("Origen") || error.message.includes("importe")) {
-window.mostrarToast(error.message, "error");
-return; // Cortamos aquí
-}
-// --- INICIO DE LA SALA DE ESPERA (Errores de conexión) ---
-let salaEspera = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
-movimientosParaLocal.forEach(nuevoMov => {
-const idxEspera = salaEspera.findIndex(m => m.id === nuevoMov.id);
-if(idxEspera > -1) salaEspera[idxEspera] = nuevoMov;
-else salaEspera.push(nuevoMov);
-});
-localStorage.setItem('salaEsperaMovimientos', JSON.stringify(salaEspera));
-if (typeof window.cerrarModal === 'function') window.cerrarModal();
-window.mostrarToast("⚠️ Guardado en Sala de Espera local. Se sincronizará más tarde.", "info");
+    console.error("❌ Fallo en el proceso de guardado:", error);
+    // Muestra cualquier error directamente sin pasar por la sala de espera local
+    window.mostrarToast(error.message || "Error al guardar en la nube", "error");
 } finally {
-// 3. DESBLOQUEAMOS EL BOTÓN PASE LO QUE PASE (Éxito o Error)
-window.toggleBotonCarga('btn-modal-action', false);
+    window.toggleBotonCarga('btn-modal-action', false);
 }
 };
 // FIN de guardarManual
-// ==========================================
-// 🤖 BOT INVISIBLE: SINCRONIZADOR DE LA SALA DE ESPERA
-// ==========================================
-window.sincronizarSalaEspera = async function() {
-// 1. Miramos si hay algo en la sala de espera
-const salaEsperaJSON = localStorage.getItem('salaEsperaMovimientos');
-if (!salaEsperaJSON) return; // Si está vacía, el bot sigue durmiendo
-let salaEspera = [];
-try {
-salaEspera = JSON.parse(salaEsperaJSON);
-} catch (e) { return; }
-if (salaEspera.length === 0) return;
-// 2. Comprobamos si hay internet y verificamos que la app no esté ya ocupada guardando otra cosa
-if (!navigator.onLine || (window.AppState && window.AppState.isSaving)) return;
-try {
-// Ponemos el cartel de "Ocupado" para no chocar con el "Escudo anti-colisiones"
-if (window.AppState) window.AppState.isSaving = true;
-// 3. Volcamos los datos de la sala de espera en la memoria principal (por si habías cerrado la app)
-let hayCambios = false;
-salaEspera.forEach(movPendiente => {
-const idx = window.datos.findIndex(m => m.id === movPendiente.id);
-if (idx > -1) {
-window.datos[idx] = movPendiente; // Si ya existía, lo actualiza
-} else {
-window.datos.push(movPendiente); // Si es nuevo, lo añade
-hayCambios = true;
-}
-});
-// Si hemos inyectado movimientos nuevos, recalculamos todo para que cuadre
-if (hayCambios) {
-window.datos.sort((a,b) => b.ts - a.ts);
-if (typeof renderizar === 'function') renderizar();
-if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-if (typeof actualizarDashboard === 'function') actualizarDashboard();
-}
-// 4. Intentamos subir el Excel completo a OneDrive
-await window.guardarUniversal();
-// 5. ¡Éxito! Limpiamos AMBAS colas offline
-localStorage.removeItem('salaEsperaMovimientos');
-localStorage.removeItem('aidanai_buzon');
-if (typeof notify === 'function') {
-notify(`✅ ¡Conexión recuperada! ${salaEspera.length} movimientos de la Sala de Espera subidos a OneDrive.`, "success");
-}
-} catch (error) {
-console.error("❌ Bot Sincronizador: Sigue sin poder subir a OneDrive. Lo intentará en la próxima ronda.", error);
-} finally {
-// Quitamos el cartel de "Ocupado" pase lo que pase
-if (window.AppState) window.AppState.isSaving = false;
-}
-};
-// --- PONEMOS AL BOT A TRABAJAR ---
-// Opción A: Cuando el dispositivo detecta que vuelve a tener WiFi o 4G/5G
-window.addEventListener('online', () => {
-// Le damos 3 segunditos a que la conexión sea estable antes de subir cosas
-setTimeout(window.sincronizarSalaEspera, 3000);
-});
 // ==========================================
 // ⚡ ACCIONES RÁPIDAS: DUPLICAR Y ELIMINAR (CORREGIDO)
 // ==========================================
