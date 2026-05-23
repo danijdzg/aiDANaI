@@ -3757,6 +3757,7 @@ window.cambiarSubVistaPatrimonio = function(subVista) {
         
         // 🚀 DETECTOR FINTECH: Si pasamos a "Cartera Activa", revivimos sus datos y gráficos
         if (subVista === 'cartera') {
+            if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
             if (typeof window.renderizarCartera === 'function') {
                 window.renderizarCartera(); // Vuelve a pintar el desglose de activos y barras de peso
             }
@@ -10673,6 +10674,22 @@ window.toggleCarteraGroup = function(id) {
 
 // ── GRÁFICO DONUT ─────────────────────────────────────────────────────
 window.renderizarDonutCartera = function(grupos, colorTipo) {
+  if (!grupos || !colorTipo) {
+    const r = window.resumenCartera;
+    if (!r || !window.datosCartera || window.datosCartera.length === 0) return;
+    const posicionesFiltradas = (window.datosCartera || []).filter(p => {
+      if (typeof pasaFiltroPropietario !== 'function') return true;
+      return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
+    }).map(p => window.sanitizarPosicionCartera(p));
+    grupos = {};
+    colorTipo = Object.fromEntries(Object.entries(window.CARTERA_TIPOS).map(([k, v]) => [k, v.color]));
+    posicionesFiltradas.forEach(pos => {
+      const tipo = window.normalizarTipoCartera(pos.tipo);
+      if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
+      grupos[tipo].total += window.getValorMercadoPosicionCartera(pos);
+      grupos[tipo].posiciones.push(pos);
+    });
+  }
   if (!window.ensureEChartsReady(() => window.renderizarDonutCartera(grupos, colorTipo))) return;
   const container = document.getElementById('chart-cartera-donut');
   const elCenter  = document.getElementById('cartera-donut-val');
