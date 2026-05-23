@@ -1441,11 +1441,10 @@ width: 100% !important;
 box-sizing: border-box !important;
 }
 #tab-inicio,
-#tab-movs,
+#tab-diario,
 #tab-ajustes {
-/* Rompe la caja general restándole 10px al margen de 20px, dejando exactamente 10px libres a los lados */
-margin-left: -10px !important;
-margin-right: -10px !important;
+    margin-left: -10px !important;
+    margin-right: -10px !important;
 }
 /* Anula los márgenes ocultos que tenían los bloques internos de Ajustes */
 #tab-ajustes > div {
@@ -1497,16 +1496,17 @@ background-color: color-mix(in srgb, var(--current-theme) 8%, #000000 92%) !impo
 /* 1. Vaciamos a cero la propia pestaña para que no sume espacios extra */
 #tab-recurrentes,
 #tab-ajustes,
-#tab-movs {
-padding-top: 0px !important;
-margin-top: 0px !important;
+#tab-diario {  /* <-- Cambiado de #tab-movs a #tab-diario */
+    padding-top: 0px !important;
+    margin-top: 0px !important;
 }
-/* 2. Le damos EXACTAMENTE 20px de espacio solo al primer elemento, igual que en Inicio */
+
+/* 2. Le damos EXACTAMENTE 20px de espacio solo al primer elemento */
 #tab-recurrentes > *:first-child,
 #tab-ajustes > *:first-child,
-#tab-movs > *:first-child {
-margin-top: 20px !important;
-padding-top: 0px !important;
+#tab-diario > *:first-child { /* <-- Cambiado de #tab-movs a #tab-diario */
+    margin-top: 20px !important;
+    padding-top: 0px !important;
 }
 /* =========================================
 MODO CAJA FUERTE (OCULTAR SALDOS)
@@ -1939,9 +1939,9 @@ tbody tr:active, .ext-row:active, .patri-account-item:active {
     }
 }
 
-/* 2. Forzamos la máxima prioridad sobre el botón principal */
+/* 2. Forzamos la máxima prioridad sobre el botón principal en su posición original */
 body #fab-main {
-	pointer-events: auto !important;   /* ← Añade esta línea */
+    pointer-events: auto !important;   /* Mantiene el botón clicable */
     width: 70px !important; 
     height: 70px !important;
     /* Un gradiente base sólido que rotará sus colores matemáticamente */
@@ -1953,6 +1953,18 @@ body #fab-main {
     z-index: 99999 !important;
     /* Aceleración por hardware para móviles */
     will-change: transform, filter, box-shadow !important;
+
+    /* ── CORRECCIÓN MAESTRA: CENTRADO INMUNE A LA ANIMACIÓN TRANSFORM ── */
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    margin-top: -35px !important;  /* -35px es la mitad exacta de su altura (70px) para el eje Y */
+    margin-left: -35px !important; /* -35px es la mitad exacta de su anchura (70px) para el eje X */
+
+    /* Centrado perfecto del icono (+) dentro del círculo */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
 body #fab-main .material-icons {
@@ -2195,7 +2207,7 @@ DN
 </div>
 <div class="app-main">
 <div id="tab-inicio" class="view-section active">
-<div class="master-card blue-card" style="margin-top: 15px; padding: 15px; text-align: center; border-color: rgba(10, 132, 255, 0.3);">
+<div class="master-card blue-card" id="card-kpi-liquidez" style="margin-top: 15px; padding: 15px; text-align: center; border-color: rgba(10, 132, 255, 0.3);">
 <span style="font-size: 16px; color: #0A84FF; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;">LIQUIDEZ+INVERSIÓN</span>
 <div id="d-metalico" class="kpi-value" style="color: #0A84FF; font-size: 28px; font-weight: 1000; margin-top: 4px; text-shadow: 0 0 10px rgba(10, 132, 255, 0.4);">0,00 €</div>
 </div>
@@ -2244,223 +2256,258 @@ DN
 </div>
 </div>
 <!-- 📈 TARJETA CARTERA (Módulo Inversiones) -->
-<div class="master-card" id="card-cartera-dashboard" style="margin-top: 15px; padding: 15px; border-color: rgba(57,255,20,0.25); box-shadow: 0 8px 25px rgba(57,255,20,0.07); display:none;">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-    <span style="font-size:13px; font-weight:900; color:var(--c-success); text-transform:uppercase; letter-spacing:1px;">📈 MI CARTERA</span>
-    <button onclick="irPestana('inversiones'); if(typeof window.renderizarCartera==='function') window.renderizarCartera();" style="background:transparent; border:none; color:var(--c-primary); font-size:10px; font-weight:900; cursor:pointer; letter-spacing:1px;">VER DETALLE ❯</button>
-  </div>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-    <div class="kpi-box" style="padding:10px; border-color:rgba(57,255,20,0.2);">
-      <span class="kpi-label" style="color:var(--c-warning)!important;">VALOR MERCADO</span>
-      <span id="dash-cartera-valor" class="kpi-value" style="font-size:18px; color:#fff;">---</span>
+<div class="master-card" id="card-cartera-dashboard" style="margin-top: 15px; border-color: rgba(0,184,255,0.2); background: rgba(5,8,15,0.9); border-radius: 18px; padding: 18px 16px 14px 16px; display:none;">
+
+    <!-- CABECERA: título + botones LIVE y VER DETALLE -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <span style="font-size:10px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.4);">📈 MI CARTERA</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button id="btn-precios-live-dash" onclick="window.actualizarPreciosAutomatico && window.actualizarPreciosAutomatico()"
+                style="background:rgba(0,184,255,0.1); border:1px solid rgba(0,184,255,0.35); color:#00B8FF; padding:3px 10px; border-radius:20px; font-size:9px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                <span id="precios-live-icon-dash">⚡</span> LIVE
+            </button>
+            <button onclick="irPestana('patrimonio'); window.cambiarSubVistaPatrimonio('cartera');"
+                style="background:rgba(0,184,255,0.1); border:1px solid rgba(0,184,255,0.35); color:#00B8FF; padding:3px 10px; border-radius:20px; font-size:9px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                VER DETALLE ❯
+            </button>
+        </div>
     </div>
-    <div class="kpi-box" style="padding:10px;">
-      <span class="kpi-label" style="color:var(--c-warning)!important;">PLUSVALÍA LATENTE</span>
-      <span id="dash-cartera-pnl" class="kpi-value" style="font-size:18px;">---</span>
+
+    <!-- FILA 1: VALOR INVERTIDO + VALOR DE MERCADO -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div style="background:rgba(0,184,255,0.05); border:1px solid rgba(0,184,255,0.15); border-radius:14px; padding:14px 10px; text-align:center;">
+            <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(0,184,255,0.6); margin-bottom:6px;">VALOR INVERTIDO</span>
+            <span id="dash-cartera-coste" style="font-size:20px; font-weight:900; color:#00B8FF; letter-spacing:-0.5px;">---</span>
+        </div>
+        <div style="background:rgba(0,184,255,0.05); border:1px solid rgba(0,184,255,0.15); border-radius:14px; padding:14px 10px; text-align:center;">
+            <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(0,184,255,0.6); margin-bottom:6px;">VALOR MERCADO</span>
+            <span id="dash-cartera-valor" style="font-size:20px; font-weight:900; color:#00B8FF; letter-spacing:-0.5px;">---</span>
+        </div>
     </div>
-    <div class="kpi-box" style="padding:10px;">
-      <span class="kpi-label" style="color:var(--c-warning)!important;">RENTABILIDAD</span>
-      <span id="dash-cartera-rent" class="kpi-value" style="font-size:16px;">---</span>
+
+    <!-- FILA 2: PLUSVALÍA LATENTE + RENTABILIDAD -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:14px 10px; text-align:center;">
+            <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:6px;">PLUSVALÍA LATENTE</span>
+            <span id="dash-cartera-pnl" style="font-size:20px; font-weight:900; color:#39FF14; letter-spacing:-0.5px;">---</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:14px 10px; text-align:center;">
+            <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:6px;">RENTABILIDAD</span>
+            <span id="dash-cartera-rent" style="font-size:20px; font-weight:900; color:#39FF14; letter-spacing:-0.5px;">---</span>
+        </div>
     </div>
-    <div class="kpi-box" style="padding:10px;">
-      <span class="kpi-label" style="color:var(--c-warning)!important;">POSICIONES</span>
-      <span id="dash-cartera-num" class="kpi-value" style="font-size:18px; color:var(--c-primary);">0</span>
-    </div>
-	<div class="kpi-box" style="padding:10px;">
-  <span class="kpi-label" style="color:var(--c-warning)!important;">INVERTIDO</span>
-  <span id="dash-cartera-coste" class="kpi-value" style="font-size:18px; color:#fff;">---</span>
-</div>
-  </div>
+
 </div>
 <div id="contenedor-alertas-15d"></div>
 </div>
-<div id="tab-patri" class="view-section">
-<div class="master-card blue-card" style="margin-top: 15px;">
-<div class="card-header" style="border:none; padding-bottom:0; margin-bottom:5px"><span class="card-title">PATRIMONIO NETO</span></div>
-<div style="text-align:center; margin-bottom:5px">
-<span class="kpi-value val-std-blue" id="d-patri-total" style="font-size:38px">0,00 €</span>
-</div>
-<div class="patri-breakdown" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-<div class="patri-col" style="margin: 0;"><span class="kpi-label">LIQUIDEZ</span><span class="val-breakdown" id="d-patri-liq">0,00 €</span></div>
-<div class="patri-col" style="margin: 0;"><span class="kpi-label">INVERSIÓN</span><span class="val-breakdown" id="d-patri-inv">0,00 €</span></div>
-<div class="patri-col" style="margin: 0;"><span class="kpi-label">AUTOCUSTODIA</span><span class="val-breakdown" id="d-patri-auto">0,00 €</span></div>
-<div class="patri-col" style="margin: 0;"><span class="kpi-label">PROPIEDAD</span><span class="val-breakdown" id="d-patri-prop">0,00 €</span></div>
-</div>
-<!-- Plusvalía latente de cartera en patrimonio -->
-<div id="patri-cartera-pnl-row" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid rgba(57,255,20,0.2); text-align:center;">
-  <span style="font-size:10px; color:#888; text-transform:uppercase; letter-spacing:1px; font-weight:700;">Plusvalía Latente Cartera</span>
-  <div id="patri-cartera-pnl-val" style="font-size:18px; font-weight:900; margin-top:4px;">---</div>
-</div>
-</div>
-<div style="display: flex; justify-content: space-between; padding: 15px 15px 10px 15px; margin-top: 15px;">
-<div onclick="cambiarOrdenPatrimonio('cuenta')" style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
-<span style="font-size: 11px; font-weight: bold; color: var(--c-accent); text-transform: uppercase;">CUENTA ⇅</span>
-</div>
-<div onclick="cambiarOrdenPatrimonio('saldo')" style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
-<span style="font-size: 11px; font-weight: bold; color: var(--c-accent); text-transform: uppercase;">SALDO ⇅</span>
-</div>
-</div>
-<div id="lista-cuentas-patri" style="display: flex; flex-direction: column; padding-bottom: 0;"></div>
-<div class="master-card" style="margin-top: 20px; margin-bottom: 0;">
-<div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
-<div style="display:flex; flex-direction:column;">
-<span class="card-title" style="font-size:14px; letter-spacing:1px;">RAYOS X PATRIMONIAL</span>
-<span style="font-size:9px; color:#666;">TOCA LOS ANILLOS PARA PROFUNDIZAR</span>
-</div>
-<button onclick="renderizarSunburstPatrimonio()" style="background:transparent; border:1px solid #333; color:#888; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">
-<span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
-</button>
-</div>
-<div style="position: relative; height: 400px; width: 100%; overflow: hidden;">
-<div id="chart-Sunburst" style="width: 100%; height: 100%;"></div>
-<div id="sunburst-center-info" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
-<div style="font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px;">TOTAL</div>
-<div id="sb-total-val" style="font-size: 16px; font-weight: 800; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.3);">---</div>
-</div>
-</div>
-<div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:5px; padding:15px; border-top:1px solid #222;">
-<div style="text-align:center;"><span style="font-size:9px; color:#00F0FF; font-weight:bold;">LIQUIDEZ</span><div id="kpi-ratio-liq" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
-<div style="text-align:center; border-left:1px solid #333;"><span style="font-size:9px; color:#F72585; font-weight:bold;">INVERSIÓN</span><div id="kpi-ratio-inv" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
-<div style="text-align:center; border-left:1px solid #333;"><span style="font-size:9px; color:#39FF14; font-weight:bold;">CUSTODIA</span><div id="kpi-ratio-auto" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
-<div style="text-align:center; border-left:1px solid #333;"><span style="font-size:9px; color:#FFD60A; font-weight:bold;">PROPIEDAD</span><div id="kpi-ratio-prop" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
-</div>
-</div>
-<div class="master-card" style="margin-top: 20px;">
-<div class="card-header"><span class="card-title">MAPA DE ACTIVOS</span></div>
-<div id="treemap-filters" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 15px; padding: 0 10px;"></div>
-<div id="chart-TreeMap" style="width: 100%; height: 380px; user-select: none; touch-action: pan-y;"></div>
-</div>
-<div style="text-align: center; margin-top: 35px; margin-bottom: 5px;">
-<span class="card-title" style="font-size:12px; color: var(--c-primary); letter-spacing: 1px;">EVOLUCIÓN HISTÓRICA</span>
-</div>
-<div id="box-grafico" class="chart-container" style="margin-top: 0px;"><div id="chartPatrimonio" style="width:100%;height:100%;"></div></div>
-</div>
-<div id="tab-salud" class="view-section">
-<div class="master-card orange-card" style="margin-top: 15px;">
-<div class="patri-breakdown" style="background:transparent; border:none; margin:0; padding:0;">
-<div class="patri-col" style="border-right: 1px solid #333;"><span class="kpi-label"><span class="material-icons freedom-icon">shield</span> COBERTURA</span><span class="orange-val" id="d-cobertura">0.0 Meses</span></div>
-<div class="patri-col"><span class="kpi-label"><span class="material-icons freedom-icon">flag</span> LIBERTAD</span><span class="green-val-freedom" id="d-libertad">0.00%</span></div>
-</div>
-</div>
-<button onclick="abrirSimulador()" style="width: 100%; margin-top: 15px; background: rgba(255, 214, 10, 0.1); border: 1px solid var(--c-warning); color: var(--c-warning); padding: 12px; border-radius: 12px; font-weight: 900; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; letter-spacing: 1px; transition: transform 0.2s;">
-<span class="material-icons">rocket_launch</span> SIMULAR GASTO (MÁQUINA DEL TIEMPO)
-</button>
-<div id="banner-simulacion" style="display:none; background: #FF2E4D; color: white; padding: 12px; text-align: center; font-weight: bold; border-radius: 12px; margin-top: 15px; cursor: pointer; box-shadow: 0 0 15px rgba(255,46,77,0.4);" onclick="cerrarSimulador()">
-⚠️ MODO SIMULACIÓN ACTIVO: -0 € (Toca para cancelar)
-</div>
-<div class="master-card green-card" style="margin-top: 20px; margin-bottom: 20px;">
-<div class="card-header" style="flex-direction: column; align-items: center;">
-<span class="card-title" style="color: var(--c-success)!important">SCORING FINANCIERO</span>
-<div id="scoring-perfil-info" style="font-size:10px; color:#FFFFFF; margin-top:4px; font-weight:600;"></div>
-</div>
-<div style="position: relative; height: 380px; width: 100%;">
-<div id="chartRadar" style="width:100%; height:400px;"></div>
-<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; margin-top: 15px;">
-<div id="score-total" style="font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 0 15px rgba(57, 255, 20, 0.5);">---</div>
-</div>
-</div>
-</div>
-<div class="master-card" style="margin-top: 0px; margin-bottom: 30px; border-color: #BF5AF2; box-shadow: 0 8px 25px rgba(191, 90, 242, 0.1);">
-<div class="card-header" style="border-bottom: none;">
-<span class="card-title" style="color: #BF5AF2!important">🚀 PROYECTOR DE JUBILACIÓN</span>
-<div style="font-size:11px; color:#FFFFFF; text-align:center; margin-top:5px; font-weight:600;" id="fire-subtitle">Calculando intersección de libertad...</div>
-</div>
-<div class="chart-container visible" style="width: 100%; height: 260px; border: none; background: transparent; box-shadow: none; padding: 0; margin: 0;">
-<div id="chart-FIRE" style="width: 100%; height: 100%;"></div>
-</div>
-</div>
-</div>
-<!-- ═══════════════════════════════════════════════════
-📈 TAB CARTERA DE INVERSIONES (MÓDULO COMPLETO)
-═══════════════════════════════════════════════════ -->
-<div id="tab-inversiones" class="view-section">
-
-  <!-- KPI HERO -->
-  <div class="master-card" style="margin-top:15px; border-color:rgba(57,255,20,0.3); box-shadow:0 8px 30px rgba(57,255,20,0.08);">
-    <div class="cartera-kpi-hero">
-      <div class="label-peq">VALOR TOTAL DE MERCADO</div>
-      <div id="inv-total-valor" class="valor-grande" style="color:#39FF14; text-shadow:0 0 20px rgba(57,255,20,0.4);">---</div>
-      <div id="inv-total-pnl" style="font-size:14px; font-weight:800; margin-top:6px; color:#888;">---</div>
+<div id="tab-patrimonio" class="view-section">
+    
+    <div class="segmented-control" style="display:flex; justify-content:center; margin:15px 0; background:rgba(255,255,255,0.05); padding:4px; border-radius:12px; gap:8px;">
+        <button id="subnav-balance" class="subnav-btn active" onclick="window.cambiarSubVistaPatrimonio('balance')" style="flex:1; padding:8px; border:none; background:rgba(255,255,255,0.1); color:#fff; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer; font-family:'Inter',sans-serif;">Balance Neto</button>
+        <button id="subnav-cartera" class="subnav-btn" onclick="window.cambiarSubVistaPatrimonio('cartera')" style="flex:1; padding:8px; border:none; background:transparent; color:#888; border-radius:8px; font-size:12px; font-weight:bold; cursor:pointer; font-family:'Inter',sans-serif;">Cartera Activa</button>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding:0 4px 4px 4px;">
-      <div class="kpi-box" style="padding:10px 6px;">
-        <span class="kpi-label" style="font-size:9px;">INVERTIDO</span>
-        <span id="inv-coste-total" class="kpi-value" style="font-size:15px; color:#888;">---</span>
-      </div>
-      <div class="kpi-box" style="padding:10px 6px;">
-        <span class="kpi-label" style="font-size:9px;">RENTABILIDAD</span>
-        <span id="inv-rent-total" class="kpi-value" style="font-size:15px;">---</span>
-      </div>
-      <div class="kpi-box" style="padding:10px 6px;">
-        <span class="kpi-label" style="font-size:9px;">POSICIONES</span>
-        <span id="inv-num-pos" class="kpi-value" style="font-size:15px; color:var(--c-primary);">0</span>
-      </div>
-    </div>
-  </div>
+    
+   <div id="subview-patrimonio-balance" class="patrimonio-subview">
+        
+<div class="master-card" style="margin-top: 10px; border-color: rgba(0, 184, 255, 0.3); background: rgba(10,10,20,0.7); border-radius: 16px; padding: 20px 15px;">
 
-  <!-- GRÁFICO DISTRIBUCIÓN -->
-  <div class="master-card" style="margin-top:15px;">
-    <div class="card-header"><span class="card-title">DISTRIBUCIÓN DE CARTERA</span></div>
-    <div style="position:relative; height:260px; width:100%;">
-      <div id="chart-cartera-donut" style="width:100%; height:100%;"></div>
-      <div id="cartera-donut-center" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none;">
-        <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px;">CARTERA</div>
-        <div id="cartera-donut-val" style="font-size:15px; font-weight:800; color:#fff;">---</div>
-      </div>
+    <!-- TÍTULO -->
+    <div style="text-align: center; margin-bottom: 6px;">
+        <span style="font-size: 11px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; color: #00B8FF;">PATRIMONIO NETO</span>
     </div>
-  </div>
 
-  <!-- GRÁFICO EVOLUCIÓN HISTÓRICA -->
-  <div class="master-card" style="margin-top:15px; display:none;" id="card-evol-cartera">
-    <div class="card-header"><span class="card-title">📊 EVOLUCIÓN HISTÓRICA</span></div>
-    <div style="height:180px; width:100%;">
-      <div id="chart-cartera-evol" style="width:100%; height:100%;"></div>
+    <!-- CIFRA PRINCIPAL -->
+    <div style="text-align: center; padding: 8px 0 18px 0;">
+        <div id="d-patri-total" class="value-privacy-blur" style="font-size: 38px; font-weight: 900; color: #00B8FF; letter-spacing: -1.5px; transition: filter 0.2s ease;">0,00 €</div>
+        <div id="total-patri-cambio" style="display:none;"></div>
     </div>
-    <!-- Estadísticas rápidas de la evolución -->
-    <div id="evol-stats" style="display:none; flex-wrap:wrap; gap:8px; padding:10px 5px 0 5px; border-top:1px solid rgba(255,255,255,0.05); margin-top:5px;"></div>
-  </div>
 
-  <!-- POSICIONES POR SECCIÓN -->
-  <div class="master-card" style="margin-top:15px; padding:0; overflow:hidden;" id="card-posiciones">
-    <div style="padding:14px 14px 10px 14px; border-bottom:1px solid #1a1a1a;">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span class="card-title">MIS POSICIONES</span>
-<select id="orden-cartera" onchange="window.ordenCartera=this.value; window.renderizarCartera();"
-  style="background:rgba(255,255,255,0.05); color:#888; border:1px solid #333; border-radius:8px; font-size:10px; font-weight:700; padding:4px 8px; outline:none; cursor:pointer; text-transform:uppercase;">
-  <option value="valor">↓ Valor</option>
-  <option value="pnl">↓ P&amp;L €</option>
-  <option value="rent">↓ Rentab.</option>
-  <option value="fecha">↓ Fecha</option>
-</select>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <button id="btn-precios-live" onclick="window.actualizarPreciosAutomatico()" style="background:rgba(0,184,255,0.12); border:1px solid rgba(0,184,255,0.5); color:#00B8FF; padding:5px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:0.5px; display:flex; align-items:center; gap:4px;">
-            <span id="precios-live-icon">⚡</span> PRECIOS LIVE
-          </button>
-          <button onclick="window.abrirModalNuevaPosicion()" style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:5px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:0.5px;">
-            + AÑADIR
-          </button>
+    <!-- SEPARADOR -->
+    <div style="border-top: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px;"></div>
+
+    <!-- GRID 2x2 -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; width: 100%; margin-bottom: 14px;">
+        <div style="text-align: center;">
+            <span style="display:block; font-size:10px; text-transform:uppercase; color:#00B8FF; font-weight:900; letter-spacing:1.5px; margin-bottom:4px;">LIQUIDEZ</span>
+            <span id="d-liquidez-val" class="value-privacy-blur" style="font-weight: 900; color: #39FF14; font-size: 15px; transition: filter 0.2s ease;">0,00 €</span>
         </div>
-      </div>
+        <div style="text-align: center;">
+            <span style="display:block; font-size:10px; text-transform:uppercase; color:#00B8FF; font-weight:900; letter-spacing:1.5px; margin-bottom:4px;">INVERSIÓN</span>
+            <span id="d-inversion-val" class="value-privacy-blur" style="font-weight: 900; color: #39FF14; font-size: 15px; transition: filter 0.2s ease;">0,00 €</span>
+        </div>
+        <div style="text-align: center;">
+            <span style="display:block; font-size:10px; text-transform:uppercase; color:#00B8FF; font-weight:900; letter-spacing:1.5px; margin-bottom:4px;">AUTOCUSTODIA</span>
+            <span id="d-autocustodia-val" class="value-privacy-blur" style="font-weight: 900; color: #39FF14; font-size: 15px; transition: filter 0.2s ease;">0,00 €</span>
+        </div>
+        <div style="text-align: center;">
+            <span style="display:block; font-size:10px; text-transform:uppercase; color:#00B8FF; font-weight:900; letter-spacing:1.5px; margin-bottom:4px;">PROPIEDAD</span>
+            <span id="d-propiedad-val" class="value-privacy-blur" style="font-weight: 900; color: #39FF14; font-size: 15px; transition: filter 0.2s ease;">0,00 €</span>
+        </div>
     </div>
-    <div id="lista-posiciones-cartera">
-      <div style="text-align:center; padding:30px; color:#555; font-size:13px;">
-        <span style="font-size:32px; display:block; margin-bottom:10px;">📊</span>
-        Sin posiciones. Añade tu primera inversión.
-      </div>
+
+    <!-- SEPARADOR -->
+    <div style="border-top: 1px solid rgba(255,255,255,0.08); margin-bottom: 14px;"></div>
+
+    <!-- PLUSVALÍA LATENTE -->
+    <div style="text-align: center;">
+        <span style="display:block; font-size:10px; text-transform:uppercase; color:#00B8FF; font-weight:900; letter-spacing:1.5px; margin-bottom:4px;">BENEFICIO / PÉRDIDA INVERSIONES</span>
+        <span id="total-patri-plusvalia" class="value-privacy-blur" style="font-weight: 900; color: #39FF14; font-size: 15px; transition: filter 0.2s ease;">+0,00 € (0.00%)</span>
     </div>
-  </div>
 
-  <!-- MENSAJE SIN DATOS -->
-  <div id="cartera-sin-datos" style="display:none; text-align:center; padding:40px 20px; color:#555;">
-    <span style="font-size:48px; display:block; margin-bottom:16px;">📈</span>
-    <h3 style="color:#888; font-size:16px; margin:0 0 8px 0;">Sin datos de cartera</h3>
-    <p style="font-size:13px; line-height:1.5;">Añade tu primera posición con el botón "+" o añade la hoja <strong style="color:var(--c-primary);">CARTERA</strong> a tu Excel.</p>
-    <button onclick="window.abrirModalNuevaPosicion()" style="margin-top:20px; background:var(--c-success); color:#000; border:none; padding:14px 28px; border-radius:20px; font-size:14px; font-weight:900; cursor:pointer;">
-      + AÑADIR PRIMERA POSICIÓN
-    </button>
-  </div>
+</div>
+    <div class="master-card" style="margin-top: 15px;">
+        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #fff; display: flex; align-items: center; gap: 8px;">
+            <span class="material-icons" style="color: #a855f7;">account_balance_wallet</span> 
+            Distribución por Tipo de Cuenta
+        </h3>
+        
+        <div id="lista-grupos-patrimonio" class="patri-grupos-container"></div>
+    </div>
 
-  <div style="height:20px;"></div>
+    <div class="master-card" style="margin-top: 20px; margin-bottom: 20px;">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; flex-direction:column;">
+                <span class="card-title" style="font-size:14px; letter-spacing:1px;">🛸 RAYOS X PATRIMONIAL</span>
+                <span style="font-size:9px; color:#666;">TOCA LOS ANILLOS PARA PROFUNDIZAR</span>
+            </div>
+            <button onclick="renderizarSunburstPatrimonio()" style="background:transparent; border:1px solid #333; color:#888; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">
+                <span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
+            </button>
+        </div>
+        <div style="position: relative; height: 400px; width: 100%; overflow: hidden;">
+            <div id="chart-Sunburst" style="width: 100%; height: 100%;"></div>
+            <div id="sunburst-center-info" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
+                <div style="font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px;">TOTAL</div>
+                <div id="sb-total-val" style="font-size: 16px; font-weight: 800; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.3);">---</div>
+            </div>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:5px; padding:15px; border-top:1px solid #222;">
+            <div style="text-align:center;"><span style="font-size:9px; color:#00F0FF; font-weight:bold;">LIQUIDEZ</span><div id="kpi-ratio-liq" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
+            <div style="text-align:center; border-left:1px solid #333;"><span style="font-size:9px; color:#F72585; font-weight:bold;">INVERSIÓN</span><div id="kpi-ratio-inv" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
+            <div style="text-align:center; border-left:1px solid #333;"><span style="font-size:9px; color:#39FF14; font-weight:bold;">CUSTODIA</span><div id="kpi-ratio-auto" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
+            <div style="text-align:center; border-left:1px solid #333;"><span style="font-size:9px; color:#FFD60A; font-weight:bold;">PROPIEDAD</span><div id="kpi-ratio-prop" style="font-size:13px; font-weight:800; color:#fff;">0%</div></div>
+        </div>
+    </div>
+<div class="master-card" style="margin-top: 20px; margin-bottom: 0;">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; flex-direction:column;">
+                <span class="card-title" style="font-size:14px; letter-spacing:1px;">🗺️ MAPA DE ACTIVOS</span>
+                <span style="font-size:9px; color:#666;">TOCA UN BLOQUE PARA FILTRAR</span>
+            </div>
+            <button onclick="window.renderTreeMap && window.renderTreeMap()" style="background:transparent; border:1px solid #333; color:#888; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">
+                <span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
+            </button>
+        </div>
+        <div id="treemap-filters" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-bottom:15px; padding:0 10px;"></div>
+        <div id="chart-TreeMap" style="width:100%; height:380px; user-select:none; touch-action:pan-y;"></div>
+    </div>
+    </div>
+    <div class="master-card" style="margin-top: 20px; margin-bottom: 20px;">
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; flex-direction:column;">
+                <span class="card-title" style="font-size:14px; letter-spacing:1px;">📈 EVOLUCIÓN DEL PATRIMONIO</span>
+                <span style="font-size:9px; color:#666;">HISTÓRICO ACUMULADO</span>
+            </div>
+            <button onclick="window.actualizarDashboard && window.actualizarDashboard()" style="background:transparent; border:1px solid #333; color:#888; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">
+                <span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
+            </button>
+        </div>
+        <div style="width: 100%; height: 280px; position: relative;">
+            <div id="chartPatrimonio" style="width: 100%; height: 100%;"></div>
+        </div>
+    </div>
+
+</div>  <!-- cierre subview-patrimonio-balance -->
+
+<div id="subview-patrimonio-cartera" ...>
+</div>
+    
+    <div id="subview-patrimonio-cartera" class="patrimonio-subview" style="display: none;">
+
+        <!-- TARJETA 1: MI CARTERA (copia exacta de la tarjeta de inicio) -->
+        <div class="master-card" style="margin-top: 10px; border-color: rgba(0,184,255,0.2); background: rgba(5,8,15,0.9); border-radius: 18px; padding: 18px 16px 14px 16px;">
+
+            <!-- CABECERA: título + botones LIVE -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <span style="font-size:10px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.4);">📈 MI CARTERA</span>
+                <button id="btn-precios-live" onclick="window.actualizarPreciosAutomatico && window.actualizarPreciosAutomatico()"
+                    style="background:rgba(0,184,255,0.1); border:1px solid rgba(0,184,255,0.35); color:#00B8FF; padding:3px 10px; border-radius:20px; font-size:9px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                    <span id="precios-live-icon">⚡</span> LIVE
+                </button>
+            </div>
+
+            <!-- FILA 1: VALOR INVERTIDO + VALOR DE MERCADO -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                <div style="background:rgba(0,184,255,0.05); border:1px solid rgba(0,184,255,0.15); border-radius:14px; padding:14px 10px; text-align:center;">
+                    <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(0,184,255,0.6); margin-bottom:6px;">VALOR INVERTIDO</span>
+                    <span id="dash-cartera-coste2" style="font-size:20px; font-weight:900; color:#00B8FF; letter-spacing:-0.5px;">---</span>
+                </div>
+                <div style="background:rgba(0,184,255,0.05); border:1px solid rgba(0,184,255,0.15); border-radius:14px; padding:14px 10px; text-align:center;">
+                    <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(0,184,255,0.6); margin-bottom:6px;">VALOR MERCADO</span>
+                    <span id="dash-cartera-valor2" style="font-size:20px; font-weight:900; color:#00B8FF; letter-spacing:-0.5px;">---</span>
+                </div>
+            </div>
+
+            <!-- FILA 2: PLUSVALÍA LATENTE + RENTABILIDAD -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:14px 10px; text-align:center;">
+                    <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:6px;">PLUSVALÍA LATENTE</span>
+                    <span id="dash-cartera-pnl2" style="font-size:20px; font-weight:900; color:#39FF14; letter-spacing:-0.5px;">---</span>
+                </div>
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:14px 10px; text-align:center;">
+                    <span style="display:block; font-size:9px; font-weight:900; letter-spacing:1.5px; text-transform:uppercase; color:rgba(255,255,255,0.35); margin-bottom:6px;">RENTABILIDAD</span>
+                    <span id="dash-cartera-rent2" style="font-size:20px; font-weight:900; color:#39FF14; letter-spacing:-0.5px;">---</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- TARJETA 2: DISTRIBUCIÓN DE CARTERA (donut) -->
+        <div class="master-card" style="margin-top: 15px;">
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; flex-direction:column;">
+                    <span class="card-title" style="font-size:14px; letter-spacing:1px;">🍩 DISTRIBUCIÓN DE CARTERA</span>
+                    <span style="font-size:9px; color:#666;">PESO DE CADA TIPO DE ACTIVO</span>
+                </div>
+                <button onclick="window.renderizarDonutCartera && window.renderizarDonutCartera()" style="background:transparent; border:1px solid #333; color:#888; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">
+                    <span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
+                </button>
+            </div>
+            <div style="position:relative; width:100%; height:280px;">
+                <div id="chart-cartera-donut" style="width:100%; height:100%;"></div>
+                <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none;">
+                    <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px;">TOTAL</div>
+                    <div id="cartera-donut-val" style="font-size:15px; font-weight:800; color:#fff;">---</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TARJETA 3: EVOLUCIÓN HISTÓRICA -->
+        <div id="card-evol-cartera" class="master-card" style="margin-top: 15px; margin-bottom: 20px; display:none;">
+            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; flex-direction:column;">
+                    <span class="card-title" style="font-size:14px; letter-spacing:1px;">📈 EVOLUCIÓN HISTÓRICA</span>
+                    <span style="font-size:9px; color:#666;">VALOR DE MERCADO VS COSTE</span>
+                </div>
+                <button onclick="window.renderizarEvolCartera && window.renderizarEvolCartera()" style="background:transparent; border:1px solid #333; color:#888; border-radius:4px; padding:2px 6px; font-size:10px; cursor:pointer;">
+                    <span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
+                </button>
+            </div>
+            <div id="evol-stats" style="display:none; gap:0; padding:10px 0 4px 0; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:8px;"></div>
+            <div style="width:100%; height:260px;">
+                <div id="chart-cartera-evol" style="width:100%; height:100%;"></div>
+            </div>
+        </div>
+
+        <!-- TARJETA 4: DESGLOSE DE ACTIVOS -->
+        <div class="master-card" style="margin-top: 15px; margin-bottom: 20px;">
+            <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                <span class="card-title" style="font-size: 12px; color: #aaa;">📊 DESGLOSE DE ACTIVOS</span>
+            </div>
+            <div id="contenedor-tabla-inversiones" style="padding-top: 10px; overflow-x: auto;"></div>
+        </div>
+
+    </div>
 </div>
 
 <!-- ═══ MODAL EXCLUSIVO: POSICIÓN DE CARTERA ═══ -->
@@ -2550,7 +2597,7 @@ DN
     </button>
   </div>
 </div>
-<div id="tab-movs" class="view-section">
+<div id="tab-diario" class="view-section">
     
     <div id="fab-overlay" onclick="toggleFiltros('cerrar')"></div>
 
@@ -2653,67 +2700,111 @@ Movimientos Fijos
 </div>
 </div>
 </div>
-<div id="tab-presupuesto" class="view-section">
-<div style="padding: 5px 5px 15px 5px;">
-<h2 style="color: white; font-size: 24px; margin: 0; font-weight: 900; letter-spacing: -0.5px;">Mi Presupuesto</h2>
-<p style="color: #FFFFFF; font-size: 13px; margin-top: 4px; font-weight: 500;">Control de gasto y proyecciones</p>
-</div>
-<div class="master-card" id="card-presupuesto-2026" style="margin-top: 0px; border-color: rgba(255,214,10,0.3); box-shadow: 0 8px 25px rgba(255,214,10,0.08);">
-<div class="card-header">
-<span class="card-title" style="color: var(--c-warning)!important" id="titulo-presupuesto-anio">📊 PRESUPUESTO 2026</span>
-<span style="font-size:10px; color:#666; font-weight:600;" id="presupuesto-subtitulo">Basado en historial 2025</span>
-</div>
-<div id="presupuesto-2026-content">
-<div style="text-align:center; padding:20px; color:#555; font-size:12px;">Cargando datos del presupuesto...</div>
-</div>
-</div>
-<div class="master-card" id="card-comparativa-anos" style="margin-top: 20px; margin-bottom: 20px; border-color: rgba(0,184,255,0.3); box-shadow: 0 8px 25px rgba(0,184,255,0.08);">
-<div class="card-header">
-<span class="card-title" style="color: var(--c-primary)!important">⚡ 2025 vs 2026</span>
-<span style="font-size:10px; color:#666; font-weight:600;" id="comparativa-subtitulo">Ritmo de gasto ajustado al tiempo</span>
-</div>
-<div id="comparativa-anos-content">
-<div style="text-align:center; padding:20px; color:#555; font-size:12px;">Cargando datos de la comparativa...</div>
-</div>
-</div> <div class="master-card" style="margin-top: 15px; border-color: rgba(191, 90, 242, 0.3); box-shadow: 0 8px 25px rgba(191, 90, 242, 0.08); position: relative; z-index: 10;">
-<div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-direction: row; gap: 10px;">
-<div style="text-align: left; flex: 1;">
-<span class="card-title" style="color: var(--c-accent)!important; display: block; margin-bottom: 2px;">⚖️ CUENTAS CLARAS</span>
-<span style="font-size:10px; color:#666; font-weight:600;">Ajuste de gastos comunes (DN)</span>
-</div>
-<input type="month" id="mes-cuentas-claras" style="background: rgba(191, 90, 242, 0.15); border: 1px solid var(--c-accent); color: white; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; font-family: 'Inter', sans-serif; color-scheme: dark; outline: none; cursor: pointer; position: relative; z-index: 50;" onchange="window.actualizarCuentasClaras()">
-</div>
-<div style="display:flex; justify-content:space-between; align-items:center; padding: 10px;">
-<div style="text-align:center; padding: 8px 15px; border-radius: 12px; cursor: pointer; transition: background 0.2s;" onclick="window.mostrarDesgloseCuentas('D')" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='transparent'">
-<span style="font-size:10px; color:var(--theme-d, #0A84FF); font-weight:bold;">D HA PAGADO</span>
-<div id="d-pago-comun" style="font-size:18px; font-weight:800; color:#fff;">0,00 €</div>
-<div style="font-size: 9px; color: #888; margin-top: 4px;">👆 Ver desglose</div>
-</div>
-<div style="text-align:center; padding: 8px 15px; border-radius: 12px; cursor: pointer; transition: background 0.2s;" onclick="window.mostrarDesgloseCuentas('N')" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='transparent'">
-<span style="font-size:10px; color:var(--theme-n, #FF453A); font-weight:bold;">N HA PAGADO</span>
-<div id="n-pago-comun" style="font-size:18px; font-weight:800; color:#fff;">0,00 €</div>
-<div style="font-size: 9px; color: #888; margin-top: 4px;">👆 Ver desglose</div>
-</div>
-</div>
-<div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; text-align: center; margin-top: 5px; border: 1px solid #222; cursor: pointer; transition: background 0.2s;" onclick="window.mostrarDesgloseAmbos()" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='rgba(0,0,0,0.3)'">
-<span id="resultado-cuentas-claras" style="font-size:14px; font-weight:900; color:#fff;">Nadie debe nada</span>
-<div style="font-size: 9px; color: #888; margin-top: 4px;">👆 Ver balance conjunto</div>
-</div>
-</div>
-<div id="modal-desglose-cuentas" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center; padding: 20px;">
-<div style="background: var(--surface-light, #1e1e1e); border: 1px solid var(--border-color, #333); border-radius: 16px; width: 100%; max-width: 400px; max-height: 75vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.6); transform: scale(0.95); opacity: 0; transition: all 0.2s ease;" id="modal-desglose-contenido">
-<div style="padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
-<h3 id="titulo-desglose" style="margin: 0; color: #fff; font-size: 16px; font-weight: 700;">Desglose</h3>
-<span class="material-icons" style="color: #888; cursor: pointer; font-size: 24px; padding: 4px; border-radius: 50%; background: rgba(255,255,255,0.05);" onclick="window.cerrarDesgloseCuentas()">close</span>
-</div>
-<div id="lista-desglose" style="padding: 15px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px;">
-</div>
-<div style="padding: 15px 20px; border-top: 1px solid rgba(255,255,255,0.05); text-align: right; background: rgba(0,0,0,0.2); border-radius: 0 0 16px 16px;">
-<span style="font-size: 12px; color: #888; margin-right: 10px; font-weight: 600;">TOTAL DEL MES:</span>
-<span id="total-desglose" style="font-size: 20px; font-weight: 900; color: #fff;">0,00 €</span>
-</div>
-</div>
-</div>
+<div id="tab-presupuestos" class="view-section">
+    
+    <div style="padding: 5px 5px 15px 5px;">
+        <h2 style="color: white; font-size: 24px; margin: 0; font-weight: 900; letter-spacing: -0.5px;">Mi Presupuesto y Salud</h2>
+        <p style="color: #FFFFFF; font-size: 13px; margin-top: 4px; font-weight: 500;">Control de gasto, reparto de comunes y salud financiera</p>
+    </div>
+
+    <div class="master-card" id="card-presupuesto-2026" style="margin-top: 0px; border-color: rgba(255,214,10,0.3); box-shadow: 0 8px 25px rgba(255,214,10,0.08);">
+        <div class="card-header">
+            <span class="card-title" style="color: var(--c-warning)!important" id="titulo-presupuesto-anio">📊 PRESUPUESTO 2026</span>
+            <span style="font-size:10px; color:#666; font-weight:600;" id="presupuesto-subtitulo">Basado en historial 2025</span>
+        </div>
+        <div id="presupuesto-2026-content">
+            <div style="text-align:center; padding:20px; color:#555; font-size:12px;">Cargando datos del presupuesto...</div>
+        </div>
+    </div>
+
+    <div class="master-card" id="card-comparativa-anos" style="margin-top: 20px; margin-bottom: 20px; border-color: rgba(0,184,255,0.3); box-shadow: 0 8px 25px rgba(0,184,255,0.08);">
+        <div class="card-header">
+            <span class="card-title" style="color: var(--c-primary)!important">⚡ 2025 vs 2026</span>
+            <span style="font-size:10px; color:#666; font-weight:600;" id="comparativa-subtitulo">Ritmo de gasto ajustado al tiempo</span>
+        </div>
+        <div id="comparativa-anos-content">
+            <div style="text-align:center; padding:20px; color:#555; font-size:12px;">Cargando datos de la comparativa...</div>
+        </div>
+    </div>
+
+    <div class="master-card" id="card-cuentas-claras" style="margin-top: 15px; border-color: rgba(191, 90, 242, 0.3); box-shadow: 0 8px 25px rgba(191, 90, 242, 0.08); position: relative; z-index: 10;">
+        <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-direction: row; gap: 10px;">
+            <div style="text-align: left; flex: 1;">
+                <span class="card-title" style="color: var(--c-accent)!important; display: block; margin-bottom: 2px;">⚖️ CUENTAS CLARAS</span>
+                <span style="font-size:10px; color:#666; font-weight:600;">Ajuste de gastos comunes (DN)</span>
+            </div>
+            <input type="month" id="mes-cuentas-claras" style="background: rgba(191, 90, 242, 0.15); border: 1px solid var(--c-accent); color: white; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; font-family: 'Inter', sans-serif; color-scheme: dark; outline: none; cursor: pointer; position: relative; z-index: 50;" onchange="window.actualizarCuentasClaras()">
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding: 10px;">
+            <div style="text-align:center; padding: 8px 15px; border-radius: 12px; cursor: pointer; transition: background 0.2s;" onclick="window.mostrarDesgloseCuentas('D')" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:10px; color:var(--theme-d, #0A84FF); font-weight:bold;">D HA PAGADO</span>
+                <div id="d-pago-comun" style="font-size:18px; font-weight:800; color:#fff;">0,00 €</div>
+                <div style="font-size: 9px; color: #888; margin-top: 4px;">👆 Ver desglose</div>
+            </div>
+            <div style="text-align:center; padding: 8px 15px; border-radius: 12px; cursor: pointer; transition: background 0.2s;" onclick="window.mostrarDesgloseCuentas('N')" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:10px; color:var(--theme-n, #FF453A); font-weight:bold;">N HA PAGADO</span>
+                <div id="n-pago-comun" style="font-size:18px; font-weight:800; color:#fff;">0,00 €</div>
+                <div style="font-size: 9px; color: #888; margin-top: 4px;">👆 Ver desglose</div>
+            </div>
+        </div>
+        <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; text-align: center; margin-top: 5px; border: 1px solid #222; cursor: pointer; transition: background 0.2s;" onclick="window.mostrarDesgloseAmbos()" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='rgba(0,0,0,0.3)'">
+            <span id="resultado-cuentas-claras" style="font-size:14px; font-weight:900; color:#fff;">Nadie debe nada</span>
+            <div style="font-size: 9px; color: #888; margin-top: 4px;">👆 Ver balance conjunto</div>
+        </div>
+    </div>
+
+    <div style="margin: 30px 0 20px 0; border-bottom: 1px dashed rgba(255,255,255,0.12);"></div>
+
+    <div class="master-card orange-card" id="card-kpi-libertad" style="margin-top: 15px;">
+        <div class="patri-breakdown" style="background:transparent; border:none; margin:0; padding:0;">
+            <div class="patri-col" style="border-right: 1px solid #333;"><span class="kpi-label"><span class="material-icons freedom-icon">shield</span> COBERTURA</span><span class="orange-val" id="d-cobertura">0.0 Meses</span></div>
+            <div class="patri-col"><span class="kpi-label"><span class="material-icons freedom-icon">flag</span> LIBERTAD</span><span class="green-val-freedom" id="d-libertad">0.00%</span></div>
+        </div>
+    </div>
+
+    <button onclick="abrirSimulador()" style="width: 100%; margin-top: 15px; background: rgba(255, 214, 10, 0.1); border: 1px solid var(--c-warning); color: var(--c-warning); padding: 12px; border-radius: 12px; font-weight: 900; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; font-family: 'Inter', sans-serif; letter-spacing: 1px; transition: transform 0.2s;">
+        <span class="material-icons">rocket_launch</span> SIMULAR GASTO (MÁQUINA DEL TIEMPO)
+    </button>
+    <div id="banner-simulacion" style="display:none; background: #FF2E4D; color: white; padding: 12px; text-align: center; font-weight: bold; border-radius: 12px; margin-top: 15px; cursor: pointer; box-shadow: 0 0 15px rgba(255,46,77,0.4);" onclick="cerrarSimulador()">
+        ⚠️ MODO SIMULACIÓN ACTIVO: -0 € (Toca para cancelar)
+    </div>
+
+    <div class="master-card green-card" style="margin-top: 20px; margin-bottom: 20px;">
+        <div class="card-header" style="flex-direction: column; align-items: center;">
+            <span class="card-title" style="color: var(--c-success)!important">SCORING FINANCIERO</span>
+            <div id="scoring-perfil-info" style="font-size:10px; color:#FFFFFF; margin-top:4px; font-weight:600;"></div>
+        </div>
+        <div style="position: relative; height: 380px; width: 100%;">
+            <div id="chartRadar" style="width:100%; height:400px;"></div>
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; margin-top: 15px;">
+                <div id="score-total" style="font-size: 24px; font-weight: 900; color: #fff; text-shadow: 0 0 15px rgba(57, 255, 20, 0.5);">---</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="master-card" style="margin-top: 0px; margin-bottom: 30px; border-color: #BF5AF2; box-shadow: 0 8px 25px rgba(191, 90, 242, 0.1);">
+        <div class="card-header" style="border-bottom: none;">
+            <span class="card-title" style="color: #BF5AF2!important">🚀 PROYECTOR DE JUBILACIÓN</span>
+            <div style="font-size:11px; color:#FFFFFF; text-align:center; margin-top:5px; font-weight:600;" id="fire-subtitle">Calculando intersección de libertad...</div>
+        </div>
+        <div class="chart-container visible" style="width: 100%; height: 260px; border: none; background: transparent; box-shadow: none; padding: 0; margin: 0;">
+            <div id="chart-FIRE" style="width: 100%; height: 100%;"></div>
+        </div>
+    </div>
+
+    <div id="modal-desglose-cuentas" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 99999; justify-content: center; align-items: center; padding: 20px;">
+        <div style="background: var(--surface-light, #1e1e1e); border: 1px solid var(--border-color, #333); border-radius: 16px; width: 100%; max-width: 400px; max-height: 75vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.6); transform: scale(0.95); opacity: 0; transition: all 0.2s ease;" id="modal-desglose-contenido">
+            <div style="padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
+                <h3 id="titulo-desglose" style="margin: 0; color: #fff; font-size: 16px; font-weight: 700;">Desglose</h3>
+                <span class="material-icons" style="color: #888; cursor: pointer; font-size: 24px; padding: 4px; border-radius: 50%; background: rgba(255,255,255,0.05);" onclick="window.cerrarDesgloseCuentas()">close</span>
+            </div>
+            <div id="lista-desglose" style="padding: 15px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px;"></div>
+            <div style="padding: 15px 20px; border-top: 1px solid rgba(255,255,255,0.05); text-align: right; background: rgba(0,0,0,0.2); border-radius: 0 0 16px 16px;">
+                <span style="font-size: 12px; color: #888; margin-right: 10px; font-weight: 600;">TOTAL DEL MES:</span>
+                <span id="total-desglose" style="font-size: 20px; font-weight: 900; color: #fff;">0,00 €</span>
+            </div>
+        </div>
+    </div>
 </div>
 <div id="tab-ajustes" class="view-section">
 <div style="padding: 20px 20px 0 20px;">
@@ -2740,6 +2831,49 @@ Movimientos Fijos
 </button>
 <div id="info-ultimo-backup" style="font-size:10px; color:#666; margin-top:10px; font-style:italic;">No se ha hecho backup hoy</div>
 </div>
+</div>
+<div class="master-card" style="margin-top: 25px; border-color: rgba(10,132,255,0.4); background: linear-gradient(180deg, rgba(10,132,255,0.05) 0%, rgba(0,0,0,0.4) 100%);">
+    <div class="card-header">
+        <span class="card-title" style="color: var(--c-primary)!important">⚙️ PERSONALIZAR INTERFAZ</span>
+        <span style="font-size: 10px; color: #888; font-weight: 600;">Ajustes por cada perfil</span>
+    </div>
+    <div style="padding: 5px 15px 15px 15px;">
+        <p style="font-size: 11px; color: #aaa; margin: 0 0 15px 0; line-height: 1.4;">Elige qué elementos deseas ver u ocultar cuando tu perfil esté seleccionado.</p>
+        
+        <label style="font-size: 10px; color: var(--c-primary); font-weight: 700; display: block; margin-bottom: 5px; text-transform: uppercase;">Pestaña de inicio por defecto</label>
+        <select id="cfg-tab-inicial" onchange="window.UserConfigManager.guardar()" style="width: 100%; background: rgba(255,255,255,0.08); border: 1px solid #444; color: white; padding: 10px; border-radius: 8px; font-size: 13px; font-weight: 600; outline: none; margin-bottom: 15px; color-scheme: dark;">
+            <option value="inicio">🏠 Inicio / Dashboard</option>
+            <option value="diario">📖 Diario / Movimientos</option>
+            <option value="recurrentes">⏳ Recurrentes / Agenda</option>
+            <option value="presupuestos">📊 Presupuestos y Salud</option>
+            <option value="patrimonio">💼 Patrimonio e Inversiones</option>
+        </select>
+
+        <label style="font-size: 10px; color: var(--c-primary); font-weight: 700; display: block; margin-bottom: 8px; text-transform: uppercase;">Pestañas del menú inferior</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="pestanas" data-clave="inicio" onchange="window.UserConfigManager.guardar()"> Inicio</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="pestanas" data-clave="diario" onchange="window.UserConfigManager.guardar()"> Diario</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="pestanas" data-clave="recurrentes" onchange="window.UserConfigManager.guardar()"> Recurrentes</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="pestanas" data-clave="presupuestos" onchange="window.UserConfigManager.guardar()"> Presupuestos</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="pestanas" data-clave="patrimonio" onchange="window.UserConfigManager.guardar()"> Patrimonio</label>
+        </div>
+
+        <label style="font-size: 10px; color: var(--c-primary); font-weight: 700; display: block; margin-bottom: 8px; text-transform: uppercase;">Gráficos Analíticos activos</label>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="graficos" data-clave="sankey" onchange="window.UserConfigManager.guardar()"> Ríos de Dinero (Sankey - Inicio)</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="graficos" data-clave="radar" onchange="window.UserConfigManager.guardar()"> Radar de Scoring (Presupuestos)</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="graficos" data-clave="fire" onchange="window.UserConfigManager.guardar()"> Proyector Jubilación (FIRE)</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="graficos" data-clave="sunburst" onchange="window.UserConfigManager.guardar()"> Distribución Macro (Sunburst)</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="graficos" data-clave="treemap" onchange="window.UserConfigManager.guardar()"> Mapa de Activos (TreeMap)</label>
+        </div>
+
+        <label style="font-size: 10px; color: var(--c-primary); font-weight: 700; display: block; margin-bottom: 8px; text-transform: uppercase;">Tarjetas y Cuadros de Mando</label>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="tarjetas" data-clave="kpiLiquidez" onchange="window.UserConfigManager.guardar()"> Resumen de Liquidez Efectiva</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="tarjetas" data-clave="kpiAlertas" onchange="window.UserConfigManager.guardar()"> Alertas Urgentes de Recibos (15 días)</label>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#fff; cursor:pointer;"><input type="checkbox" class="control-config-pwa" data-tipo="tarjetas" data-clave="cuentasClaras" onchange="window.UserConfigManager.guardar()"> Módulo de Cuentas Claras (DN)</label>
+        </div>
+    </div>
 </div>
  <!-- 📌 AÑADIR AQUÍ EL CAMBIO DE PIN -->
     <h3 style="color:var(--c-primary); margin: 20px 0 10px 0; text-transform:uppercase; letter-spacing:1px;">Seguridad</h3>
@@ -2768,33 +2902,32 @@ Movimientos Fijos
   </div> <!-- fin del padding-wrapper -->
 </div> <!-- fin #tab-ajustes -->
 <nav class="bottom-nav">
-<button class="nav-item active" id="nav-inicio" onclick="irPestana('inicio');">
-<span class="material-icons">dashboard</span> Inicio
-</button>
-<button class="nav-item" id="nav-movs" onclick="irPestana('movs');">
-<span class="material-icons">feed</span> Diario
-</button>
-<div class="nav-center-slot">
-    <div class="fab-container">
-        <button id="fab-main" onclick="accionFab('pagos')" title="Nuevo Gasto">
-            <span class="material-icons">add</span>
-        </button>
-    </div>
-</div>
-<button class="nav-item" id="nav-patri" onclick="irPestana('patri');">
-<span class="material-icons">account_balance</span> Patrim.
-</button>
-<button class="nav-item" id="nav-salud" onclick="irPestana('salud');">
-<span class="material-icons">favorite</span> Salud
-</button>
-<button class="nav-item" id="nav-inversiones" onclick="irPestana('inversiones'); if(typeof window.renderizarCartera==='function') window.renderizarCartera();">
-<span class="material-icons">candlestick_chart</span> Cartera
-</button>
-<button class="nav-item" id="nav-presupuesto" onclick="irPestana('presupuesto')">
-<span class="material-icons">pie_chart</span>
-Presup.
-</button>
+    <button id="nav-inicio" class="nav-item active" onclick="irPestana('inicio')">
+        <span class="material-icons">dashboard</span>
+        <span>Inicio</span>
+    </button>
+    <button id="nav-diario" class="nav-item" onclick="irPestana('diario')">
+        <span class="material-icons">receipt_long</span>
+        <span>Diario</span>
+    </button>
+    <button id="nav-recurrentes" class="nav-item" onclick="irPestana('recurrentes')">
+        <span class="material-icons">update</span>
+        <span>Recurrentes</span>
+    </button>
+    <button id="nav-presupuestos" class="nav-item" onclick="irPestana('presupuestos')">
+        <span class="material-icons">pie_chart</span>
+        <span>Presupuestos</span>
+    </button>
+    <button id="nav-patrimonio" class="nav-item" onclick="irPestana('patrimonio')">
+        <span class="material-icons">account_balance_wallet</span>
+        <span>Patrimonio</span>
+    </button>
+    <button id="nav-ajustes" class="nav-item" onclick="irPestana('ajustes')">
+        <span class="material-icons">settings</span>
+        <span>Ajustes</span>
+    </button>
 </nav>
+
 <div id="modal-extracto">
 <div class="cockpit-header" style="border-bottom: 1px solid #1c1c1e; padding: 10px 15px; min-height: auto;">
 <button class="btn-close-cockpit" onclick="cerrarModalExtracto()" style="width: 28px; height: 28px; font-size: 14px;">✕</button>
@@ -2913,9 +3046,28 @@ GUARDAR OPERACIÓN <span class="material-icons">rocket_launch</span>
 </div>
 </div>
 </div>
+<div class="nav-center-slot">
+        <div class="fab-container">
+            <button id="fab-main" onclick="accionFab('pagos')">
+                <span class="material-icons">add</span>
+            </button>
+        </div>
+    </div>
 </template>
 <script>
-
+// ── FILTRO DEFENSIVO CONTRA ERRORES FANTASMA DE EXTENSIONES ─────────────────
+window.addEventListener('unhandledrejection', function(event) {
+    if (event.reason && event.reason.message) {
+        const msg = event.reason.message;
+        // Interceptamos el error exacto del canal de mensajes cerrado por extensiones
+        if (msg.includes('A listener indicated an asynchronous response') || 
+            msg.includes('message channel closed before a response was received')) {
+            event.preventDefault(); // Evita que el error salte a la consola
+            return;
+        }
+    }
+});
+// ────────────────────────────────────────────────────────────────────────────
 // ============================================================
 // MODELO FINANCIERO CENTRAL
 // Se define al inicio para que cualquier carga local/nube tenga
@@ -3288,6 +3440,18 @@ window.FinanceModel = (function() {
         };
     }
 
+    // Formateador de moneda EUR (de-DE, 2 decimales) expuesto como FinanceModel.format()
+    const _fmtEUR = new Intl.NumberFormat('de-DE', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+    function formatMoney(valor) {
+        const num = parseMoney(valor);
+        return _fmtEUR.format(num);
+    }
+
     return {
         parseMoney,
         redondearDinero,
@@ -3295,6 +3459,7 @@ window.FinanceModel = (function() {
         parseFecha,
         fechaISO,
         getCampo,
+        format: formatMoney,
         texto: { limpiar: limpiarTexto, nuclear: nuclearTexto, sinAcentos: quitarAcentos },
         cuentas: { buscarInfo: buscarInfoCuenta, detectarDueno: detectarDuenoCuenta },
         movimientos: { desdeFila: movimientoDesdeFila, normalizarTipo: normalizarTipoMovimiento },
@@ -3412,21 +3577,24 @@ window.AppRuntime = (function() {
         });
     }
     function renderVisibleTab() {
-        const tab = activeTab();
-        if (tab === 'movs' && typeof window.renderizar === 'function') window.renderizar();
-        if (tab === 'patri') {
-            if (typeof window.actualizarPatrimonio === 'function') window.actualizarPatrimonio();
-            if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
-            if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
-            if (typeof window.renderizarGraficoEvolucion === 'function') window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos || []);
-        }
-        if (tab === 'inversiones') {
-            if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-            if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
-        }
-        if (tab === 'presupuesto' && typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
-        if (tab === 'recurrentes' && typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
+    const tab = activeTab();
+    // 'movs' pasa a ser 'diario'
+    if (tab === 'diario' && typeof window.renderizar === 'function') window.renderizar();
+
+    // Fusión estratégica: si está en patrimonio, despierta ambas sub-vistas
+    if (tab === 'patrimonio') {
+        if (typeof window.actualizarPatrimonio === 'function') window.actualizarPatrimonio();
+        if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
+        if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
+        if (typeof window.renderizarGraficoEvolucion === 'function') window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos || []);
+        if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
+        if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
     }
+
+    // 'presupuesto' pasa a plural 'presupuestos'
+    if (tab === 'presupuestos' && typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
+    if (tab === 'recurrentes' && typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
+}
     function refreshAfterDataLoaded() {
         dashboardSignature = null;
         scheduleDashboard(true);
@@ -3505,11 +3673,13 @@ delete btn.dataset.textoOriginal;
 window.ChartLifecycle = (function() {
     // Registro de gráficos activos y sus contenedores correspondientes por pestaña
     const registry = {
-        'inicio': ['chart-Sankey'],
-        'patri':  ['chart-Sunburst', 'chart-TreeMap', 'chartPatrimonio'],
-        'salud':  ['chartRadar', 'chart-FIRE'],
-        'inversiones': ['chart-cartera-donut', 'chart-cartera-evol']
-    };
+    'inicio': ['chart-Sankey'],
+    'diario': [],
+    'recurrentes': [],
+    'presupuestos': ['chartRadar', 'chart-FIRE'], // Salud financiera ahora vive aquí
+    'patrimonio': ['chart-Sunburst', 'chart-TreeMap', 'chartPatrimonio', 'chart-cartera-donut', 'chart-cartera-evol'], // Fusionados todos los de largo plazo
+    'ajustes': []
+};
     return {
         // Elimina de RAM todo lo que no pertenezca a la pestaña actual
         limpiarMemoria: function(tabDestino) {
@@ -3538,12 +3708,12 @@ window.ChartLifecycle = (function() {
         },
         // Redibuja solo los gráficos de la pestaña activa si hay datos
         despertarGraficos: function(tabActiva) {
-            // Pequeño delay para dejar que el DOM respire tras la animación de pestaña
+            // Pequeño delay para dejar que el DOM respire tras la navegación gummy
             setTimeout(() => {
                 if (tabActiva === 'inicio') {
                     if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
                     else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
-                } else if (tabActiva === 'patri') {
+                } else if (tabActiva === 'patrimonio') {
                     if (typeof window.actualizarPatrimonio === 'function') window.actualizarPatrimonio();
                     if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
                     if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
@@ -3551,16 +3721,10 @@ window.ChartLifecycle = (function() {
                     if (domEvo && typeof window.renderizarGraficoEvolucion === 'function') {
                         window.renderizarGraficoEvolucion(window._datosEvoCache || window.datos || []);
                     }
-                } else if (tabActiva === 'salud') {
-                    if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
-                    else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
-                } else if (tabActiva === 'inversiones') {
-                    if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-                    if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
-                } else if (tabActiva === 'presupuesto') {
+                } else if (tabActiva === 'presupuestos') {
                     if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
                     if (typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
-                } else if (tabActiva === 'movs') {
+                } else if (tabActiva === 'diario') {
                     if (typeof window.renderizar === 'function') window.renderizar();
                 } else if (tabActiva === 'recurrentes') {
                     if (typeof window.cargarVistaRecurrentes === 'function') window.cargarVistaRecurrentes();
@@ -3570,55 +3734,118 @@ window.ChartLifecycle = (function() {
         }
     };
 })();
-window.irPestana = function(p) {
-    // 1. Guardar estado (Memoria de elefante)
-    localStorage.setItem('aidanai_last_tab', p);
-
-    // 2. Limpieza agresiva de RAM antes de cambiar (Evita fugas de memoria ECharts)
-    if (window.ChartLifecycle && typeof window.ChartLifecycle.limpiarMemoria === 'function') {
-        window.ChartLifecycle.limpiarMemoria(p);
-    }
-
-    // 3. UI: Switch visual de pestañas (Apagar todo primero)
-    document.querySelectorAll('.view-section').forEach(e => e.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(e => e.classList.remove('active'));
-
-    // 4. UI: Encender la pestaña y el botón del menú destino
-    const tab = document.getElementById('tab-' + p);
-    if (tab) tab.classList.add('active');
-    const nav = document.getElementById('nav-' + p);
-    if (nav) nav.classList.add('active');
-
-    // 5. UI: Control total de los Botones Flotantes (FAB)
-    const overlay = document.getElementById('fab-overlay');
+// CONTROLADOR INTERNO DE SUB-VISTAS DE PATRIMONIO
+window.cambiarSubVistaPatrimonio = function(subVista) {
+    // 1. Ocultar sub-vistas
+    document.querySelectorAll('.patrimonio-subview').forEach(view => {
+        view.style.display = 'none';
+    });
+    // 2. Mostrar la elegida
+    document.getElementById(`subview-patrimonio-${subVista}`).style.display = 'block';
     
-    // 6. MOTOR MÁGICO + MANAGER DE MEMORIA
-    // Usamos el setTimeout de 50ms para garantizar que el DOM ya tiene 
-    // su ancho/alto final antes de que ECharts intente dibujarse.
-    setTimeout(() => {
-        // Forzamos un reflow para ajustar contenedores por si acaso
-        window.dispatchEvent(new Event('resize'));
+    // 3. Mutar estilos estéticos de los botones superiores
+    const btnBalance = document.getElementById('subnav-balance');
+    const btnCartera = document.getElementById('subnav-cartera');
+    if (subVista === 'balance') {
+        btnBalance.style.background = 'rgba(255,255,255,0.1)';
+        btnBalance.style.color = '#fff';
+        btnCartera.style.background = 'transparent';
+        btnCartera.style.color = '#888';
+    } else {
+        btnCartera.style.background = 'rgba(255,255,255,0.1)';
+        btnCartera.style.color = '#fff';
+        btnBalance.style.background = 'transparent';
+        btnBalance.style.color = '#888';
+    }
+    
+    // 4. Forzar redibujado de gráficos para evitar deformaciones en ECharts
+    setTimeout(() => { 
+        // Disparador general del navegador
+        window.dispatchEvent(new Event('resize')); 
         
-        // Si el Manager Moderno de Gráficos existe, lo usamos
-        if (window.ChartLifecycle && typeof window.ChartLifecycle.despertarGraficos === 'function') {
-            window.ChartLifecycle.despertarGraficos(p);
-        } else {
-            // 🔥 Fallback de Seguridad: Unificado bajo el objeto window
-            if (p === 'patri') {
-                if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
-                if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
-            } else if (p === 'inversiones') {
-                if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
-            } else if (p === 'presupuesto') {
-                if (typeof window.calcularPresupuestoYComparativa === 'function') window.calcularPresupuestoYComparativa();
+        // 🚀 DETECTOR FINTECH: Si pasamos a "Cartera Activa", revivimos sus datos y gráficos
+        if (subVista === 'cartera') {
+            if (typeof window.renderizarCartera === 'function') {
+                window.renderizarCartera(); // Vuelve a pintar el desglose de activos y barras de peso
+            }
+            
+            // Forzar despertar explícito a los gráficos de la sub-vista Cartera
+            if (typeof echarts !== 'undefined') {
+                const donutDom = document.getElementById('chart-cartera-donut');
+                if (donutDom) {
+                    const donutChart = echarts.getInstanceByDom(donutDom);
+                    if (donutChart) donutChart.resize();
+                }
+                const evolDom = document.getElementById('chart-cartera-evol');
+                if (evolDom) {
+                    const evolChart = echarts.getInstanceByDom(evolDom);
+                    if (evolChart) evolChart.resize();
+                }
+                const treemapDom = document.getElementById('chart-TreeMap');
+                if (treemapDom) {
+                    const treemapChart = echarts.getInstanceByDom(treemapDom);
+                    if (treemapChart) treemapChart.resize();
+                }
+            }
+        } 
+        // 🚀 Si regresamos a "Balance Neto", aseguramos que despierten sus respectivos gráficos
+        else if (subVista === 'balance') {
+            if (typeof echarts !== 'undefined') {
+                const patriDom = document.getElementById('chartPatrimonio');
+                if (patriDom) {
+                    const patriChart = echarts.getInstanceByDom(patriDom);
+                    if (patriChart) patriChart.resize();
+                }
+                const sunburstDom = document.getElementById('chart-Sunburst');
+                if (sunburstDom) {
+                    const sunburstChart = echarts.getInstanceByDom(sunburstDom);
+                    if (sunburstChart) sunburstChart.resize();
+                }
             }
         }
-    }, 50);
-
-    // 7. UX: Volver arriba suavemente al cambiar de vista
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 60); // Ajustado a 60ms para dar margen completo a que el display del DOM sea efectivo
 };
-// --- FIN PERFORMANCE MANAGER ---
+window.irPestana = function(pestanaId) {
+    window._tabActiva = 'tab-' + pestanaId;
+    
+    // 1. Ocultar todas las pantallas principales del DOM
+    document.querySelectorAll('.view-section').forEach(e => {
+        e.classList.remove('active');
+    });
+    
+    // 2. Mostrar la pantalla seleccionada de forma nativa
+    const contenedorObjetivo = document.getElementById('tab-' + pestanaId);
+    if (contenedorObjetivo) {
+        contenedorObjetivo.classList.add('active');
+    }
+    
+    // 3. Apagar iluminación de todos los botones de la barra inferior
+    document.querySelectorAll('.bottom-nav button, .nav-btn, .nav-item').forEach(e => {
+        e.classList.remove('active');
+    });
+    
+    // 4. Iluminar el botón activo actual
+    const botonActivo = document.getElementById('nav-' + pestanaId);
+    if (botonActivo) {
+        botonActivo.classList.add('active');
+    }
+    
+    // 5. Cierre automático defensivo del panel de filtros lateral (si estuviera abierto)
+    const overlayFiltros = document.getElementById('filter-overlay');
+    if (overlayFiltros && overlayFiltros.classList.contains('active')) {
+        overlayFiltros.classList.remove('active');
+    }
+    
+    // 6. Lanzar de forma segura el ciclo de vida de los gráficos asignados a la pestaña
+    if (typeof window.ChartLifecycle !== 'undefined') {
+        window.ChartLifecycle.despertarGraficos(pestanaId);
+    }
+    
+    // 7. Notificar al programador de ejecuciones el cambio de escenario
+    if (typeof window.AppRuntime !== 'undefined' && window.AppRuntime.triggerRender) {
+        window.AppRuntime.triggerRender();
+    }
+};
 
 // ==========================================
 // 🔔 SISTEMA DE NOTIFICACIONES UNIFICADO (Y SEMÁFORO)
@@ -3926,6 +4153,25 @@ Object.defineProperty(window, 'filtroUsuarioActual', {
         // 3. Refresca la UI automáticamente (evento ya existente)
         if (window.UIEvents) {
             window.UIEvents.emitir('datos:actualizados');
+        }
+    },
+    configurable: true
+});
+// 🔄 SINCRONIZADOR DE MODO TRANSACCIÓN (Getter/Setter reactivo)
+Object.defineProperty(window, 'modoTransaccionActual', {
+    get() {
+        // Recupera el valor del estado global o una cadena vacía si no existe
+        return (window.AppState && window.AppState.modoTransaccion) || '';
+    },
+    set(nuevoModo) {
+        // 1. Actualiza el objeto de estado principal
+        if (window.AppState) {
+            window.AppState.modoTransaccion = nuevoModo;
+        }
+        
+        // 2. Refresca la UI si es necesario (ej: cambiar colores del botón principal)
+        if (window.UIEvents) {
+            window.UIEvents.emitir('ui:cambioModoTransaccion', nuevoModo);
         }
     },
     configurable: true
@@ -4575,7 +4821,7 @@ reader.readAsArrayBuffer(blob);
 // ==========================================
 // 🧠 PROCESADOR MAESTRO V7 + RECURRENTES (FUSIÓN)
 // ==========================================
-window.procesarLibroLeido = function(wb) {
+window.procesarLibroLeido = async function(wb) {
 if (typeof XLSX === 'undefined') {
     if (window.AppAssets && typeof window.AppAssets.xlsx === 'function') {
         window.AppAssets.xlsx()
@@ -5091,20 +5337,21 @@ tEnd = endObj.getTime();
 return { start: tStart, end: tEnd };
 };
 function verDetalleKPI(tipoObjetivo) {
-const rango = getFechasDashboard();
-limpiarFiltros();
-if(rango && rango.start) {
-// CORRECCIÓN: Convertimos el timestamp (número) a Objeto Date
-document.getElementById('f-desde').valueAsDate = new Date(rango.start);
-document.getElementById('f-hasta').valueAsDate = new Date(rango.end);
-// Actualizamos el objeto filtros interno para que coincida con lo visual
-filtros.desde = document.getElementById('f-desde').value;
-filtros.hasta = document.getElementById('f-hasta').value;
-}
-filtros.tipo = tipoObjetivo;
-aplicarFiltros();
-irPestana('movs');
-notify(`Viendo detalle: ${tipoObjetivo.toUpperCase()}`, 'success');
+    const rango = getFechasDashboard();
+    limpiarFiltros();
+    if(rango && rango.start) {
+        document.getElementById('f-desde').valueAsDate = new Date(rango.start);
+        document.getElementById('f-hasta').valueAsDate = new Date(rango.end);
+        filtros.desde = document.getElementById('f-desde').value;
+        filtros.hasta = document.getElementById('f-hasta').value;
+    }
+    filtros.tipo = tipoObjetivo;
+    aplicarFiltros();
+
+    // 📌 CORREGIDO: Apunta a la nueva nomenclatura lógica de la pestaña
+    irPestana('diario'); 
+
+    notify(`Viendo detalle: ${tipoObjetivo.toUpperCase()}`, 'success');
 }
 // --- NUEVA FUNCIÓN: RELLENAR DESPLEGABLES DE FILTRO ---
 // Esta función se llama automáticamente al cargar datos
@@ -5329,11 +5576,11 @@ window.cerrarModal = cerrarModal;
 // --- GENERADOR DE IDs CANÓNICO (única implementación en toda la app) ---
 const uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // ==========================================
-// 🛡️ GUARDAR MOVIMIENTO (BLINDADO + FECHA ESPAÑOLA + 8 COLUMNAS + SALA ESPERA)
+// 🛡️ GUARDAR MOVIMIENTO (GRABACIÓN DIRECTA EN LA NUBE - ESTILO INDEXXX)
 // ==========================================
 window.guardarManual = async function() {
 if (document.getElementById('btn-modal-action').disabled) return;
-// ========== VALIDACIÓN VISUAL (desde versión B) ==========
+// ========== VALIDACIÓN VISUAL ==========
 const inputImporte = document.getElementById('m-cantidad');
 const inputConcepto = document.getElementById('m-concepto');
 let hayErrorVisual = false;
@@ -5352,11 +5599,11 @@ const dispararErrorVisual = (input) => {
 
 // Validar importe
 const importeVal = inputImporte ? inputImporte.value.trim() : '';
-if (!importeVal || parseFloat(importeVal.replace('€', '').replace(',', '.')) === 0) {
+if (!importeVal || window.FinanceModel.parseMoney(importeVal) === 0) {
     dispararErrorVisual(inputImporte);
 }
 
-// Validar concepto solo si NO es traspaso (en traspaso se fuerza "TRASPASO")
+// Validar concepto solo si NO es traspaso
 const modoActualTemp = window.modoTransaccionActual || 'gasto';
 if (modoActualTemp !== 'traspaso') {
     const conceptoVal = inputConcepto ? inputConcepto.value : '';
@@ -5367,198 +5614,145 @@ if (modoActualTemp !== 'traspaso') {
 
 if (hayErrorVisual) {
     window.mostrarToast("Rellena los campos en rojo", "warning");
-    return; // Salimos sin bloquear el botón ni continuar
+    return;
 }
 // ========== FIN VALIDACIÓN VISUAL ==========
-// 1. BLOQUEAMOS EL BOTÓN AL INSTANTE CON LA NUEVA FUNCIÓN (Mejora B)
+
 window.toggleBotonCarga('btn-modal-action', true);
-// --- VIBRACIÓN ---
+
 try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){}
+
 // --- INTERCEPTOR RECURRENTE ---
 const chkRecurrente = document.getElementById('m-es-recurrente');
 if (chkRecurrente && chkRecurrente.checked) {
-// Cambiamos el texto temporalmente para saber que es recurrente
-const btnGuardar = document.getElementById('btn-modal-action');
-if (btnGuardar) btnGuardar.innerText = '⏳ GUARDANDO REGLA...';
-try {
-await window.guardarComoRecurrenteUnificado(window.modoTransaccionActual || 'gasto');
-} catch(e) {
-console.error(e);
-window.mostrarToast(e.message, "error"); // Usamos el Toast de la Mejora A
-} finally {
-// DESBLOQUEAMOS EL BOTÓN
-window.toggleBotonCarga('btn-modal-action', false);
-}
-return; // Cortamos aquí para que NO se anote como movimiento de hoy
+    const btnGuardar = document.getElementById('btn-modal-action');
+    if (btnGuardar) btnGuardar.innerText = '⏳ GUARDANDO REGLA...';
+    try {
+        await window.guardarComoRecurrenteUnificado();
+    } catch(e) {
+        console.error(e);
+        window.mostrarToast(e.message, "error");
+    } finally {
+        window.toggleBotonCarga('btn-modal-action', false);
+    }
+    return;
 }
 // --- FIN INTERCEPTOR ---
+
 const modoActual = window.modoTransaccionActual || 'gasto';
 const generarID = () => typeof uuid === 'function' ? uuid() : crypto.randomUUID();
 let movimientosParaLocal = [];
+
 try {
-const elId = document.getElementById('m-id');
-const idExistente = elId ? elId.value : "";
-// 📅 OBTENER Y FORMATEAR LA FECHA
-const fechaCruda = document.getElementById('m-fecha').value;
-if (!fechaCruda) throw new Error("Falta la FECHA");
-let fechaParaExcel = new Date();
-if (fechaCruda.includes('-')) {
-const partes = fechaCruda.split('-');
-fechaParaExcel = new Date(partes[0], partes[1] - 1, partes[2]);
-}
-const fechaFormateada = fechaParaExcel;
-const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
-const cuentaOrigen = document.getElementById('m-cuenta').value;
-const elDestino = document.getElementById('m-cuenta-destino');
-const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
-let concepto = document.getElementById('m-concepto').value;
-if (modoActual === 'traspaso') concepto = "TRASPASO";
-const importeStr = document.getElementById('m-cantidad').value;
-const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
-const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
-// Validaciones (usamos throw para saltar al catch y no bloquear el botón)
-if (!cuentaOrigen) throw new Error("Falta la CUENTA");
-if (!importeStr) throw new Error("Falta el IMPORTE");
-if (!concepto) throw new Error("Falta el CONCEPTO");
-let importeLimpio = importeStr.replace('€', '').replace(',', '.').trim();
-let importeNum = parseFloat(importeLimpio);
-if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
-importeNum = Math.abs(importeNum);
-const detectarDueno = (nombreCuenta) => {
-const c = String(nombreCuenta).toUpperCase().trim();
-if (c.startsWith("D-")) return "D";
-if (c.startsWith("N-")) return "N";
-return "DN";
-};
-// 🅰️ TRASPASO
-if (modoActual === 'traspaso') {
-if (!cuentaDestino) throw new Error("Selecciona CUENTA DESTINO");
-if (cuentaOrigen === cuentaDestino) throw new Error("Origen y Destino iguales");
-movimientosParaLocal.push({
-id: generarID(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: "TRASPASO",
-importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
-beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: timestampInterno
-});
-movimientosParaLocal.push({
-id: generarID(), fecha: fechaFormateada, cuenta: cuentaDestino, concepto: "TRASPASO",
-importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
-beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: timestampInterno
-});
-}
-    // 🅱️ GASTO O INGRESO
-    else {
-        if (modoActual === 'gasto' || modoActual === 'pago') importeNum = -Math.abs(importeNum);
-        let benefFinal = benefManual || detectarDueno(cuentaOrigen);
-        movimientosParaLocal.push({ id: idExistente || generarID(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: concepto, importe: importeNum, descripcion: desc, beneficiario: benefFinal, tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', ts: timestampInterno });
+    const elId = document.getElementById('m-id');
+    const idExistente = elId ? elId.value : "";
+    
+    // 📅 OBTENER Y FORMATEAR LA FECHA
+    const fechaCruda = document.getElementById('m-fecha').value;
+    if (!fechaCruda) throw new Error("Falta la FECHA");
+    let fechaParaExcel = new Date();
+    if (fechaCruda.includes('-')) {
+        const partes = fechaCruda.split('-');
+        fechaParaExcel = new Date(partes[0], partes[1] - 1, partes[2]);
     }
-// 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA
-if (idExistente) {
-const movOriginal = window.datos.find(m => m.id === idExistente);
-if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
-const desc = movOriginal.descripcion || '';
-let cuentaHermana = '';
-if (desc.includes('>> A:')) cuentaHermana = desc.split('>> A:')[1].split('|')[0].trim();
-else if (desc.includes('<< DE:')) cuentaHermana = desc.split('<< DE:')[1].split('|')[0].trim();
-window.datos = window.datos.filter(m => {
-if (m.id === idExistente) return false;
-if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.cuenta === cuentaHermana) return false;
-return true;
-});
-} else {
-window.datos = window.datos.filter(m => m.id !== idExistente);
+    const fechaFormateada = fechaParaExcel;
+    const timestampInterno = new Date(fechaCruda + 'T12:00:00').getTime();
+    const cuentaOrigen = document.getElementById('m-cuenta').value;
+    const elDestino = document.getElementById('m-cuenta-destino');
+    const cuentaDestino = (elDestino && elDestino.offsetParent !== null) ? elDestino.value : "";
+    let concepto = document.getElementById('m-concepto').value;
+    if (modoActual === 'traspaso') concepto = "TRASPASO";
+    const importeStr = document.getElementById('m-cantidad').value;
+    const desc = (document.getElementById('m-desc').value || "").toUpperCase().trim();
+    const benefManual = (document.getElementById('m-beneficiario').value || "").toUpperCase().trim();
+    
+    if (!cuentaOrigen) throw new Error("Falta la CUENTA");
+    if (!importeStr) throw new Error("Falta el IMPORTE");
+    if (!concepto) throw new Error("Falta el CONCEPTO");
+    
+    let importeNum = window.FinanceModel.parseMoney(importeStr);
+    if (isNaN(importeNum) || importeNum === 0) throw new Error("El importe no es válido");
+    importeNum = Math.abs(importeNum);
+    
+    const detectarDueno = (nombreCuenta) => {
+        const c = String(nombreCuenta).toUpperCase().trim();
+        if (c.startsWith("D-")) return "D";
+        if (c.startsWith("N-")) return "N";
+        return "DN";
+    };
+    
+    // 🅰️ TRASPASO
+    if (modoActual === 'traspaso') {
+        if (!cuentaDestino) throw new Error("Selecciona CUENTA DESTINO");
+        if (cuentaOrigen === cuentaDestino) throw new Error("Origen y Destino iguales");
+        movimientosParaLocal.push({
+            id: generarID(), fecha: fechaFormateada, cuenta: cuentaOrigen, concepto: "TRASPASO",
+            importe: -importeNum, descripcion: `>> A: ${cuentaDestino} | ${desc}`,
+            beneficiario: detectarDueno(cuentaOrigen), tipo: 'traspaso', ts: timestampInterno
+        });
+        movimientosParaLocal.push({
+            id: generarID(), fecha: fechaFormateada, cuenta: cuentaDestino, concepto: "TRASPASO",
+            importe: importeNum, descripcion: `<< DE: ${cuentaOrigen} | ${desc}`,
+            beneficiario: detectarDueno(cuentaDestino), tipo: 'traspaso', ts: timestampInterno
+        });
+    }
+    // 🅱️ GASTO O INGRESO
+else {
+    if (modoActual === 'gasto' || modoActual === 'pago') importeNum = -Math.abs(importeNum);
+    let benefFinal = benefManual || detectarDueno(cuentaOrigen);
+    movimientosParaLocal.push({
+        id: idExistente || generarID(), // 👈 Cambiado aquí para usar el generador nativo seguro
+        fecha: fechaFormateada, 
+        cuenta: cuentaOrigen, 
+        concepto: concepto,
+        importe: importeNum, 
+        descripcion: desc, 
+        beneficiario: benefFinal,
+        tipo: (importeNum >= 0) ? 'ingreso' : 'gasto', 
+        ts: timestampInterno
+    });
 }
-}
-movimientosParaLocal.forEach(m => window.datos.push(m));
-// La emisión la hace guardarUniversal al terminar. No emitir aquí para evitar doble renderizado.
-// 🚀 SUBIDA A LA NUBE
-await window.guardarUniversal();
-if (typeof window.cerrarModal === 'function') window.cerrarModal();
-// Notificación de éxito
-window.mostrarToast("Guardado con éxito", "success");
-if (typeof vibrar === 'function') {
-if (modoActual === 'traspaso') vibrar('traspaso');
-else if (modoActual === 'gasto' || modoActual === 'pago') vibrar('gasto');
-else vibrar('ingreso');
-}
+    
+    // 🛡️ REVERSIÓN OPTIMISTA EN MEMORIA
+    if (idExistente) {
+        const movOriginal = window.datos.find(m => m.id === idExistente);
+        if (movOriginal && (movOriginal.tipo === 'traspaso' || (movOriginal.concepto && movOriginal.concepto.toUpperCase().includes('TRASPASO')))) {
+            const desc = movOriginal.descripcion || '';
+            let cuentaHermana = '';
+            if (desc.includes('>> A:')) cuentaHermana = desc.split('>> A:')[1].split('|')[0].trim();
+            else if (desc.includes('<< DE:')) cuentaHermana = desc.split('<< DE:')[1].split('|')[0].trim();
+            window.datos = window.datos.filter(m => {
+                if (m.id === idExistente) return false;
+                if (m.tipo === 'traspaso' && m.ts === movOriginal.ts && m.cuenta === cuentaHermana) return false;
+                return true;
+            });
+        } else {
+            window.datos = window.datos.filter(m => m.id !== idExistente);
+        }
+    }
+    
+    movimientosParaLocal.forEach(m => window.datos.push(m));
+    
+    // 🚀 SUBIDA DIRECTA A LA NUBE
+    await window.guardarUniversal(movimientosParaLocal);
+    
+    if (typeof window.cerrarModal === 'function') window.cerrarModal();
+    window.mostrarToast("Guardado con éxito", "success");
+    
+    if (typeof vibrar === 'function') {
+        if (modoActual === 'traspaso') vibrar('traspaso');
+        else if (modoActual === 'gasto' || modoActual === 'pago') vibrar('gasto');
+        else vibrar('ingreso');
+    }
 } catch (error) {
-console.error("❌ Fallo en el proceso de guardado:", error);
-// Si el error es de validación (falta importe, cuenta...), se lo decimos al usuario sin sala de espera
-if (error.message.startsWith("Falta") || error.message.includes("Selecciona") || error.message.includes("Origen") || error.message.includes("importe")) {
-window.mostrarToast(error.message, "error");
-return; // Cortamos aquí
-}
-// --- INICIO DE LA SALA DE ESPERA (Errores de conexión) ---
-let salaEspera = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
-movimientosParaLocal.forEach(nuevoMov => {
-const idxEspera = salaEspera.findIndex(m => m.id === nuevoMov.id);
-if(idxEspera > -1) salaEspera[idxEspera] = nuevoMov;
-else salaEspera.push(nuevoMov);
-});
-localStorage.setItem('salaEsperaMovimientos', JSON.stringify(salaEspera));
-if (typeof window.cerrarModal === 'function') window.cerrarModal();
-window.mostrarToast("⚠️ Guardado en Sala de Espera local. Se sincronizará más tarde.", "info");
+    console.error("❌ Fallo en el proceso de guardado:", error);
+    // Muestra cualquier error directamente sin pasar por la sala de espera local
+    window.mostrarToast(error.message || "Error al guardar en la nube", "error");
 } finally {
-// 3. DESBLOQUEAMOS EL BOTÓN PASE LO QUE PASE (Éxito o Error)
-window.toggleBotonCarga('btn-modal-action', false);
+    window.toggleBotonCarga('btn-modal-action', false);
 }
 };
 // FIN de guardarManual
-// ==========================================
-// 🤖 BOT INVISIBLE: SINCRONIZADOR DE LA SALA DE ESPERA
-// ==========================================
-window.sincronizarSalaEspera = async function() {
-// 1. Miramos si hay algo en la sala de espera
-const salaEsperaJSON = localStorage.getItem('salaEsperaMovimientos');
-if (!salaEsperaJSON) return; // Si está vacía, el bot sigue durmiendo
-let salaEspera = [];
-try {
-salaEspera = JSON.parse(salaEsperaJSON);
-} catch (e) { return; }
-if (salaEspera.length === 0) return;
-// 2. Comprobamos si hay internet y verificamos que la app no esté ya ocupada guardando otra cosa
-if (!navigator.onLine || (window.AppState && window.AppState.isSaving)) return;
-try {
-// Ponemos el cartel de "Ocupado" para no chocar con el "Escudo anti-colisiones"
-if (window.AppState) window.AppState.isSaving = true;
-// 3. Volcamos los datos de la sala de espera en la memoria principal (por si habías cerrado la app)
-let hayCambios = false;
-salaEspera.forEach(movPendiente => {
-const idx = window.datos.findIndex(m => m.id === movPendiente.id);
-if (idx > -1) {
-window.datos[idx] = movPendiente; // Si ya existía, lo actualiza
-} else {
-window.datos.push(movPendiente); // Si es nuevo, lo añade
-hayCambios = true;
-}
-});
-// Si hemos inyectado movimientos nuevos, recalculamos todo para que cuadre
-if (hayCambios) {
-window.datos.sort((a,b) => b.ts - a.ts);
-if (typeof renderizar === 'function') renderizar();
-if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-if (typeof actualizarDashboard === 'function') actualizarDashboard();
-}
-// 4. Intentamos subir el Excel completo a OneDrive
-await window.guardarUniversal();
-// 5. ¡Éxito! Limpiamos AMBAS colas offline
-localStorage.removeItem('salaEsperaMovimientos');
-localStorage.removeItem('aidanai_buzon');
-if (typeof notify === 'function') {
-notify(`✅ ¡Conexión recuperada! ${salaEspera.length} movimientos de la Sala de Espera subidos a OneDrive.`, "success");
-}
-} catch (error) {
-console.error("❌ Bot Sincronizador: Sigue sin poder subir a OneDrive. Lo intentará en la próxima ronda.", error);
-} finally {
-// Quitamos el cartel de "Ocupado" pase lo que pase
-if (window.AppState) window.AppState.isSaving = false;
-}
-};
-// --- PONEMOS AL BOT A TRABAJAR ---
-// Opción A: Cuando el dispositivo detecta que vuelve a tener WiFi o 4G/5G
-window.addEventListener('online', () => {
-// Le damos 3 segunditos a que la conexión sea estable antes de subir cosas
-setTimeout(window.sincronizarSalaEspera, 3000);
-});
 // ==========================================
 // ⚡ ACCIONES RÁPIDAS: DUPLICAR Y ELIMINAR (CORREGIDO)
 // ==========================================
@@ -5748,9 +5942,11 @@ if(typeof renderizar === 'function') renderizar();
 if(typeof actualizarDashboard === 'function') actualizarDashboard();
 // Patrimonio y Sunburst solo si el usuario está viéndolos ahora mismo
 // (irPestana ya los renderiza cuando el usuario navega a esa pestaña)
-if(_tabActiva === 'tab-patri') {
-if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
-if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+if(_tabActiva === 'tab-patrimonio') {
+    if(typeof actualizarPatrimonio === 'function') actualizarPatrimonio();
+    if(typeof renderizarSunburstPatrimonio === 'function') renderizarSunburstPatrimonio();
+    if(typeof calcularValoresCartera === 'function') calcularValoresCartera();
+    if(typeof renderizarCartera === 'function') renderizarCartera();
 }
 } finally {
 _recalculandoSaldos = false;   // ← siempre liberamos la guardia
@@ -5846,124 +6042,148 @@ if(icono) icono.style.color = '#666';
 }
 }
 function actualizarPatrimonio() {
-// 1. Localizar elementos
-const contenedorLista = document.getElementById('lista-cuentas-patri');
-const elTotalDetalle = document.getElementById('total-patri-valor');
-const elTotalHome = document.getElementById('d-patri-total');
-// 2. Seguridad
-if (!datos || datos.length === 0) {
-if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
-return;
-}
-// 3. Cálculos en memoria
-const saldos = {};
-const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
-datosFiltrados.forEach(m => {
-const cta = String(m.cuenta || '').trim();
-if (!cta) return;
-const val = window.FinanceModel.parseMoney(m.importe);
-saldos[cta] = window.sumarDinero(saldos[cta] || 0, val);
-});
-if (window.mapaCuentas) {
-Object.keys(window.mapaCuentas).forEach(ctaKey => {
-const info = window.mapaCuentas[ctaKey];
-if (!info || !info.tieneCartera) return;
-if (filtroUsuarioActual !== 'todos') {
-const letra = ctaKey.charAt(0).toUpperCase();
-if (filtroUsuarioActual === 'D' && letra !== 'D') return;
-if (filtroUsuarioActual === 'N' && letra !== 'N') return;
-}
-saldos[ctaKey] = info.costeTotal !== undefined ? info.costeTotal : (info.saldoActual || 0);
-});
-}
-const grupos = {};
-let sumaTotal = 0;
-// Agrupar saldos
-Object.keys(saldos).forEach(cta => {
-if (Math.abs(saldos[cta]) >= 0.01) sumaTotal = window.sumarDinero(sumaTotal, saldos[cta]);
-});
-Object.keys(saldos).forEach(cta => {
-const saldo = saldos[cta];
-if (Math.abs(saldo) < 0.01) return;
-const ctaKey = cta.trim().toUpperCase();
-const mapa = window.mapaCuentas || {};
-const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
-const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
-if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { nombre: nombreGrupo, total: 0, cuentas: [], esInversion: config.esInversion };
-grupos[nombreGrupo].total = window.sumarDinero(grupos[nombreGrupo].total, saldo);
-grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
-});
-// 4. Actualizar Totales (UI Superior con Efecto Odómetro)
-const claseColor = sumaTotal >= 0 ? 'val-std-blue' : 'val-std-neg';
-if (elTotalDetalle) {
-window.animarCifra('total-patri-valor', sumaTotal, 'moneda');
-elTotalDetalle.className = 'kpi-value ' + claseColor;
-}
-if (elTotalHome) {
-window.animarCifra('d-patri-total', sumaTotal, 'moneda');
-elTotalHome.className = 'kpi-value ' + claseColor;
-}
-// 5. PINTADO ORDENADO POR IMPORTE
-if (contenedorLista) {
-if (Object.keys(grupos).length === 0) {
-contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
-return;
-}
-let htmlFinal = '';
-// --- CAMBIO CLAVE: CONVERTIR A ARRAY Y ORDENAR POR TOTAL ---
-const listaGrupos = Object.values(grupos);
-// Ordenamos: Mayor dinero primero
-listaGrupos.sort((a, b) => b.total - a.total);
-listaGrupos.forEach(grupo => {
-const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF';
-// Si es inversión borde morado, si no blanco
-const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
-const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
-const groupId = grupo.nombre.replace(/[^a-zA-Z0-9]/g, '');
-// Generar HTML cuentas (Ordenadas por valor también)
-let htmlCuentas = '';
-grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
-const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
-const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
-htmlCuentas += `
-<div class="patri-account-item" onclick="verExtractoPatrimonio('${c.nombre}')" style="border-bottom: 1px solid #333;">
-<div class="patri-acc-name-col">
-<span class="patri-acc-name" style="color:#FFFFFF; font-size:13px;">${c.nombre}</span>
-<div class="patri-progress-bar-bg" style="background:#222;">
-<div class="patri-progress-bar-fill" style="width:${Math.abs(pctCuenta)}%; background:${colorVal}; opacity:1;"></div>
-</div>
-</div>
-<div class="patri-acc-val-col">
-<div class="patri-acc-val" style="color:${colorVal}">${FMT_PCT.format(c.valor)}€</div>
-<div class="patri-acc-pct" style="color:var(--c-warning); font-size:10px;">${pctCuenta}%</div>
-</div>
-</div>
-`;
-});
-htmlFinal += `
-<div class="patri-group-card" style="${borderStyle} background:#000; border:1px solid #222;">
-<div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; background:#0a0a0a; border-bottom:1px solid #222;">
-<div style="display:flex; gap:8px; align-items:center;">
-<span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${grupo.nombre}</span>
-<span style="color:var(--c-warning); border:1px solid var(--c-warning); padding:1px 6px; border-radius:4px; font-size:9px; font-weight:800">${pctGrupo}%</span>
-</div>
-<div style="display:flex; align-items:center; gap:10px">
-<span class="patri-group-total" style="color:#FFFFFF;">${FMT_PCT.format(grupo.total)}€</span>
-<span class="material-icons" id="icon-${groupId}" style="font-size:20px; color:#FFFFFF;">expand_more</span>
-</div>
-</div>
-<div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">
-${htmlCuentas}
-</div>
-</div>
-`;
-});
-contenedorLista.innerHTML = htmlFinal;
-}
-// Refrescar plusvalía latente (cartera)
-if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
-  window.actualizarPlusvaliaPatrimonio();
-}
+    // 1. Localizar elementos de la interfaz
+    const contenedorLista = document.getElementById('lista-grupos-patrimonio');
+    const elTotalDetalle = document.getElementById('total-patri-valor'); 
+    const elTotalCambio = document.getElementById('total-patri-cambio');   
+    const elTotalHome = document.getElementById('d-patri-total');
+    
+    // 2. Control de seguridad por si no hay datos cargados
+    if (!datos || datos.length === 0) {
+        if(contenedorLista) contenedorLista.innerHTML = '<div style="text-align:center; padding:20px; color:#FFFFFF;">ESPERANDO DATOS...</div>';
+        return;
+    }
+
+    // 3. Cálculos en memoria filtrados por el propietario actual
+    const saldos = {};
+    const datosFiltrados = datos.filter(m => pasaFiltroPropietario(m));
+    
+    datosFiltrados.forEach(m => {
+        const cta = String(m.cuenta || '').trim();
+        if (!cta) return;
+        const val = window.FinanceModel.parseMoney(m.importe);
+        saldos[cta] = window.sumarDinero(saldos[cta] || 0, val);
+    });
+
+    if (window.mapaCuentas) {
+        Object.keys(window.mapaCuentas).forEach(ctaKey => {
+            const info = window.mapaCuentas[ctaKey];
+            if (!info || !info.tieneCartera) return;
+            if (filtroUsuarioActual !== 'todos') {
+                const letra = ctaKey.charAt(0).toUpperCase();
+                if (filtroUsuarioActual === 'D' && letra !== 'D') return;
+                if (filtroUsuarioActual === 'N' && letra !== 'N') return;
+            }
+            saldos[ctaKey] = info.costeTotal !== undefined ? info.costeTotal : (info.saldoActual || 0);
+        });
+    }
+
+    // Separar matemáticamente los balances para el desglose de la tarjeta
+    let totalBancos = 0;
+    let totalPasivos = 0;
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        if (saldo < 0) {
+            totalPasivos += Math.abs(saldo);
+        } else {
+            totalBancos += saldo;
+        }
+    });
+
+    // FÓRMULA CORRECTA: suma directa de todos los saldos (sin duplicar cartera)
+    const sumaTotal = totalBancos - totalPasivos;
+
+    const grupos = {};
+    Object.keys(saldos).forEach(cta => {
+        const saldo = saldos[cta];
+        if (Math.abs(saldo) < 0.01) return;
+        const ctaKey = cta.trim().toUpperCase();
+        const mapa = window.mapaCuentas || {};
+        const config = mapa[ctaKey] ? mapa[ctaKey] : { tipo: 'SIN CLASIFICAR', esInversion: false };
+        const nombreGrupo = config.tipo ? config.tipo.toUpperCase() : 'SIN CLASIFICAR';
+        
+        if (!grupos[nombreGrupo]) grupos[nombreGrupo] = { nombre: nombreGrupo, total: 0, cuentas: [], esInversion: config.esInversion };
+        grupos[nombreGrupo].total = window.sumarDinero(grupos[nombreGrupo].total, saldo);
+        grupos[nombreGrupo].cuentas.push({ nombre: cta, valor: saldo });
+    });
+
+    // 4. Inyección en la UI Superior (Efecto Odómetro y Desglose de Leyenda)
+    if (elTotalDetalle) {
+        window.animarCifra('total-patri-valor', sumaTotal, 'moneda');
+    }
+
+    if (elTotalCambio) {
+        // Formateador interno rápido sin decimales para la leyenda limpia
+        const fmtMini = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+           
+    }
+
+    if (elTotalHome) {
+        window.animarCifra('d-patri-total', sumaTotal, 'moneda');
+    }
+
+    // 5. Pintado y ordenación del listado inferior por importes descascarados
+    if (contenedorLista) {
+        if (Object.keys(grupos).length === 0) {
+            contenedorLista.innerHTML = '<div style="padding:20px; text-align:center; color:#888;">SIN CUENTAS ACTIVAS</div>';
+            return;
+        }
+        let htmlFinal = '';
+
+        const listaGrupos = Object.values(grupos);
+        listaGrupos.sort((a, b) => b.total - a.total);
+        
+        listaGrupos.forEach(grupo => {
+            const colorTitle = grupo.esInversion ? '#BF5AF2' : '#FFFFFF';
+            const borderStyle = grupo.esInversion ? 'border-left: 3px solid #BF5AF2;' : 'border-left: 3px solid #FFFFFF;';
+            const pctGrupo = sumaTotal !== 0 ? ((grupo.total / sumaTotal) * 100).toFixed(0) : '0';
+            const groupId = grupo.nombre.replace(/[^a-zA-Z0-9]/g, '');
+
+            let htmlCuentas = '';
+            grupo.cuentas.sort((a,b) => b.valor - a.valor).forEach(c => {
+                const colorVal = c.valor >= 0 ? 'var(--c-success)' : 'var(--c-danger)';
+                const pctCuenta = sumaTotal !== 0 ? ((c.valor / sumaTotal) * 100).toFixed(1) : '0.0';
+                htmlCuentas += `
+                    <div class="patri-account-item" onclick="verExtractoPatrimonio('${c.nombre}')" style="border-bottom: 1px solid #333;">
+                        <div class="patri-acc-name-col">
+                            <span class="patri-acc-name" style="color:#FFFFFF; font-size:13px;">${c.nombre}</span>
+                            <div class="patri-progress-bar-bg" style="background:#222;">
+                                <div class="patri-progress-bar-fill" style="width:${Math.abs(pctCuenta)}%; background:${colorVal}; opacity:1;"></div>
+                            </div>
+                        </div>
+                        <div class="patri-acc-val-col">
+                            <div class="patri-acc-val" style="color:${colorVal}">${FMT_PCT.format(c.valor)}€</div>
+                            <div class="patri-acc-pct" style="color:var(--c-warning); font-size:10px;">${pctCuenta}%</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            htmlFinal += `
+                <div class="patri-group-card" style="${borderStyle} background:#000; border:1px solid #222;">
+                    <div class="patri-group-header" onclick="togglePatriGroup('${groupId}')" style="cursor:pointer; background:#0a0a0a; border-bottom:1px solid #222;">
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <span class="patri-group-title" style="color:${colorTitle}; font-size:12px;">${grupo.nombre}</span>
+                            <span style="color:var(--c-warning); border:1px solid var(--c-warning); padding:1px 6px; border-radius:4px; font-size:9px; font-weight:800">${pctGrupo}%</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px">
+                            <span class="patri-group-total" style="color:#FFFFFF;">${FMT_PCT.format(grupo.total)}€</span>
+                            <span class="material-icons" id="icon-${groupId}" style="font-size:20px; color:#FFFFFF;">expand_more</span>
+                        </div>
+                    </div>
+                    <div id="list-${groupId}" class="patri-account-list" style="display:none; animation: fadeIn 0.3s ease;">
+                        ${htmlCuentas}
+                    </div>
+                </div>
+            `;
+        });
+        contenedorLista.innerHTML = htmlFinal;
+    }
+
+    // Refrescar plusvalía latente (cartera)
+    if (typeof window.actualizarPlusvaliaPatrimonio === 'function') {
+        window.actualizarPlusvaliaPatrimonio();
+    }
 }
 function renderizarGraficoEvolucion(movimientos) {
 if (!window.ensureEChartsReady(() => renderizarGraficoEvolucion(movimientos))) return;
@@ -6135,7 +6355,7 @@ function accionFab(tipo) {
     }
 }
 // ==========================================
-// 💾 GUARDADO MAESTRO BLINDADO (V6: Rendimiento + AES-GCM)
+// 💾 GUARDADO MAESTRO BLINDADO (V6: Rendimiento + AES-GCM) - CORREGIDO RECURRENTES & CARTERA
 // ==========================================
 window.guardarUniversal = async function(nuevasFilas) {
     // --- 1. SEMÁFORO DE SEGURIDAD (MUTEX) ---
@@ -6146,15 +6366,19 @@ window.guardarUniversal = async function(nuevasFilas) {
     const originalText = btn ? btn.innerHTML : 'GUARDAR';
     const btnModal = document.getElementById('btn-modal-action');
 
+    // Bloquear estado para que nadie toque el archivo
     window.AppState.setGuardando(true);
     if (btn) btn.innerHTML = '<span class="material-icons spin">sync</span> GUARDANDO...';
     if (btnModal) btnModal.innerHTML = '<span class="material-icons spin">sync</span> SUBIENDO...';
-
     let wb = null;
+
     try {
+        if (window.AppAssets) await window.AppAssets.xlsx();
+        if (window.AppRuntime) await window.AppRuntime.yieldToUI();
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
+        const FM = window.FinanceModel;
         let datosFinales = [...(window.datos || [])];
-        
+
         // --- 2. GESTIÓN DE NUEVAS FILAS (Anti-duplicados) ---
         if (nuevasFilas) {
             if (!Array.isArray(nuevasFilas)) nuevasFilas = [nuevasFilas];
@@ -6172,14 +6396,13 @@ window.guardarUniversal = async function(nuevasFilas) {
                     fecha: fechaFinal,
                     cuenta: CLEAN(f.CUENTA || f.cuenta),
                     concepto: CLEAN(f.CONCEPTO || f.concepto),
-                    importe: parseFloat(f.IMPORTE || f.importe || 0),
+                    importe: FM.parseMoney(f.IMPORTE || f.importe || 0),
                     descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
                     beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
                     ts: fechaFinal.getTime(),
-                    tipo: f.tipo || f.TIPO || ((parseFloat(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
+                    tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
                 };
             });
-
             filasProcesadas.forEach(f => {
                 const indice = datosFinales.findIndex(m => m.id === f.id);
                 if (indice === -1) {
@@ -6190,231 +6413,255 @@ window.guardarUniversal = async function(nuevasFilas) {
             });
             datosFinales.sort((a, b) => b.ts - a.ts);
         }
-// --- 3. ENCRIPTADO LOCAL (AES-GCM) ---
-const pinSession = PinSecurity.getSession();
-if (pinSession && typeof CryptoSystem !== 'undefined') {
-const paqueteDeDatos = {
-movimientos: datosFinales,
-recurrentes: window.datosRecurrentes || [],
-config: {
-cuentas: window.mapaCuentas || {},
-conceptos: window.listaConceptosConfig || [],
-beneficiarios: window.listaBeneficiariosConfig || []
-},
-fechaGuardado: new Date().toISOString()
-};
-const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, pinSession);
-localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
-}
-// --- 4. CONSTRUIR EL EXCEL PARA LA NUBE ---
-wb = XLSX.utils.book_new();
-const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
-"Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
-"Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
-"Tipo": d.tipo || ((parseFloat(d.importe) >= 0) ? 'ingreso' : 'gasto')
-})), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
-Object.keys(hojaMovs).forEach(key => {
-if (hojaMovs[key].t === 'd') hojaMovs[key].z = 'dd/mm/yyyy';
-});
-XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
-// Hoja Configuracion
-const listaCuentas = Object.entries(window.mapaCuentas || {});
-const rawConceptos = window.listaConceptosConfig || [];
-const rawBeneficiarios = window.listaBeneficiariosConfig || [];
-const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
-// Añadimos las dos columnas nuevas a la cabecera
-const datosConfig = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO", "SEC_PIN_HASH"]];
-for (let i = 0; i < maxFilas; i++) {
-    const c = listaCuentas[i];
-    const pinHash = (i === 0) ? (localStorage.getItem('aidanai_pw_v3') || "") : "";
-    datosConfig.push([
-        c ? CLEAN(c[0]) : "",
-        c ? CLEAN(c[1].tipo) : "",
-        c ? (c[1].esInversion ? "SI" : "NO") : "",
-        rawConceptos[i] ? CLEAN(rawConceptos[i]) : "",
-        rawBeneficiarios[i] ? CLEAN(rawBeneficiarios[i]) : "",
-        pinHash
-    ]);
-}
-XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(datosConfig), "Configuracion");
-// Hoja Recurrentes
-const listaRec = window.datosRecurrentes || [];
-const filasRec = listaRec.length > 0 ? listaRec.map(r => ({
-"ID": r.id,
-"PROXIMA_FECHA": window.FinanceModel.parseFecha(r.fechaProx),
-"FRECUENCIA": r.frecuencia,
-"DIAS_SEMANA": r.diasSemana || "", "TIPO_REGLA": r.tipoRegla || "gasto",
-"CUENTA": r.cuenta, "CUENTA_DESTINO": r.cuentaDestino || "",
-"IMPORTE": r.importe, "CONCEPTO": r.concepto, "BENEFICIARIO": r.beneficiario || "",
-"DESCRIPCION": r.descripcion || ""
-})) : [];
-const wsRec = XLSX.utils.json_to_sheet(filasRec, {
-header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
-});
-// 🟢 MAGIA FECHAS: Máscara visual DD/MM/YYYY para recurrentes en OneDrive
-Object.keys(wsRec).forEach(key => {
-if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
-});
-XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
-	// ── MÓDULO CARTERA: Guardar hoja CARTERA ──────────────────────────────
-	const listaCartera = window.datosCartera || [];
-	if (listaCartera.length > 0) {
-	  const filasCartera = listaCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
-	    "ID": p.id, "TICKER": p.ticker, "NOMBRE": p.nombre, "TIPO": p.tipo,
-	    "CUENTA": p.cuenta, "CANTIDAD": p.cantidad,
-	    "PRECIO_COMPRA": p.precioCompra, "PRECIO_ACTUAL": p.precioActual,
-        "PRECIO_FUENTE": p.precioFuente || "",
-        "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "",
-        "FECHA_COMPRA": p.fechaCompra || "",
-	    "NOTAS": p.notas || ""
-	  }));
-	  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCartera, {
-	    header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"]
-	  }), "Cartera");
-	}
-// ── MÓDULO CARTERA: Guardar hoja HISTORICO_CARTERA ────────────────────
-const listaHistCartera = window.historicoCartera || [];
-if (listaHistCartera.length > 0) {
-  const filasHist = listaHistCartera.map(h => ({
-    "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
-    "VALOR": h.valor,
-    "COSTE": typeof h.coste === 'number' ? h.coste : ""
-  }));
-  const wsHistC = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR","COSTE"] });
-  Object.keys(wsHistC).forEach(k => { if (wsHistC[k].t === 'd') wsHistC[k].z = 'dd/mm/yyyy'; });
-  XLSX.utils.book_append_sheet(wb, wsHistC, "Historico_Cartera");
-}
-const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0));
-if (usarNube) {
-let exito = false;
-let intentos = 0;
-const maxRetries = 2;
-while (!exito && intentos < maxRetries) {
-try {
-intentos++;
-if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
-if (window.AppRuntime) await window.AppRuntime.yieldToUI();
-const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-await oneDrive.saveFile(wbout, "aidanai-ctas.xlsx");
-exito = true;
-} catch (e) {
-if (e && e.code === 'CONFLICT_412') {
-notify("🔄 Fusionando datos de la nube...", "loading");
-try {
-    const wbFresco = await oneDrive.loadFile();
-    
-    // ---- INICIO MEJORA: guardar cartera local antes de sobrescribir ----
-    const carteraLocal = window.datosCartera ? JSON.parse(JSON.stringify(window.datosCartera)) : [];
-    const historicoLocal = window.historicoCartera ? JSON.parse(JSON.stringify(window.historicoCartera)) : [];
-    // ---- FIN MEJORA ----
-    
-    if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
-    
-    // ---- INICIO MEJORA: fusionar cartera (local prevalece) ----
-    if (carteraLocal.length > 0 || window.datosCartera.length > 0) {
-        const mapaCartera = new Map();
-        window.datosCartera.forEach(p => mapaCartera.set(p.id, p));
-        carteraLocal.forEach(p => mapaCartera.set(p.id, p));
-        window.datosCartera = Array.from(mapaCartera.values());
-    }
-    if (historicoLocal.length > 0 || window.historicoCartera.length > 0) {
-        const mapaHistorico = new Map();
-        window.historicoCartera.forEach(h => mapaHistorico.set(h.ts, h));
-        historicoLocal.forEach(h => mapaHistorico.set(h.ts, h));
-        window.historicoCartera = Array.from(mapaHistorico.values())
-            .sort((a,b) => a.ts - b.ts);
-    }
-    // ---- FIN MEJORA ----
-    
-    // 2. 🟢 MAGIA DE FUSIÓN: Comparamos la Nube con lo que intentábamos subir (datosFinales)
-    datosFinales = window.fusionarMovimientos(window.datos, datosFinales);
+
+        // --- 3. ENCRIPTADO LOCAL (AES-GCM) ---
+        const pinSession = PinSecurity.getSession();
+        if (pinSession && typeof CryptoSystem !== 'undefined') {
+            const paqueteDeDatos = {
+                movimientos: datosFinales,
+                recurrentes: window.datosRecurrentes || [],
+                config: {
+                    cuentas: window.mapaCuentas || {},
+                    conceptos: window.listaConceptosConfig || [],
+                    beneficiarios: window.listaBeneficiariosConfig || []
+                },
+                fechaGuardado: new Date().toISOString()
+            };
+            const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, pinSession);
+            localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
+        }
+
+        // --- 4. CONSTRUIR EL EXCEL PARA LA NUBE ---
+        wb = XLSX.utils.book_new();
+        const hojaMovs = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
+            "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
+            "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario,
+            "Tipo": d.tipo || ((FM.parseMoney(d.importe) >= 0) ? 'ingreso' : 'gasto')
+        })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
+        
+        Object.keys(hojaMovs).forEach(key => {
+            if (hojaMovs[key].t === 'd') hojaMovs[key].z = 'dd/mm/yyyy';
+        });
+        XLSX.utils.book_append_sheet(wb, hojaMovs, "Movimientos");
+
+        // Hoja Configuracion
+        const listaCuentas = Object.entries(window.mapaCuentas || {});
+        const rawConceptos = window.listaConceptosConfig || [];
+        const rawBeneficiarios = window.listaBeneficiariosConfig || [];
+        const maxFilas = Math.max(listaCuentas.length, rawConceptos.length, rawBeneficiarios.length);
+
+        const datosConfig = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO", "SEC_PIN_HASH"]];
+        for (let i = 0; i < maxFilas; i++) {
+            const c = listaCuentas[i];
+            const pinHash = (i === 0) ? (localStorage.getItem('aidanai_pw_v3') || "") : "";
+            datosConfig.push([
+                c ? CLEAN(c[0]) : "",
+                c ? CLEAN(c[1].tipo) : "",
+                c ? (c[1].esInversion ? "SI" : "NO") : "",
+                rawConceptos[i] ? CLEAN(rawConceptos[i]) : "",
+                rawBeneficiarios[i] ? CLEAN(rawBeneficiarios[i]) : "",
+                pinHash
+            ]);
+        }
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(datosConfig), "Configuracion");
+
+        // Hoja Recurrentes
+        const listaRec = window.datosRecurrentes || [];
+        const filasRec = listaRec.length > 0 ? listaRec.map(r => ({
+            "ID": r.id,
+            "PROXIMA_FECHA": window.FinanceModel.parseFecha(r.fechaProx),
+            "FRECUENCIA": r.frecuencia,
+            "DIAS_SEMANA": r.diasSemana || "", "TIPO_REGLA": r.tipoRegla || "gasto",
+            "CUENTA": r.cuenta, "CUENTA_DESTINO": r.cuentaDestino || "",
+            "IMPORTE": r.importe, "CONCEPTO": r.concepto, "BENEFICIARIO": r.beneficiario || "",
+            "DESCRIPCION": r.descripcion || ""
+        })) : [];
+        const wsRec = XLSX.utils.json_to_sheet(filasRec, {
+            header: ["ID", "PROXIMA_FECHA", "FRECUENCIA", "DIAS_SEMANA", "TIPO_REGLA", "CUENTA", "CUENTA_DESTINO", "IMPORTE", "CONCEPTO", "BENEFICIARIO", "DESCRIPCION"]
+        });
+
+        Object.keys(wsRec).forEach(key => {
+            if (wsRec[key].t === 'd') wsRec[key].z = 'dd/mm/yyyy';
+        });
+        XLSX.utils.book_append_sheet(wb, wsRec, "Recurrentes");
+
+        // ── MÓDULO CARTERA: Guardar hoja CARTERA ──────────────────────────────
+        const listaCartera = window.datosCartera || [];
+        if (listaCartera.length > 0) {
+            const filasCartera = listaCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
+                "ID": p.id, "TICKER": p.ticker, "NOMBRE": p.nombre, "TIPO": p.tipo,
+                "CUENTA": p.cuenta, "CANTIDAD": p.cantidad,
+                "PRECIO_COMPRA": p.precioCompra, "PRECIO_ACTUAL": p.precioActual,
+                "PRECIO_FUENTE": p.precioFuente || "",
+                "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "",
+                "FECHA_COMPRA": p.fechaCompra || "",
+                "NOTAS": p.notas || ""
+            }));
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCartera, {
+                header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"]
+            }), "Cartera");
+        }
+
+        // ── MÓDULO CARTERA: Guardar hoja HISTORICO_CARTERA ────────────────────
+        const listaHistCartera = window.historicoCartera || [];
+        if (listaHistCartera.length > 0) {
+            const filasHist = listaHistCartera.map(h => ({
+                "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
+                "VALOR": h.valor,
+                "COSTE": typeof h.coste === 'number' ? h.coste : ""
+            }));
+            const wsHistC = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR","COSTE"] });
+            Object.keys(wsHistC).forEach(k => { if (wsHistC[k].t === 'd') wsHistC[k].z = 'dd/mm/yyyy'; });
+            XLSX.utils.book_append_sheet(wb, wsHistC, "Historico_Cartera");
+        }
+
+        const usarNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0));
+        if (usarNube) {
+            let exito = false;
+            let intentos = 0;
+            const maxRetries = 2;
+            while (!exito && intentos < maxRetries) {
+                try {
+                    intentos++;
+                    if (!navigator.onLine) throw new Error("Sin conexión a Internet.");
+                    if (window.AppRuntime) await window.AppRuntime.yieldToUI();
+                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    await oneDrive.saveFile(wbout, "aidanai-ctas.xlsx");
+                    exito = true;
+                } catch (e) {
+                    if (e && e.code === 'CONFLICT_412') {
+                        if (typeof notify === 'function') notify("🔄 Fusionando datos de la nube...", "loading");
+                        try {
+                            const wbFresco = await oneDrive.loadFile();
+                            
+                            // ---- INICIO MEJORA: guardar cartera local antes de sobrescribir ----
+                            const carteraLocal = window.datosCartera ? JSON.parse(JSON.stringify(window.datosCartera)) : [];
+                            const historicoLocal = window.historicoCartera ? JSON.parse(JSON.stringify(window.historicoCartera)) : [];
+                            // ---- FIN MEJORA ----
+                            
+                            if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
+                            
+                            // ---- INICIO MEJORA: fusionar cartera (local prevalece) ----
+                            if (carteraLocal.length > 0 || window.datosCartera.length > 0) {
+                                const mapaCartera = new Map();
+                                window.datosCartera.forEach(p => mapaCartera.set(p.id, p));
+                                carteraLocal.forEach(p => mapaCartera.set(p.id, p));
+                                window.datosCartera = Array.from(mapaCartera.values());
+                            }
+                            if (historicoLocal.length > 0 || window.historicoCartera.length > 0) {
+                                const mapaHistorico = new Map();
+                                window.historicoCartera.forEach(h => mapaHistorico.set(h.ts, h));
+                                historicoLocal.forEach(h => mapaHistorico.set(h.ts, h));
+                                window.historicoCartera = Array.from(mapaHistorico.values()).sort((a,b) => a.ts - b.ts);
+                            }
+                            // ---- FIN MEJORA ----
+                            
+                            // 2. 🟢 MAGIA DE FUSIÓN
+                            datosFinales = window.fusionarMovimientos(window.datos, datosFinales);
+                            window.datos = datosFinales;
+                            
+                            // 3. RECONSTRUIMOS EL EXCEL COMPLETO CON TODAS LAS HOJAS (Evita pérdidas en conflicto)
+                            wb = XLSX.utils.book_new();
+                            
+                            // Hoja Movimientos
+                            const wsM2 = XLSX.utils.json_to_sheet(datosFinales.map(d => ({
+                                "Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
+                                "Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario, "Tipo": d.tipo
+                            })), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] });
+                            Object.keys(wsM2).forEach(key => { if (wsM2[key].t === 'd') wsM2[key].z = 'dd/mm/yyyy'; });
+                            XLSX.utils.book_append_sheet(wb, wsM2, "Movimientos");
+
+                            // Hoja Configuracion
+                            const dc2 = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO", "SEC_PIN_HASH"]];
+                            const lc2 = Object.entries(window.mapaCuentas||{}), rc2 = window.listaConceptosConfig||[], rb2 = window.listaBeneficiariosConfig||[];
+                            const mf2 = Math.max(lc2.length, rc2.length, rb2.length);
+                            for(let i=0; i<mf2; i++){
+                                const c = lc2[i];
+                                const pinHash = (i === 0) ? (localStorage.getItem('aidanai_pw_v3') || "") : "";
+                                dc2.push([
+                                    c ? CLEAN(c[0]) : "",
+                                    c ? CLEAN(c[1].tipo) : "",
+                                    c ? (c[1].esInversion ? "SI" : "NO") : "",
+                                    rc2[i] ? CLEAN(rc2[i]) : "",
+                                    rb2[i] ? CLEAN(rb2[i]) : "",
+                                    pinHash
+                                ]);
+                            }
+                            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dc2), "Configuracion");
+
+                            // Hoja Recurrentes (Se asegura de persistir usando la variable global unificada)
+                            const lr2 = window.datosRecurrentes || [];
+                            const filasRec2 = lr2.length > 0 ? lr2.map(r=>({
+                                ID: r.id,
+                                PROXIMA_FECHA: window.FinanceModel.parseFecha(r.fechaProx),
+                                FRECUENCIA: r.frecuencia,
+                                DIAS_SEMANA: r.diasSemana||"",
+                                TIPO_REGLA: r.tipoRegla||"gasto",
+                                CUENTA: r.cuenta,
+                                CUENTA_DESTINO: r.cuentaDestino||"",
+                                IMPORTE: r.importe,
+                                CONCEPTO: r.concepto,
+                                BENEFICIARIO: r.beneficiario||"",
+                                DESCRIPCION: r.descripcion||""
+                            })) : [];
+                            const wsRec2 = XLSX.utils.json_to_sheet(filasRec2, {header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]});
+                            Object.keys(wsRec2).forEach(key => { if (wsRec2[key].t === 'd') wsRec2[key].z = 'dd/mm/yyyy'; });
+                            XLSX.utils.book_append_sheet(wb, wsRec2, "Recurrentes");
+
+                            // Hoja Cartera (Añadido crucial que faltaba en tu index.html original durante conflictos)
+                            if (window.datosCartera && window.datosCartera.length > 0) {
+                                const filasCart2 = window.datosCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
+                                    "ID": p.id, "TICKER": p.ticker, "NOMBRE": p.nombre, "TIPO": p.tipo,
+                                    "CUENTA": p.cuenta, "CANTIDAD": p.cantidad, "PRECIO_COMPRA": p.precioCompra,
+                                    "PRECIO_ACTUAL": p.precioActual, "PRECIO_FUENTE": p.precioFuente || "",
+                                    "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "", "FECHA_COMPRA": p.fechaCompra || "", "NOTAS": p.notas || ""
+                                }));
+                                XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCart2, {
+                                    header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"]
+                                }), "Cartera");
+                            }
+
+                            // Hoja Historico_Cartera
+                            if (window.historicoCartera && window.historicoCartera.length > 0) {
+                                const filasHist2 = window.historicoCartera.map(h => ({
+                                    "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
+                                    "VALOR": h.valor, "COSTE": typeof h.coste === 'number' ? h.coste : ""
+                                }));
+                                const wsHist2 = XLSX.utils.json_to_sheet(filasHist2, { header: ["FECHA","VALOR","COSTE"] });
+                                Object.keys(wsHist2).forEach(k => { if (wsHist2[k].t === 'd') wsHist2[k].z = 'dd/mm/yyyy'; });
+                                XLSX.utils.book_append_sheet(wb, wsHist2, "Historico_Cartera");
+                            }
+
+                            await new Promise(r => setTimeout(r, 800));
+                        } catch(syncErr) {
+                            throw new Error("No se pudo resolver el conflicto.");
+                        }
+                    // ✅ REEMPLAZA ÚNICAMENTE ESE SEGMENTO POR ESTE:
+                    } else {
+                        if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
+                    }
+                }
+            }
+            
+            if (!exito) throw new Error("Fallo conexión OneDrive.");
+            
+            // Éxito: limpiamos el buzón offline
+            localStorage.removeItem('aidanai_buzon');
+            if (window.AppState) window.AppState.actualizarSemaforo('ok');
+            if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
+
+        } else { // <--- Ahora el else se conecta perfectamente con "if (usarNube)"
+            if (window.AppRuntime) await window.AppRuntime.yieldToUI();
+            XLSX.writeFile(wb, "aidanai-ctas.xlsx");
+            if (window.AppState) window.AppState.actualizarSemaforo('ok');
+        }
+
+    // ── 6. ACTUALIZAR UI LOCAL ────────────────────────────────────────
     window.datos = datosFinales;
-    
-// 3. RECONSTRUIMOS EL EXCEL (Movimientos)
-wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(datosFinales.map(d => ({
-"Id": d.id, "Fecha": d.fecha, "Cuenta": d.cuenta, "Concepto": d.concepto,
-"Importe": d.importe, "Descripcion": d.descripcion, "Beneficiario": d.beneficiario, "Tipo": d.tipo
-})), { header: ["Id", "Fecha", "Cuenta", "Concepto", "Importe", "Descripcion", "Beneficiario", "Tipo"] }), "Movimientos");
-// 4. RECONSTRUIMOS EL EXCEL (Configuracion) - CORREGIDO CON COLUMNA DE SEGURIDAD
-const dc2 = [["CUENTA", "TIPO", "ES_INVERSION", "CONCEPTO", "BENEFICIARIO", "SEC_PIN_HASH"]];
-const lc2 = Object.entries(window.mapaCuentas||{}), rc2 = window.listaConceptosConfig||[], rb2 = window.listaBeneficiariosConfig||[];
-const mf2 = Math.max(lc2.length, rc2.length, rb2.length);
-for(let i=0; i<mf2; i++){
-    const c = lc2[i];
-    const pinHash = (i === 0) ? (localStorage.getItem('aidanai_pw_v3') || "") : "";
-    dc2.push([
-        c ? CLEAN(c[0]) : "",
-        c ? CLEAN(c[1].tipo) : "",
-        c ? (c[1].esInversion ? "SI" : "NO") : "",
-        rc2[i] ? CLEAN(rc2[i]) : "",
-        rb2[i] ? CLEAN(rb2[i]) : "",
-        pinHash
-    ]);
-}
-XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dc2), "Configuracion");
+    window.UIEvents.emitir('datos:actualizados');
+    setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
+    return true;
 
-// 5. RECONSTRUIMOS EL EXCEL (Recurrentes) - CORREGIDO CON FECHAS REALES Y MÁSCARA VISUAL
-const lr2 = window.datosRecurrentes||[];
-const filasRec2 = lr2.length > 0 ? lr2.map(r=>({
-    ID: r.id,
-    PROXIMA_FECHA: window.FinanceModel.parseFecha(r.fechaProx),
-    FRECUENCIA: r.frecuencia,
-    DIAS_SEMANA: r.diasSemana||"",
-    TIPO_REGLA: r.tipoRegla||"gasto",
-    CUENTA: r.cuenta,
-    CUENTA_DESTINO: r.cuentaDestino||"",
-    IMPORTE: r.importe,
-    CONCEPTO: r.concepto,
-    BENEFICIARIO: r.beneficiario||"",
-    DESCRIPCION: r.descripcion||""
-})) : [];
-const wsRec2 = XLSX.utils.json_to_sheet(filasRec2, {header:["ID","PROXIMA_FECHA","FRECUENCIA","DIAS_SEMANA","TIPO_REGLA","CUENTA","CUENTA_DESTINO","IMPORTE","CONCEPTO","BENEFICIARIO","DESCRIPCION"]});
-Object.keys(wsRec2).forEach(key => { 
-    if (wsRec2[key].t === 'd') wsRec2[key].z = 'dd/mm/yyyy'; 
-});
-XLSX.utils.book_append_sheet(wb, wsRec2, "Recurrentes");
-
-// ── RECONSTRUIR HOJA HISTÓRICO_CARTERA ─────────────────────────────
-if (window.historicoCartera && window.historicoCartera.length > 0) {
-    const filasHist = window.historicoCartera.map(h => ({
-        "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
-        "VALOR": h.valor,
-        "COSTE": typeof h.coste === 'number' ? h.coste : ""
-    }));
-    const wsHist = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR","COSTE"] });
-    // Aplicar formato de fecha legible
-    Object.keys(wsHist).forEach(k => {
-        if (wsHist[k].t === 'd') wsHist[k].z = 'dd/mm/yyyy';
-    });
-    XLSX.utils.book_append_sheet(wb, wsHist, "Historico_Cartera");
-}
-await new Promise(r => setTimeout(r, 800));
-// Al terminar el catch sin errores, el bucle while vuelve a intentar la subida (intentos++)
-} catch(syncErr) {
-throw new Error("No se pudo resolver el conflicto.");
-}
-} else {
-// Si es otro error de red, esperamos un poco y reintentamos
-if (intentos < maxRetries) await new Promise(r => setTimeout(r, 1500));
-}
-}
-}
-if (!exito) throw new Error("Fallo conexión OneDrive.");
-// Éxito: limpiamos el buzón offline
-localStorage.removeItem('aidanai_buzon');
-if (window.AppState) window.AppState.actualizarSemaforo('ok');
-if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
-} else {
-if (window.AppRuntime) await window.AppRuntime.yieldToUI();
-XLSX.writeFile(wb, "aidanai-ctas.xlsx");
-if (window.AppState) window.AppState.actualizarSemaforo('ok');
-}
-// --- 6. ACTUALIZAR UI LOCAL ---
-window.datos = datosFinales;
-window.UIEvents.emitir('datos:actualizados');
-setTimeout(() => { if(btn) btn.innerHTML = originalText; }, 2000);
-return true;
 } catch (errorCritico) {
     console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
     // --- 7. FALLO: BUZÓN DE SALIDA (OFFLINE QUEUE) ---
@@ -6429,15 +6676,12 @@ return true;
         localStorage.setItem('aidanai_buzon', JSON.stringify(buzonAnterior));
         if (typeof notify === 'function') notify("📶 Sin conexión. Guardado offline en espera.", "warning");
         if (window.AppState) window.AppState.actualizarSemaforo('naranja');
-        // 🟢 NUEVO: FIX OPTIMISTIC UI (El truco Fintech)
-        // Aunque no haya red, inyectamos el dato visualmente para que no desaparezca de la pantalla
+        
         window.datos = datosFinales;
         if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
     } else {
         if (window.AppState) window.AppState.actualizarSemaforo('error');
     }
-    // 🟢 NUEVO: Devolvemos true para que el modal/formulario se cierre. 
-    // Para el usuario, la experiencia es fluida y sin bloqueos.
     return true; 
 } finally {
     // --- 8. LIBERAR MUTEX SIEMPRE ---
@@ -6445,6 +6689,96 @@ return true;
     if (btnModal) btnModal.innerHTML = 'GUARDAR';
     setTimeout(() => { if (btn) btn.innerHTML = originalText; }, 2000);
 }
+}; // <-- Aquí cierra de forma segura e impecable window.guardarUniversal
+
+
+// ==========================================
+// ⚙️ PROCESADOR AUTOMÁTICO DE MOVIMIENTOS RECURRENTES (ADAPTADO)
+// ==========================================
+window.procesarRecurrentes = async function() {
+    // Usamos datosRecurrentes que es la variable nativa de tu index.html
+    if (!window.datosRecurrentes || window.datosRecurrentes.length === 0) return;
+    
+    const hoy = new Date();
+    const anioActual = hoy.getFullYear();
+    const mesActual = hoy.getMonth() + 1; // Mes de 1 a 12
+    const diaActual = hoy.getDate();
+    
+    let nuevosMovs = [];
+    
+    for (let regla of window.datosRecurrentes) {
+        if (!regla.frecuencia) continue;
+        
+        // Obtención ultra-segura del día de cobro (por número directo o fechaProx)
+        let diaRegla = regla.dia ? parseInt(regla.dia) : null;
+        if (!diaRegla && regla.fechaProx) {
+            const dObj = new Date(regla.fechaProx);
+            if (!isNaN(dObj.getTime())) {
+                diaRegla = dObj.getDate();
+            }
+        }
+        
+        if (!diaRegla) continue; 
+        
+        const ultimaEjecucion = regla.ultima_ejecucion || "";
+        const claveMesAnio = `${anioActual}-${String(mesActual).padStart(2, '0')}`;
+        
+        // Si ya ha sido procesada este mes, la saltamos
+        if (ultimaEjecucion.startsWith(claveMesAnio)) {
+            continue; 
+        }
+        
+        let tocaEjecutar = false;
+        if (regla.frecuencia === 'mensual') {
+            if (diaActual >= diaRegla) {
+                tocaEjecutar = true;
+            }
+        }
+        
+        if (tocaEjecutar) {
+            const fechaEfectiva = new Date(anioActual, mesActual - 1, diaRegla, 12, 0, 0);
+            const importeNum = parseFloat(regla.importe || 0);
+            
+            const nuevoMov = {
+                id: typeof uuid === 'function' ? uuid() : crypto.randomUUID(),
+                fecha: fechaEfectiva, 
+                cuenta: regla.cuenta,
+                concepto: regla.concepto,
+                importe: importeNum,
+                descripcion: `[RECURRENTE] ${regla.descripcion || ""}`.trim(),
+                beneficiario: regla.beneficiario || "DN",
+                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
+                ts: fechaEfectiva.getTime()
+            };
+            
+            nuevosMovs.push(nuevoMov);
+            
+            // Marcamos el sello de ejecución
+            regla.ultima_ejecucion = `${anioActual}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`;
+            
+            // Desplazamos la fecha estética al mes siguiente
+            const proximoMes = mesActual === 12 ? 1 : mesActual + 1;
+            const proximoAnio = mesActual === 12 ? anioActual + 1 : anioActual;
+            regla.fechaProx = `${proximoAnio}-${String(proximoMes).padStart(2, '0')}-${String(diaRegla).padStart(2, '0')}`;
+        }
+    }
+    
+    if (nuevosMovs.length > 0) {
+        if (!window.datos) window.datos = [];
+        window.datos.push(...nuevosMovs);
+        window.datos.sort((a, b) => b.ts - a.ts);
+        
+        if (typeof renderizar === 'function') renderizar();
+        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
+        if (typeof actualizarDashboard === 'function') actualizarDashboard();
+        
+        // Subimos a OneDrive los cambios
+        await window.guardarUniversal();
+        
+        if (typeof window.mostrarToast === 'function') {
+            window.mostrarToast(`✅ Autogenerados ${nuevosMovs.length} movimientos recurrentes.`, "success");
+        }
+    }
 };
 // ==========================================
 // 🌊 GRÁFICO SANKEY (RÍOS DE DINERO) - [OPTIMIZADO RAM]
@@ -7242,26 +7576,30 @@ window.actualizarDashboard();
 }
 };
 // =========================================================
-// 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (VERSIÓN CORREGIDA)
+// 🚀 FUNCIÓN DASHBOARD: CÁLCULOS REALES (CON PATRIMONIO AVANZADO)
 // =========================================================
 window.actualizarDashboard = function() {
 if (window.AppRuntime && window.AppRuntime.shouldSkipDashboard()) return;
+
 // 1. SEGURIDAD: Si no hay datos, salimos sin romper nada
 if (!window.datos || window.datos.length === 0) {
-animarCifra('d-ing', 0, 'moneda');
-animarCifra('d-gas', 0, 'moneda');
-animarCifra('d-net', 0, 'moneda');
-animarCifra('d-aho', 0, 'porcentaje');
-return;
+ animarCifra('d-ing', 0, 'moneda');
+ animarCifra('d-gas', 0, 'moneda');
+ animarCifra('d-net', 0, 'moneda');
+ animarCifra('d-aho', 0, 'porcentaje');
+ return;
 }
-// 2. FILTRADO POR USUARIO (GLOBAL)
+
+// 2. FILTRADO POR USUARIO (GLOBAL - BLINDADO)
 let datosUsuario = [...window.datos];
-if (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') {
-datosUsuario = datosUsuario.filter(m => pasaFiltroPropietario(m));
+if (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos' && typeof pasaFiltroPropietario === 'function') {
+    datosUsuario = datosUsuario.filter(m => pasaFiltroPropietario(m));
 }
+
 // 3. FILTRADO POR FECHA (PARA LA TARJETA DE RESUMEN)
 const rango = getFechasDashboard();
 window.datosResumen = datosUsuario.filter(m => m.ts >= rango.start && m.ts <= rango.end);
+
 // 4. CÁLCULO DE KPIs DE PERIODO (INGRESOS, GASTOS, AHORRO)
 let ing = 0;
 let gas = 0;
@@ -7269,69 +7607,110 @@ window.datosResumen.forEach(m => {
 const conc = String(m.concepto || "").toLowerCase();
 if (conc.includes('inicial') || conc.includes('traspaso')) return;
 if (m.tipo === 'ingreso') {
-ing += m.importe;
+ ing += m.importe;
 } else if (m.tipo === 'gasto') {
-gas += Math.abs(m.importe);
+ gas += Math.abs(m.importe);
 }
 });
 const neto = ing - gas;
 const tasaAhorro = (ing > 0) ? (neto / ing) * 100 : 0;
+
 // 5. ACTUALIZAR TARJETA SUPERIOR (RESUMEN)
 animarCifra('d-ing', ing, 'moneda');
 animarCifra('d-gas', gas, 'moneda');
 const elNeto = document.getElementById('d-net');
 if(elNeto) {
-animarCifra('d-net', neto, 'moneda');
-elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
+ animarCifra('d-net', neto, 'moneda');
+ elNeto.className = 'kpi-value ' + (neto >= 0 ? 'val-std-pos' : 'val-std-neg');
 }
 animarCifra('d-aho', tasaAhorro, 'porcentaje');
+
 // 6. CÁLCULO DE PATRIMONIO
 let totalPatrimonio = 0;
 let totalLiquidez = 0;
 let totalInversion = 0;
 let totalAutocustodia = 0;
 let totalPropiedad = 0;
+
 if (window.mapaCuentas) {
-Object.keys(window.mapaCuentas).forEach(k => {
-if (filtroUsuarioActual !== 'todos') {
-const letra = k.charAt(0).toUpperCase();
-if (filtroUsuarioActual === 'D' && letra !== 'D') return;
-if (filtroUsuarioActual === 'N' && letra !== 'N') return;
+ Object.keys(window.mapaCuentas).forEach(k => {
+ if (filtroUsuarioActual !== 'todos') {
+ const letra = k.charAt(0).toUpperCase();
+ if (filtroUsuarioActual === 'D' && letra !== 'D') return;
+ if (filtroUsuarioActual === 'N' && letra !== 'N') return;
+ }
+ const c = window.mapaCuentas[k];
+ const saldo = c.saldoActual || 0;
+ const tipo = (c.tipo || '').toUpperCase();
+ totalPatrimonio += saldo;
+ 
+ if (tipo === 'AUTOCUSTODIA') {
+     totalAutocustodia += saldo;
+ } else if (tipo === 'PROPIEDAD' || tipo === 'INMUEBLE') {
+ totalPropiedad += saldo;
+ } else if (c.esInversion) {
+ totalInversion += saldo;
+ } else {
+ totalLiquidez += saldo;
+ }
+ });
 }
-const c = window.mapaCuentas[k];
-const saldo = c.saldoActual || 0;
-const tipo = (c.tipo || '').toUpperCase();
-totalPatrimonio += saldo;
-if (tipo === 'AUTOCUSTODIA') {
-    // const coste = c.costeTotal !== undefined ? c.costeTotal : saldo;
-    // totalAutocustodia += coste;
-    totalAutocustodia += saldo;
-} else if (tipo === 'PROPIEDAD' || tipo === 'INMUEBLE') {
-totalPropiedad += saldo;
-} else if (c.esInversion) {
-totalInversion += saldo;
-} else {
-totalLiquidez += saldo;
-}
-});
-}
+
 // --- 🚀 MÁQUINA DEL TIEMPO (SIMULADOR DE IMPACTO) ---
 if (window.simuladorImpacto && window.simuladorImpacto > 0) {
-totalLiquidez -= window.simuladorImpacto;
-totalPatrimonio -= window.simuladorImpacto;
+ totalLiquidez -= window.simuladorImpacto;
+ totalPatrimonio -= window.simuladorImpacto;
 }
-const elPatri = document.getElementById('d-patri-total');
-if(elPatri) {
+
+// Actualización del Patrimonio Total mediante animación nativa
 animarCifra('d-patri-total', totalPatrimonio, 'moneda');
-elPatri.className = totalPatrimonio >= 0 ? 'kpi-value val-std-blue' : 'kpi-value val-std-neg';
-}
-animarCifra('d-patri-liq', totalLiquidez, 'moneda');
-animarCifra('d-patri-inv', totalInversion, 'moneda');
-animarCifra('d-patri-auto', totalAutocustodia, 'moneda');
-animarCifra('d-patri-prop', totalPropiedad, 'moneda');
-// NUEVO: Calcular y actualizar la tarjeta de Liquidez + Inversión en Inicio
+
+// 🟢 ANIMACIÓN COHESIVA: Actualiza los 4 desgloses de la rejilla visual en tiempo real (IDs Corregidos)
+animarCifra('d-liquidez-val', totalLiquidez, 'moneda');
+animarCifra('d-inversion-val', totalInversion, 'moneda');
+animarCifra('d-autocustodia-val', totalAutocustodia, 'moneda');
+animarCifra('d-propiedad-val', totalPropiedad, 'moneda');
+
+// Calcular y actualizar la tarjeta de Liquidez + Inversión en Inicio
 const totalMetalico = totalLiquidez + totalInversion;
 animarCifra('d-metalico', totalMetalico, 'moneda');
+
+// 📈 CÁLCULO DE PLUSVALÍA LATENTE CRITERIO USUARIO (DN / D / N)
+let totalCosteCartera = 0;
+let totalValorCartera = 0;
+
+if (window.datosCartera && Array.isArray(window.datosCartera)) {
+ window.datosCartera.forEach(pos => {
+ if (typeof filtroUsuarioActual !== 'undefined' && filtroUsuarioActual !== 'todos') {
+ const cuentaPos = String(pos.cuenta || "").toUpperCase().trim();
+ // Filtrado estricto por la letra inicial de la cuenta asociada a la posición
+ if (filtroUsuarioActual === 'D' && !cuentaPos.startsWith('D')) return;
+ if (filtroUsuarioActual === 'N' && !cuentaPos.startsWith('N')) return;
+ }
+ const cantidad = parseFloat(pos.cantidad || 0);
+ const precioCompra = parseFloat(pos.precioCompra || 0);
+ const precioActual = parseFloat(pos.precioActual || pos.precioCompra || 0);
+ 
+ totalCosteCartera += (cantidad * precioCompra);
+ totalValorCartera += (cantidad * precioActual);
+ });
+}
+
+const plusvaliaMonto = totalValorCartera - totalCosteCartera;
+const plusvaliaPct = totalCosteCartera > 0 ? (plusvaliaMonto / totalCosteCartera) * 100 : 0;
+
+// Sincronizado con window.resumenCartera para coincidir con la tarjeta de cartera
+const elPatriPlusvalia = document.getElementById('total-patri-plusvalia');
+if (elPatriPlusvalia) {
+    const r = window.resumenCartera;
+    const monto = (r && r.numPosiciones > 0) ? r.plusvalia : plusvaliaMonto;
+    const pct   = (r && r.numPosiciones > 0) ? r.rentabilidad : plusvaliaPct;
+    const signo = monto >= 0 ? '+' : '';
+    const fmt2  = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
+    elPatriPlusvalia.innerText = `${signo}${fmt2(monto)} (${signo}${pct.toFixed(2)}%)`;
+    elPatriPlusvalia.style.color = monto >= 0 ? '#39FF14' : '#FF2E4D';
+}
+
 // 7. CÁLCULO DE KPIs FINANCIEROS AVANZADOS
 let gastoTotalUltimoAno = 0;
 let ingresoTotalUltimoAno = 0;
@@ -7342,36 +7721,40 @@ const datosUltimoAno = datosUsuario.filter(m => m.ts >= tsCorte);
 let primerMovAno = new Date();
 let ultimoMovAno = new Date(0);
 let hayDatosAno = false;
+
 datosUltimoAno.forEach(m => {
-const conc = String(m.concepto || "").toLowerCase();
-if (conc.includes('inicial') || conc.includes('traspaso')) return;
-if (m.tipo === 'gasto') {
-gastoTotalUltimoAno += Math.abs(m.importe);
-if (m.fecha < primerMovAno) primerMovAno = m.fecha;
-if (m.fecha > ultimoMovAno) ultimoMovAno = m.fecha;
-hayDatosAno = true;
-} else if (m.tipo === 'ingreso') {
-ingresoTotalUltimoAno += m.importe;
-}
+ const conc = String(m.concepto || "").toLowerCase();
+ if (conc.includes('inicial') || conc.includes('traspaso')) return;
+ if (m.tipo === 'gasto') {
+ gastoTotalUltimoAno += Math.abs(m.importe);
+ if (m.fecha < primerMovAno) primerMovAno = m.fecha;
+ if (m.fecha > ultimoMovAno) ultimoMovAno = m.fecha;
+ hayDatosAno = true;
+ } else if (m.tipo === 'ingreso') {
+ ingresoTotalUltimoAno += m.importe;
+ }
 });
+
 let gastoMensualMedio = 0;
 if (hayDatosAno) {
-const diasDif = Math.max(1, (ultimoMovAno - primerMovAno) / (1000 * 60 * 60 * 24));
-gastoMensualMedio = (gastoTotalUltimoAno / diasDif) * 30.44;
+ const diasDif = Math.max(1, (ultimoMovAno - primerMovAno) / (1000 * 60 * 60 * 24));
+ gastoMensualMedio = (gastoTotalUltimoAno / diasDif) * 30.44;
 }
 if (gastoMensualMedio < 1) gastoMensualMedio = 1;
+
 // A) COBERTURA
 let mesesCobertura = totalLiquidez / gastoMensualMedio;
 if (mesesCobertura < 0) mesesCobertura = 0;
 const elCob = document.getElementById('d-cobertura');
 if(elCob) {
-let mesesC = Math.floor(mesesCobertura);
-let diasC = Math.round((mesesCobertura - mesesC) * 30.44);
-if (diasC >= 30) { mesesC += 1; diasC = 0; }
-elCob.innerText = `${mesesC} mes${mesesC !== 1 ? 'es' : ''} y ${diasC} día${diasC !== 1 ? 's' : ''}`;
-elCob.style.fontSize = "19px";
-elCob.style.color = "var(--c-primary, #0A84FF)";
+ let mesesC = Math.floor(mesesCobertura);
+ let diasC = Math.round((mesesCobertura - mesesC) * 30.44);
+ if (diasC >= 30) { mesesC += 1; diasC = 0; }
+ elCob.innerText = `${mesesC} mes${mesesC !== 1 ? 'es' : ''} y ${diasC} día${diasC !== 1 ? 's' : ''}`;
+ elCob.style.fontSize = "19px";
+ elCob.style.color = "var(--c-primary, #0A84FF)";
 }
+
 // B) LIBERTAD
 let mesesLibertad = totalPatrimonio / gastoMensualMedio;
 if (mesesLibertad < 0) mesesLibertad = 0;
@@ -7382,53 +7765,47 @@ let gastoAnualProyectado = gastoMensualMedio * 12;
 let pctLibertad = (rentaPasivaAnual / gastoAnualProyectado) * 100;
 const elLib = document.getElementById('d-libertad');
 if(elLib) {
-elLib.innerText = `${aniosLib} año${aniosLib !== 1 ? 's' : ''} y ${mesesLib} mes${mesesLib !== 1 ? 'es' : ''}`;
-elLib.style.fontSize = "19px";
-elLib.style.color = "var(--c-primary, #0A84FF)";
+ elLib.innerText = `${aniosLib} año${aniosLib !== 1 ? 's' : ''} y ${mesesLib} mes${mesesLib !== 1 ? 'es' : ''}`;
+ elLib.style.fontSize = "19px";
+ elLib.style.color = "var(--c-primary, #0A84FF)";
 }
+
 // C) AHORRO ESTRUCTURAL
 let tasaAhorroEstructural = 0;
 let ahorroMensualMedio = 0;
 if (ingresoTotalUltimoAno > 0) {
-tasaAhorroEstructural = ((ingresoTotalUltimoAno - gastoTotalUltimoAno) / ingresoTotalUltimoAno) * 100;
-ahorroMensualMedio = (ingresoTotalUltimoAno - gastoTotalUltimoAno) / 12;
+ tasaAhorroEstructural = ((ingresoTotalUltimoAno - gastoTotalUltimoAno) / ingresoTotalUltimoAno) * 100;
+ ahorroMensualMedio = (ingresoTotalUltimoAno - gastoTotalUltimoAno) / 12;
 }
+
 // 8. RENDERIZADO DE GRÁFICOS SOLO EN LA PESTAÑA VISIBLE
 const tabActivaDashboard = window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio';
 if (tabActivaDashboard === 'inicio' && typeof window.renderizarSankey === 'function') {
-window.renderizarSankey(window.datosResumen);
+ window.renderizarSankey(window.datosResumen);
 }
-if (tabActivaDashboard === 'patri' && typeof renderizarGraficoEvolucion === 'function') {
-renderizarGraficoEvolucion(datosUsuario);
+if (tabActivaDashboard === 'patrimonio' && typeof renderizarGraficoEvolucion === 'function') {
+ renderizarGraficoEvolucion(datosUsuario);
 }
-// Cachear KPIs para uso desde otras pestañas (e.g. Salud)
-window._lastTotalPatri = totalPatrimonio;
-window._lastInversion = totalInversion;
-window._lastGasto = gastoMensualMedio;
-window._lastAhorro = ahorroMensualMedio;
-window._lastMesesCobertura = mesesCobertura;
-window._lastTasaAhorro = tasaAhorroEstructural;
-window._lastLibertad = pctLibertad;
-if (tabActivaDashboard === 'salud' && typeof renderizarProyectorFIRE === 'function') {
-renderizarProyectorFIRE(totalLiquidez + totalInversion, ahorroMensualMedio, gastoMensualMedio);
+if (tabActivaDashboard === 'presupuestos' && typeof renderizarProyectorFIRE === 'function') {
+ renderizarProyectorFIRE(totalLiquidez + totalInversion, ahorroMensualMedio, gastoMensualMedio);
 }
-if (tabActivaDashboard === 'salud' && typeof window.renderizarRadarScoring === 'function') {
-window.renderizarRadarScoring({
-meses: mesesCobertura,
-tasaAhorro: tasaAhorroEstructural,
-inversiones: totalInversion,
-patrimonio: totalPatrimonio || 1,
-libertad: pctLibertad,
-gastoMedio: gastoMensualMedio
-});
+if (tabActivaDashboard === 'presupuestos' && typeof window.renderizarRadarScoring === 'function') {
+ window.renderizarRadarScoring({ meses: mesesCobertura, tasaAhorro: tasaAhorroEstructural, inversiones: totalInversion, patrimonio: totalPatrimonio || 1, libertad: pctLibertad, gastoMedio: gastoMensualMedio });
 }
-// 🚀 9. CÁLCULO DEL PRESUPUESTO ANUAL (solo cuando el usuario mira esa pestaña)
-if (tabActivaDashboard === 'presupuesto' && typeof window.calcularPresupuestoYComparativa === 'function') {
-window.calcularPresupuestoYComparativa();
+
+// 🚀 9. CÁLCULO DEL PRESUPUESTO ANUAL
+if (tabActivaDashboard === 'presupuestos' && typeof window.calcularPresupuestoYComparativa === 'function') {
+ window.calcularPresupuestoYComparativa();
 }
-// 11. ALERTAS DE RECIBOS PRÓXIMOS, diferidas para no bloquear el primer pintado
+
+// Forzar recarga automática de Cuentas Claras al actualizar datos
+if (tabActivaDashboard === 'presupuestos' && typeof window.actualizarCuentasClaras === 'function') {
+ window.actualizarCuentasClaras();
+}
+
+// 11. ALERTAS DE RECIBOS PRÓXIMOS
 if (tabActivaDashboard === 'inicio' && window.AppInitializer && typeof window.AppInitializer.revisarRecibosProximos === 'function') {
-setTimeout(() => window.AppInitializer.revisarRecibosProximos(), 250);
+ setTimeout(() => window.AppInitializer.revisarRecibosProximos(), 250);
 }
 };
 // ==========================================
@@ -7500,6 +7877,10 @@ window.toggleUsuario = function() {
     }, 50);
 
     if(typeof vibrar === 'function') vibrar('tecla');
+	// 📌 NUEVO: INTERCEPTOR DE PERSONALIZACIÓN DE INTERFAZ EN CALIENTE
+    if (window.UserConfigManager) {
+        window.UserConfigManager.aplicar();
+    }
 };
 // === FUNCIÓN DE EDICIÓN (VERSIÓN BLINDADA) ===
 window.editarMovimiento = function(idMov) {
@@ -7513,7 +7894,7 @@ tipo = 'traspaso';
 tipo = 'ingreso';
 }
 // CRÍTICO: Decirle al sistema global en qué modo estamos para que 'guardarManual' sepa poner el signo (-)
-window.modoTransaccionActual = tipo;
+window.modoTransaccionActual = mov.tipo; // Aquí el "setter" actualiza AppState
 window.idEnEdicion = mov.id;
 // 2. ABRIR EL MODAL (Pasamos 'true' para indicar que es edición)
 if(typeof abrirModal === 'function') abrirModal(true);
@@ -7653,6 +8034,41 @@ notify("✅ Backup completo (3 hojas) descargado", "success");
 console.error(error);
 notify("❌ Error al generar el backup: " + error.message, "error");
 }
+}
+
+// ── HOJA 4: CARTERA (Añadir esto que falta de index.html)
+const listaCartera = window.datosCartera || [];
+if (listaCartera.length > 0) {
+    const filasCartera = listaCartera.map(p => window.sanitizarPosicionCartera(p)).map(p => ({
+        "ID": p.id,
+        "TICKER": p.ticker,
+        "NOMBRE": p.nombre,
+        "TIPO": p.tipo,
+        "CUENTA": p.cuenta,
+        "CANTIDAD": p.cantidad,
+        "PRECIO_COMPRA": p.precioCompra,
+        "PRECIO_ACTUAL": p.precioActual,
+        "PRECIO_FUENTE": p.precioFuente || "",
+        "PRECIO_ACTUALIZADO": p.precioActualizadoEn || "",
+        "FECHA_COMPRA": p.fechaCompra || "",
+        "NOTAS": p.notes || p.notas || ""
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasCartera, { header: ["ID","TICKER","NOMBRE","TIPO","CUENTA","CANTIDAD","PRECIO_COMPRA","PRECIO_ACTUAL","PRECIO_FUENTE","PRECIO_ACTUALIZADO","FECHA_COMPRA","NOTAS"] }), "Cartera");
+}
+
+// ── HOJA 5: HISTORICO_CARTERA (Añadir esto que falta de index.html)
+const listaHistCartera = window.historicoCartera || [];
+if (listaHistCartera.length > 0) {
+    const filasHist = listaHistCartera.map(h => ({
+        "FECHA": h.fecha instanceof Date ? h.fecha : new Date(h.ts),
+        "VALOR": h.valor,
+        "COSTE": typeof h.coste === 'number' ? h.coste : ""
+    }));
+    const wsHistC = XLSX.utils.json_to_sheet(filasHist, { header: ["FECHA","VALOR","COSTE"] });
+    Object.keys(wsHistC).forEach(k => {
+        if (wsHistC[k].t === 'd') wsHistC[k].z = 'dd/mm/yyyy';
+    });
+    XLSX.utils.book_append_sheet(wb, wsHistC, "Historico_Cartera");
 }
 // ==========================================
 // 🔐 GESTOR DE SEGURIDAD (CONTRASEÑA ROBUSTA)
@@ -8095,28 +8511,17 @@ window.alternarDiasDiarioUnificado = function() {
     const cajaDias = document.getElementById('m-dias-semana-box');
     if (cajaDias) cajaDias.style.display = (frecuencia === 'Diario') ? 'block' : 'none';
 };
-window.guardarComoRecurrenteUnificado = async function(modoForzado = null) {
+
+window.guardarComoRecurrenteUnificado = async function() {
     const idEdit = document.getElementById('m-id').value;
     const importeStr = document.getElementById('m-cantidad').value;
     const fecha = document.getElementById('m-fecha').value;
     const cta = document.getElementById('m-cuenta').value;
-    
-    // Capturamos la cuenta destino
-    let ctaDest = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
+    const ctaDest = document.getElementById('m-cuenta-destino') ? document.getElementById('m-cuenta-destino').value : '';
     const conc = document.getElementById('m-concepto').value;
     const benef = document.getElementById('m-beneficiario').value;
     const desc = document.getElementById('m-desc').value;
     const frec = document.getElementById('m-frecuencia-recurrente').value;
-    
-    // DETERMINAR TIPO CORRECTO
-    // Si viene un parámetro (modoForzado), usamos ese. Si no, el global.
-    let tipo = modoForzado || window.modoTransaccionActual || 'gasto';
-
-    // ¡CRUCIAL! Si no es traspaso, vaciamos la cuenta destino para evitar que el sistema
-    // interprete que es una transferencia de dinero entre cuentas.
-    if (tipo !== 'traspaso') {
-        ctaDest = '';
-    }
     
     let diasStr = '';
     if (frec === 'Diario') {
@@ -8131,6 +8536,7 @@ window.guardarComoRecurrenteUnificado = async function(modoForzado = null) {
     let importeNum = window.FinanceModel.parseMoney(importeStr);
     if (isNaN(importeNum) || importeNum === 0) throw new Error("Importe inválido");
 
+    let tipo = window.modoTransaccionActual || 'gasto';
     let importeGuardar = tipo === 'gasto' ? -Math.abs(importeNum) : Math.abs(importeNum);
 
     if (!window.datosRecurrentes) window.datosRecurrentes = [];
@@ -8142,7 +8548,7 @@ window.guardarComoRecurrenteUnificado = async function(modoForzado = null) {
         diasSemana: diasStr,
         tipoRegla: tipo,
         cuenta: cta,
-        cuentaDestino: ctaDest, // Ahora llegará vacía si no es traspaso
+        cuentaDestino: ctaDest,
         concepto: conc,
         beneficiario: benef,
         descripcion: desc,
@@ -8165,7 +8571,6 @@ window.guardarComoRecurrenteUnificado = async function(modoForzado = null) {
     notify("✅ Regla fija guardada", "success");
     if(typeof cargarVistaRecurrentes === 'function') cargarVistaRecurrentes();
 };
-
 // === FIN LÓGICA UNIFICADA RECURRENTES ===
 // --- FUNCIÓN MEJORADA: AGREGAR RECURRENTE (CON SOPORTE PARA TRASPASOS) ---
 window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
@@ -8201,7 +8606,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
     const destinoLimpio = String(regla.cuentaDestino || '').trim();
 
     // 3. Lógica divisoria: Traspaso (2 movs) vs Gasto/Ingreso (1 mov)
-    if (tipoReglaLimpio === 'traspaso' || destinoLimpio.length > 1) {
+    if (tipoReglaLimpio === 'traspaso' && destinoLimpio.length > 1) {
         // Movimiento 1: El dinero sale (Origen)
         movimientosAGuardar.push({
             id: uuid(),
@@ -8272,6 +8677,150 @@ if ('serviceWorker' in navigator) {
     } else {
         }
 }
+
+// ============================================================================
+// 🛠️ MOTOR DE PERSONALIZACIÓN AVANZADA DE INTERFAZ POR USUARIO
+// ============================================================================
+window.UserConfigManager = (function() {
+    const STORAGE_PREFIX = "cuentas_cfg_";
+
+    // Configuración por defecto: todo visible
+    const CONFIG_DEFECTO = {
+        pestanaInicial: "inicio",
+        pestanas: { inicio: true, diario: true, recurrentes: true, presupuestos: true, patrimonio: true, ajustes: true },
+        graficos: { sankey: true, radar: true, fire: true, sunburst: true, treemap: true },
+        tarjetas: { kpiLiquidez: true, kpiAlertas: true, cuentasClaras: true, kpiLibertad: true }
+    };
+
+    // Mapeo directo entre los elementos lógicos y los IDs reales de tu HTML
+    const MAPA_DOM = {
+        pestanas: {
+            inicio: { nav: "nav-inicio", view: "tab-inicio" },
+            diario: { nav: "nav-diario", view: "tab-diario" },
+            recurrentes: { nav: "nav-recurrentes", view: "tab-recurrentes" },
+            presupuestos: { nav: "nav-presupuestos", view: "tab-presupuestos" },
+            patrimonio: { nav: "nav-patrimonio", view: "tab-patrimonio" },
+            ajustes: { nav: "nav-ajustes", view: "tab-ajustes" }
+        },
+        graficos: {
+            sankey: "chart-Sankey",
+            radar: "chartRadar",
+            fire: "chart-FIRE",
+            sunburst: "chart-Sunburst",
+            treemap: "chart-TreeMap"
+        },
+        tarjetas: {
+    kpiLiquidez: "card-kpi-liquidez",
+    kpiAlertas: "contenedor-alertas-15d", // Apunta al contenedor inyectado por el revisor de recibos
+    cuentasClaras: "card-cuentas-claras",  // Oculta la tarjeta completa, no solo el texto interior
+    kpiLibertad: "card-kpi-libertad"       // Oculta el bloque naranja de salud completo
+}
+    };
+
+    function obtenerUsuarioActivo() {
+        // Adaptación defensiva: lee tu filtro actual o asigna un fallback seguro
+        return window.filtroUsuarioActual || "todos";
+    }
+
+    function cargarPreferencias() {
+        const usuario = obtenerUsuarioActivo();
+        const guardado = localStorage.getItem(STORAGE_PREFIX + usuario);
+        if (!guardado) return JSON.parse(JSON.stringify(CONFIG_DEFECTO));
+        try {
+            return Object.assign({}, CONFIG_DEFECTO, JSON.parse(guardado));
+        } catch (e) {
+            return JSON.parse(JSON.stringify(CONFIG_DEFECTO));
+        }
+    }
+
+    function aplicarPreferenciasUI() {
+        const cfg = cargarPreferencias();
+
+        // 1. Mostrar/Ocultar botones del menú inferior de navegación
+        Object.keys(MAPA_DOM.pestanas).forEach(key => {
+            const ids = MAPA_DOM.pestanas[key];
+            const botonNav = document.getElementById(ids.nav);
+            const esVisible = cfg.pestanas[key];
+            if (botonNav) {
+                botonNav.style.display = esVisible ? "flex" : "none";
+            }
+        });
+
+        // 2. Mostrar/Ocultar contenedores de Gráficos (y sus tarjetas contenedoras)
+        Object.keys(MAPA_DOM.graficos).forEach(key => {
+            const id = MAPA_DOM.graficos[key];
+            const grafico = document.getElementById(id);
+            const esVisible = cfg.graficos[key];
+            if (grafico) {
+                const tarjetaContenedora = grafico.closest('.master-card') || grafico.parentElement;
+                if (tarjetaContenedora) tarjetaContenedora.style.display = esVisible ? "" : "none";
+            }
+        });
+
+        // 3. Mostrar/Ocultar Tarjetas KPI específicas
+        Object.keys(MAPA_DOM.tarjetas).forEach(key => {
+            const id = MAPA_DOM.tarjetas[key];
+            const kpi = document.getElementById(id);
+            const esVisible = cfg.tarjetas[key];
+            if (kpi) {
+                const tarjetaContenedora = kpi.closest('.master-card') || kpi;
+                tarjetaContenedora.style.display = esVisible ? "" : "none";
+            }
+        });
+
+        // 4. Sincronizar los controles del panel de ajustes si está pintado
+        const selectInicial = document.getElementById("cfg-tab-inicial");
+        if (selectInicial) selectInicial.value = cfg.pestanaInicial;
+
+        document.querySelectorAll(".control-config-pwa").forEach(input => {
+            const tipo = input.dataset.tipo;
+            const clave = input.dataset.clave;
+            if (tipo && clave && cfg[tipo]) {
+                input.checked = !!cfg[tipo][clave];
+            }
+        });
+    }
+
+    function guardarPreferenciasDesdeUI() {
+        const usuario = obtenerUsuarioActivo();
+        const cfg = {
+            pestanaInicial: document.getElementById("cfg-tab-inicial")?.value || "inicio",
+            pestanas: {},
+            graficos: {},
+            tarjetas: {}
+        };
+
+        document.querySelectorAll(".control-config-pwa").forEach(input => {
+            const tipo = input.dataset.tipo;
+            const clave = input.dataset.clave;
+            if (tipo && clave) {
+                cfg[tipo][clave] = input.checked;
+            }
+        });
+
+        localStorage.setItem(STORAGE_PREFIX + usuario, JSON.stringify(cfg));
+        aplicarPreferenciasUI();
+        
+        if (typeof window.mostrarToast === 'function') {
+            window.mostrarToast(`Preferencias de ${usuario.toUpperCase()} aplicadas`, "success");
+        }
+    }
+
+    function irAPestanaInicialPerfil() {
+        const cfg = cargarPreferencias();
+        // Si el usuario ha ocultado su pestaña inicial preferida, usamos 'ajustes' como salvavidas
+        const destino = cfg.pestanas[cfg.pestanaInicial] ? cfg.pestanaInicial : "ajustes";
+        if (typeof window.irPestana === 'function') {
+            window.irPestana(destino);
+        }
+    }
+
+    return {
+        aplicar: aplicarPreferenciasUI,
+        guardar: guardarPreferenciasDesdeUI,
+        iniciar: irAPestanaInicialPerfil
+    };
+})();
 
 // ─────────────────────────────────────────────────────────────
 // 4. PULL TO REFRESH
@@ -8349,14 +8898,10 @@ window.addEventListener('offline', () => {
 notify('📵 Sin conexión — trabajando en local', 'error');
 if(window.AppState) window.AppState.actualizarSemaforo('rojo');
 });
-// Listener nativo para vaciar colas de espera en cuanto el dispositivo detecte internet
 window.addEventListener('online', () => {
-    if (typeof window.sincronizarSalaEspera === 'function') {
-        console.log("🌐 Conexión restaurada detectada. Ejecutando sincronización de sala de espera...");
-        window.sincronizarSalaEspera();
-    }
+notify('📶 Conexión restaurada', 'success');
+if(window.AppState) window.AppState.actualizarSemaforo('verde');
 });
-
 // ─────────────────────────────────────────────────────────────
 // 6. TECLADO VIRTUAL — Ajustar viewport cuando aparece
 //    En móvil el teclado reduce el viewport. Si un input
@@ -8474,10 +9019,19 @@ window.verificarPinCriptografico = async function() {
         esCorrecto = await PinSecurity.verificar(window.pinActualUI);
         if (esCorrecto) {
             PinSecurity.setSession(window.pinActualUI);
-            }
+        }
     }
+    
     if (esCorrecto) {
+        // 1. Desbloqueamos la aplicación de forma nativa
         window.desbloquearApp();
+        
+        // 📌 NUEVO: INTERCEPTOR DE AJUSTES EN EL ARRANQUE SEGURO
+        if (window.UserConfigManager) {
+            window.UserConfigManager.aplicar();  // Oculta/Muestra las tarjetas y gráficos del perfil activo
+            window.UserConfigManager.iniciar();  // Redirige automáticamente a la pestaña elegida por este usuario
+        }
+        
     } else {
         const msg = document.getElementById('auth-message');
         if (msg) { msg.innerText = "❌ PIN INCORRECTO"; msg.style.color = "#ff5252"; }
@@ -9927,6 +10481,10 @@ window.actualizarDashCartera = function() {
     // 🛡️ Oculta también la fila de plusvalía en patrimonio
     const rowPnl = document.getElementById('patri-cartera-pnl-row');
     if (rowPnl) rowPnl.style.display = 'none';
+    // Limpiar espejo cartera activa
+    ['dash-cartera-coste2','dash-cartera-valor2','dash-cartera-pnl2','dash-cartera-rent2'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.innerText = '---';
+    });
     return;
   }
 
@@ -9937,18 +10495,36 @@ window.actualizarDashCartera = function() {
   const elRent = document.getElementById('dash-cartera-rent');
   const elNum  = document.getElementById('dash-cartera-num');
   const elCosteDash = document.getElementById('dash-cartera-coste');
-  if (elCosteDash) elCosteDash.innerText = fmt(r.totalCoste);
-  if (elVal)  { elVal.innerText  = fmt(r.totalValor); elVal.style.color = '#39FF14'; }
+  // IDs espejo en subpestaña Cartera Activa
+  const elVal2  = document.getElementById('dash-cartera-valor2');
+  const elPnl2  = document.getElementById('dash-cartera-pnl2');
+  const elRent2 = document.getElementById('dash-cartera-rent2');
+  const elCosteDash2 = document.getElementById('dash-cartera-coste2');
+
+  if (elCosteDash)  elCosteDash.innerText  = fmt2(r.totalCoste);
+  if (elCosteDash2) elCosteDash2.innerText = fmt2(r.totalCoste);
+  if (elVal)  { elVal.innerText  = fmt2(r.totalValor); elVal.style.color  = '#00B8FF'; }
+  if (elVal2) { elVal2.innerText = fmt2(r.totalValor); elVal2.style.color = '#00B8FF'; }
   if (elNum)  elNum.innerText  = r.numPosiciones;
   if (elPnl)  {
     const signo = r.plusvalia >= 0 ? '+' : '';
     elPnl.innerText   = signo + fmt2(r.plusvalia);
     elPnl.style.color = r.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
   }
+  if (elPnl2) {
+    const signo = r.plusvalia >= 0 ? '+' : '';
+    elPnl2.innerText   = signo + fmt2(r.plusvalia);
+    elPnl2.style.color = r.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
+  }
   if (elRent) {
     const signo = r.rentabilidad >= 0 ? '+' : '';
     elRent.innerText   = signo + r.rentabilidad.toFixed(2) + '%';
     elRent.style.color = r.rentabilidad >= 0 ? '#39FF14' : '#FF2E4D';
+  }
+  if (elRent2) {
+    const signo = r.rentabilidad >= 0 ? '+' : '';
+    elRent2.innerText   = signo + r.rentabilidad.toFixed(2) + '%';
+    elRent2.style.color = r.rentabilidad >= 0 ? '#39FF14' : '#FF2E4D';
   }
 
   // Actualizar fila plusvalía en Patrimonio
@@ -9964,148 +10540,136 @@ window.actualizarDashCartera = function() {
 
 // ── MÓDULO 3: RENDERIZAR PESTAÑA CARTERA ─────────────────────────────
 window.renderizarCartera = function() {
-  const fmt  = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-  const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
-  const r = window.resumenCartera;
-  const sinDatos = document.getElementById('cartera-sin-datos');
-  const cardPos  = document.getElementById('card-posiciones');
+    const fmt = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+    const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
+    const r = window.resumenCartera;
+    
+    // Si no hay datos, limpiamos el total principal por seguridad
+    if (!r || r.numPosiciones === 0) {
+        const elVal = document.getElementById('inv-total-valor');
+        const elPlus = document.getElementById('inv-total-plusvalia');
+        if (elVal) elVal.innerText = '0,00 €';
+        if (elPlus) elPlus.innerText = '+0,00% (Plusvalía Latente)';
+        
+        const lista = document.getElementById('contenedor-tabla-inversiones'); // Selector HTML real
+        if (lista) lista.innerHTML = '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+        return;
+    }
 
-  if (!r || r.numPosiciones === 0) {
-    if (sinDatos) sinDatos.style.display = 'block';
-    if (cardPos)  cardPos.style.display  = 'none';
-    ['inv-total-valor','inv-total-pnl','inv-coste-total','inv-rent-total','inv-num-pos'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.innerText = '---';
-    });
-    return;
-  }
-  if (sinDatos) sinDatos.style.display = 'none';
-  if (cardPos)  cardPos.style.display  = 'block';
-
-  // KPIs principales
-  const elTotalVal  = document.getElementById('inv-total-valor');
-  const elTotalPnl  = document.getElementById('inv-total-pnl');
-  const elCosteT    = document.getElementById('inv-coste-total');
-  const elRentT     = document.getElementById('inv-rent-total');
-  const elNumPos    = document.getElementById('inv-num-pos');
-
-  if (elTotalVal)  { elTotalVal.innerText = fmt(r.totalValor); elTotalVal.style.color = '#39FF14'; }
-  if (elCosteT)    elCosteT.innerText     = fmt(r.totalCoste);
-  if (elNumPos)    elNumPos.innerText     = r.numPosiciones;
-  if (elTotalPnl)  {
+    // 1. ACTUALIZAR KPIs PRINCIPALES DEL ENCABEZADO DE CARTERA
+    const colorBenef = r.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
     const signo = r.plusvalia >= 0 ? '+' : '';
-    elTotalPnl.innerText   = signo + fmt2(r.plusvalia) + '  (' + signo + r.rentabilidad.toFixed(2) + '%)';
-    elTotalPnl.style.color = r.plusvalia >= 0 ? '#39FF14' : '#FF2E4D';
-  }
-  if (elRentT) {
-    const signo = r.rentabilidad >= 0 ? '+' : '';
-    elRentT.innerText   = signo + r.rentabilidad.toFixed(2) + '%';
-    elRentT.style.color = r.rentabilidad >= 0 ? '#39FF14' : '#FF2E4D';
-  }
 
-  // Agrupar posiciones por tipo
-  const grupos = {};
-  const colorTipo = Object.fromEntries(Object.entries(window.CARTERA_TIPOS).map(([k, v]) => [k, v.color]));
-	  // 📌 NUEVO: filtrar posiciones por usuario activo
-  const posicionesFiltradas = (window.datosCartera || []).filter(p => {
-    if (typeof pasaFiltroPropietario !== 'function') return true;
-    return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
-  }).map(p => window.sanitizarPosicionCartera(p));
+    const elTotalVal   = document.getElementById('dash-cartera-valor2');
+	const elTotalCoste = document.getElementById('dash-cartera-coste2');
+	const elBeneficio  = document.getElementById('dash-cartera-pnl2');
+	const elRentab     = document.getElementById('dash-cartera-rent2');
 
-  posicionesFiltradas.forEach(pos => {
-      const tipo = window.normalizarTipoCartera(pos.tipo);
-    if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
-    const valPos = window.getValorMercadoPosicionCartera(pos);
-    grupos[tipo].total += valPos;
-    grupos[tipo].posiciones.push(pos);
-  });
+    if (elTotalVal)   { elTotalVal.innerText   = fmt(r.totalValor);  elTotalVal.style.color   = '#00B8FF'; }
+    if (elTotalCoste) { elTotalCoste.innerText = fmt(r.totalCoste);  elTotalCoste.style.color = '#00B8FF'; }
+    if (elBeneficio)  { elBeneficio.innerText  = `${signo}${fmt2(r.plusvalia)}`;  elBeneficio.style.color  = colorBenef; }
+    if (elRentab)     { elRentab.innerText      = `${signo}${r.rentabilidad.toFixed(2)}%`; elRentab.style.color = colorBenef; }
+	// Pills: Invertido, Rentabilidad, Posiciones
+    const elNum   = document.getElementById('inv-total-num');
+    const fmtSin  = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+    if (elCoste) elCoste.innerText = fmtSin(r.totalCoste);
+    if (elNum)   elNum.innerText   = r.numPosiciones;
+    if (elRent) {
+        const signoR = r.rentabilidad >= 0 ? '+' : '';
+        elRent.innerText   = signoR + r.rentabilidad.toFixed(2) + '%';
+        elRent.style.color = r.rentabilidad >= 0 ? '#39FF14' : '#FF2E4D';
+    }
 
-  // Renderizar lista de posiciones
-  let html = '';
-  Object.keys(grupos).sort().forEach(tipo => {
-    const g = grupos[tipo];
-    const meta = window.getMetaTipoCartera(tipo);
-    const color = meta.color || '#888';
-    const badgeClass = meta.badge || '';
-    const emoji = meta.emoji || '💼';
-    const tipoLabel = window.escapeHtmlCartera(meta.label || tipo);
-    const groupId = 'grp-' + tipo.replace(/[^a-zA-Z0-9]/g, '');
-    html += `
-    <div style="border-bottom:1px solid #111;">
-      <div class="cartera-section-header" onclick="window.toggleCarteraGroup('${groupId}')">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:18px;">${emoji}</span>
-          <span class="cartera-section-title" style="color:${color};">${tipoLabel}</span>
-          <span style="font-size:9px; color:#555; font-weight:700;">(${g.posiciones.length})</span>
-        </div>
-        <span class="cartera-section-total" style="color:${color};">${fmt(g.total)} <span style="font-size:10px; opacity:0.6;">(${((g.total / (r.totalValor || 1)) * 100).toFixed(1)}%)</span></span>
-      </div>
-      <div id="${groupId}">`;
-      const totalValorCartera = r.totalValor || 1; // evita división por cero
-    g.posiciones.sort((a,b) => {
-  const vA = window.getValorMercadoPosicionCartera(a), vB = window.getValorMercadoPosicionCartera(b);
-  if (window.ordenCartera === 'pnl')  return window.getPnlPosicionCartera(b) - window.getPnlPosicionCartera(a);
-  if (window.ordenCartera === 'rent') return window.getRentabilidadPosicionCartera(b) - window.getRentabilidadPosicionCartera(a);
-  if (window.ordenCartera === 'fecha') return (b.fechaCompra||'').localeCompare(a.fechaCompra||'');
-  return vB - vA;
-}).forEach(pos => {
-          const valPos  = window.getValorMercadoPosicionCartera(pos);
-const pesoPct = (valPos / totalValorCartera) * 100;
-const alertaPeso = pesoPct > 40 ? '🔴' : pesoPct > 25 ? '🟡' : '';
-          const cosPos  = window.getCostePosicionCartera(pos);
-          const pnlPos  = window.getPnlPosicionCartera(pos);
-          let rentPos = window.getRentabilidadPosicionCartera(pos);
-          const fCompra = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
-          if (fCompra && !isNaN(fCompra.getTime())) {
-            const years = (new Date() - fCompra) / (1000 * 60 * 60 * 24 * 365.25);
-            if (years > 0.08) {
-              rentPos = (Math.pow(1 + (rentPos/100), 1/years) - 1) * 100;
-            }
-          }
-          const pnlSig  = pnlPos >= 0 ? '+' : '';
-          const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
-          const cant = window.getCantidadCartera(pos);
-          const cantStr = cant >= 1 ? cant.toFixed(2) : cant.toFixed(6);
+    // 2. AGRUPAR POSICIONES POR TIPO
+    const grupos = {};
+    const colorTipo = Object.fromEntries(Object.entries(window.CARTERA_TIPOS).map(([k, v]) => [k, v.color]));
+    
+    const posicionesFiltradas = (window.datosCartera || []).filter(p => {
+        if (typeof pasaFiltroPropietario !== 'function') return true;
+        return pasaFiltroPropietario({ cuenta: p.cuenta, beneficiario: '' });
+    }).map(p => window.sanitizarPosicionCartera(p));
 
-          // ✨ NUEVA LÓGICA DIFERENCIADA POR TIPO DE ACTIVO
-          const esCripto = window.esCriptoCartera(pos);
-			const esPrecioAuto = window.esBTCCartera(pos); // solo BTC/EUR tiene precio automático
-const precioIcon = esPrecioAuto ? '<span style="color:#00B8FF; font-size:10px; margin-left:4px;" title="Precio automático vía Binance">⚡</span>' : '<span style="color:#888; font-size:9px; margin-left:4px;" title="Precio manual">✏️</span>';
-          const tickerTxt = window.escapeHtmlCartera(pos.ticker || pos.nombre);
-          const nombreTxt = window.escapeHtmlCartera(pos.nombre || '');
-          const fuenteTxt = window.escapeHtmlCartera(pos.precioFuente || (esPrecioAuto ? 'Binance BTC/EUR' : 'Manual'));
-          const fechaPrecioTxt = pos.precioActualizadoEn ? new Date(pos.precioActualizadoEn).toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-          const precioInfo = fechaPrecioTxt ? `${fuenteTxt} · ${fechaPrecioTxt}` : fuenteTxt;
-          const posIdJs = window.escapeJsCartera(pos.id);
-          html += `
-          <div class="cartera-pos-row" onclick="window.editarPosicion('${posIdJs}')">
-            <div style="flex:1; min-width:0; padding-right:8px;">
-              <div class="cartera-ticker">${alertaPeso}${tickerTxt}${precioIcon}</div>
-              ${pos.nombre && pos.ticker ? `<div class="cartera-nombre">${nombreTxt}</div>` : ''}
-              ${esCripto ? `<div class="cartera-cantidad">${cantStr} × ${fmt2(pos.precioActual)}</div>` : ''}
-              <span class="cartera-tipo-badge ${badgeClass}">${tipoLabel}</span>
-            </div>
-            <div style="text-align:right; flex-shrink:0;">
-              <div class="cartera-valor" style="color:#fff;">${fmt2(valPos)}</div>
-              <div class="cartera-pnl ${pnlClass}">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%${pos.fechaCompra && (new Date() - new Date(pos.fechaCompra)) > 2592000000 ? ' an.' : ''})</div>
-              <div style="font-size:9px; color:#555; margin-top:2px;">${pos.fechaCompra ? pos.fechaCompra.split('-').reverse().join('/') + ' · ' : ''}Invertido: ${fmt2(pos.precioCompra)}</div>
-              <div style="font-size:9px; color:#555; margin-top:2px;">Precio: ${precioInfo}</div>
-<div class="pos-weight-pct">${((valPos / totalValorCartera) * 100).toFixed(1)}% cartera</div>
-<div class="pos-weight-bar-bg">
-  <div class="pos-weight-bar-fill" style="width:${Math.min((valPos / totalValorCartera) * 100, 100).toFixed(1)}%; background:${color};"></div>
-</div>
-            </div>
-          </div>`;
+    posicionesFiltradas.forEach(pos => {
+        const tipo = window.normalizarTipoCartera(pos.tipo);
+        if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
+        const valPos = window.getValorMarket = window.getValorMercadoPosicionCartera(pos);
+        grupos[tipo].total += valPos;
+        grupos[tipo].posiciones.push(pos);
     });
-    html += `</div></div>`;
-  });
 
-  const lista = document.getElementById('lista-posiciones-cartera');
-  if (lista) lista.innerHTML = html || '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+    // 3. GENERAR EL LISTADO HTML DINÁMICO
+    let html = '';
+    Object.keys(grupos).sort().forEach(tipo => {
+        const g = grupos[tipo];
+        const meta = window.getMetaTipoCartera(tipo);
+        const color = meta.color || '#888';
+        const badgeClass = meta.badge || '';
+        const emoji = meta.emoji || '💼';
+        const tipoLabel = window.escapeHtmlCartera(meta.label || tipo);
+        const groupId = 'grp-' + tipo.replace(/[^a-zA-Z0-9]/g, '');
 
-  // Gráfico Donut distribución
-  window.renderizarDonutCartera(grupos, colorTipo);
-  // Gráfico evolución histórica
-  window.renderizarEvolCartera();
+        html += `
+        <div style="border-bottom:1px solid #111; margin-bottom: 10px;">
+            <div class="cartera-section-header" onclick="window.toggleCarteraGroup('${groupId}')" style="display:flex; justify-content:space-between; align-items:center; padding:8px; background:rgba(255,255,255,0.02); cursor:pointer;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:18px;">${emoji}</span>
+                    <span class="cartera-section-title" style="color:${color}; font-weight:900; font-size:11px; text-transform:uppercase;">${tipoLabel}</span>
+                    <span style="font-size:9px; color:#555; font-weight:700;">(${g.posiciones.length})</span>
+                </div>
+                <span class="cartera-section-total" style="color:${color}; font-weight:800; font-size:13px;">${fmt(g.total)} <span style="font-size:10px; opacity:0.6;">(${((g.total / (r.totalValor || 1)) * 100).toFixed(1)}%)</span></span>
+            </div>
+            <div id="${groupId}" style="display:block;">`;
+
+        const totalValorCartera = r.totalValor || 1;
+        g.posiciones.sort((a,b) => window.getValorMercadoPosicionCartera(b) - window.getValorMercadoPosicionCartera(a)).forEach(pos => {
+            const valPos = window.getValorMercadoPosicionCartera(pos);
+            const pesoPct = (valPos / totalValorCartera) * 100;
+            const alertaPeso = pesoPct > 40 ? '🔴 ' : pesoPct > 25 ? '🟡 ' : '';
+            const pnlPos = window.getPnlPosicionCartera(pos);
+            let rentPos = window.getRentabilidadPosicionCartera(pos);
+            
+            const pnlSig = pnlPos >= 0 ? '+' : '';
+            const pnlClass = pnlPos >= 0 ? 'pos' : 'neg';
+            const cant = window.getCantidadCartera(pos);
+            const cantStr = cant >= 1 ? cant.toFixed(2) : cant.toFixed(6);
+            
+            const esCripto = window.esCriptoCartera(pos);
+            const esPrecioAuto = window.esBTCCartera(pos);
+            const precioIcon = esPrecioAuto ? '<span style="color:#00B8FF; font-size:10px; margin-left:4px;">⚡</span>' : '<span style="color:#888; font-size:9px; margin-left:4px;">✏️</span>';
+            
+            const tickerTxt = window.escapeHtmlCartera(pos.ticker || pos.nombre);
+            const nombreTxt = window.escapeHtmlCartera(pos.nombre || '');
+            const fuenteTxt = window.escapeHtmlCartera(pos.precioFuente || (esPrecioAuto ? 'Binance BTC/EUR' : 'Manual'));
+            const posIdJs = window.escapeJsCartera(pos.id);
+
+            html += `
+            <div class="cartera-pos-row" onclick="window.editarPosicion('${posIdJs}')" style="display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+                <div style="flex:1; min-width:0; padding-right:8px;">
+                    <div class="cartera-ticker" style="font-size:13px; font-weight:900; color:#fff;">${alertaPeso}${tickerTxt}${precioIcon}</div>
+                    ${pos.nombre && pos.ticker ? `<div class="cartera-nombre" style="font-size:10px; color:#888;">${nombreTxt}</div>` : ''}
+                    ${esCripto ? `<div class="cartera-cantidad" style="font-size:10px; color:#666;">${cantStr} × ${fmt2(pos.precioActual)}</div>` : ''}
+                    <span class="cartera-tipo-badge ${badgeClass}">${tipoLabel}</span>
+                </div>
+                <div style="text-align:right; flex-shrink:0;">
+                    <div class="cartera-valor" style="font-size:14px; font-weight:800; color:#fff;">${fmt2(valPos)}</div>
+                    <div class="cartera-pnl ${pnlClass}" style="font-size:11px; font-weight:700;">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%)</div>
+                    <div style="font-size:9px; color:#555; margin-top:2px;">Invertido: ${fmt2(pos.precioCompra)}</div>
+                    <div class="pos-weight-pct" style="font-size:9px; font-weight:700; color:rgba(255,214,10,0.75); margin-top:2px;">${pesoPct.toFixed(1)}% cartera</div>
+                </div>
+            </div>`;
+        });
+        html += `</div></div>`;
+    });
+
+    // 4. INYECTAR EN EL CONTENEDOR CORRECTO DEL HTML ACTUAL
+    const lista = document.getElementById('contenedor-tabla-inversiones'); // Vinculado a tu contenedor real
+    if (lista) {
+        lista.innerHTML = html || '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+    }
+
+    // 5. REDIBUJAR LOS GRÁFICOS COMPLEMENTARIOS
+    window.renderizarDonutCartera(grupos, colorTipo);
+    window.renderizarEvolCartera();
 };
 
 // Toggle secciones de la lista
@@ -10527,9 +11091,13 @@ window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
     }
 
     const btn = document.getElementById('btn-precios-live');
+    const btnDash = document.getElementById('btn-precios-live-dash');
     const icon = document.getElementById('precios-live-icon');
+    const iconDash = document.getElementById('precios-live-icon-dash');
     if (btn) btn.style.opacity = '0.5';
+    if (btnDash) btnDash.style.opacity = '0.5';
     if (icon && !modoSilencioso) icon.textContent = '⏳';
+    if (iconDash && !modoSilencioso) iconDash.textContent = '⏳';
     if (!modoSilencioso) notify("⚡ Consultando mercado (Binance)...", "info");
 
     try {
@@ -10563,7 +11131,9 @@ window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
         if (typeof vibrar === 'function') vibrar('success');
     } finally {
         if (btn) btn.style.opacity = '1';
+        if (btnDash) btnDash.style.opacity = '1';
         if (icon && !modoSilencioso) icon.textContent = '⚡';
+        if (iconDash && !modoSilencioso) iconDash.textContent = '⚡';
     }
 };
 // ── FIN MOTOR CARTERA ─────────────────────────────────────────────────
