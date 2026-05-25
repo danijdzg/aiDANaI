@@ -435,6 +435,7 @@ TARJETAS KPI (ESTILO iOS / EFECTO CRISTAL)
 }
 .val-std-pos { color: var(--c-success); text-shadow: 0 0 15px rgba(57, 255, 20, 0.2); }
 .val-std-neg { color: var(--c-danger); text-shadow: 0 0 15px rgba(255, 46, 77, 0.2); }
+.val-std-blue { color: var(--c-primary); text-shadow: 0 0 15px rgba(0, 184, 255, 0.2); }
 /* =========================================
 FILTROS AVANZADOS: ESTILO CRISTAL MORADO COMPACTO
 ========================================= */
@@ -566,6 +567,18 @@ box-shadow: 0 0 15px rgba(191, 90, 242, 0.4);
 transition: transform 0.2s;
 }
 .btn-apply:active { transform: scale(0.98); }
+.btn-clear {
+width: 100%;
+background: transparent;
+color: #888;
+border: 1px solid #444;
+padding: 6px;
+border-radius: 8px;
+font-size: 9px;
+cursor: pointer;
+transition: all 0.2s;
+}
+.btn-clear:hover { border-color: #fff; color: #fff; }
 /* Ajuste para que las opciones del select sean legibles (fondo negro) */
 select.filter-input option { background-color: #000; color: #fff; }
 /* ESTILO ÚNICO: TARJETAS (CARDS) */
@@ -1464,7 +1477,7 @@ subimos toda la aplicación hacia arriba para ganar el espacio (antes estaba en 
 padding-top: 60px !important;
 }
 /* 2. Baño de luz en el Encabezado y Pie de página */
-header {
+header, .header-row-top {
 /* Sombra de luz cayendo sobre la aplicación */
 box-shadow: 0 5px 20px -5px var(--current-theme) !important;
 }
@@ -1573,6 +1586,7 @@ width: 90%; max-width: 600px; margin-top: 15px;
 flex: 1; overflow-y: auto; padding-bottom: 20px; box-sizing: border-box;
 }
 .spotlight-resumen { background: rgba(191, 90, 242, 0.15); border: 1px solid var(--c-accent); padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: center; }
+.spotlight-item { background: rgba(20, 20, 20, 0.9); border-bottom: 1px solid #333; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; border-radius: 8px; margin-bottom: 6px; }
 /* Botón Central Cíclico */
 .btn-ciclo {
 width: 60px; height: 35px; border-radius: 18px; border: none;
@@ -3492,6 +3506,20 @@ window.FinanceModel = (function() {
     };
 })();
 
+// Aliases legacy: mantienen compatible el resto del archivo y evitan carreras de carga.
+window.CARTERA_TIPOS = window.FinanceModel.cartera.tipos;
+window.normalizarTipoCartera = tipo => window.FinanceModel.cartera.normalizarTipo(tipo);
+window.getMetaTipoCartera = tipo => window.FinanceModel.cartera.getMetaTipo(tipo);
+window.parseNumeroCartera = valor => window.FinanceModel.parseMoney(valor);
+window.esCriptoCartera = pos => window.FinanceModel.cartera.esCripto(pos);
+window.esBTCCartera = pos => window.FinanceModel.cartera.esBTC(pos);
+window.getCantidadCartera = pos => window.FinanceModel.cartera.getCantidad(pos);
+window.getCostePosicionCartera = pos => window.FinanceModel.cartera.getCoste(pos);
+window.getValorMercadoPosicionCartera = pos => window.FinanceModel.cartera.getValorMercado(pos);
+window.getPnlPosicionCartera = pos => window.FinanceModel.cartera.getPnl(pos);
+window.getRentabilidadPosicionCartera = pos => window.FinanceModel.cartera.getRentabilidad(pos);
+window.sanitizarPosicionCartera = pos => window.FinanceModel.cartera.sanitizar(pos);
+
 // --- NUEVA HERRAMIENTA MATEMÁTICA SEGURA ---
 window.sumarDinero = function(a, b) {
     // Multiplica por 100 para operar con enteros (céntimos) y evitar errores de decimales fantasma
@@ -4013,19 +4041,10 @@ w = canvas.width = window.innerWidth;
 h = canvas.height = window.innerHeight;
 };
 const animate = () => {
-    // 🟡 CÓDIGO AFINADO: Cortocircuito visual
-    // Verificamos si la pestaña de inicio está visible. Si no, calculamos pero no dibujamos, 
-    // o pausamos el loop por completo.
-    const tabInicio = document.getElementById('tab-inicio');
-    if (tabInicio && !tabInicio.classList.contains('active')) {
-        animationId = requestAnimationFrame(animate);
-        return; // Retornamos para evadir cargas de la GPU
-    }
-
-    // Limpieza de pantalla con negro puro
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = CONFIG.bgColor;
-    ctx.fillRect(0, 0, w, h);
+// Limpieza de pantalla con negro puro
+ctx.globalAlpha = 1;
+ctx.fillStyle = CONFIG.bgColor;
+ctx.fillRect(0, 0, w, h);
 // Renderizado del Parallax estelar
 for (let i = 0; i < stars.length; i++) {
 stars[i].update();
@@ -4651,6 +4670,7 @@ return String(str)
 window.modoTransaccionActual = window.modoTransaccionActual || null;
 let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '', tipoCuenta: '' };
 let chartInstance = null;
+let ordenPatri = { campo: 'saldo', asc: false };
 window.ordenActivo = { campo: 'ts', asc: false };
 // === NUEVA MEDIDA 3: MEMORIA DE ELEFANTE (Restaurar al inicio) ===
 document.addEventListener('DOMContentLoaded', () => {
@@ -4981,6 +5001,13 @@ window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
 window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
 // ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
 	const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
+function valCampo(fila, posiblesNombres) {   // ← FUERA del if, bien
+    for (let nom of posiblesNombres) {
+        if (fila[nom] !== undefined && fila[nom] !== '') return fila[nom];
+    }
+    const clave = Object.keys(fila).find(k => posiblesNombres.some(pn => k.toUpperCase() === pn.toUpperCase()));
+    return clave ? fila[clave] : '';
+}
 
 if (wsCarteraName) {
     const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
@@ -6024,6 +6051,11 @@ window.cerrarModalExtracto = function() {
 const modal = document.getElementById('modal-extracto');
 if(modal) modal.classList.remove('active');
 };
+function cambiarOrdenPatrimonio(campo) {
+if (ordenPatri.campo === campo) { ordenPatri.asc = !ordenPatri.asc; }
+else { ordenPatri.campo = campo; ordenPatri.asc = (campo === 'cuenta'); }
+actualizarPatrimonio();
+}
 function togglePatriGroup(id) {
 const lista = document.getElementById('list-' + id);
 const icono = document.getElementById('icon-' + id);
@@ -10349,44 +10381,6 @@ window.actualizarChivatoFiltros = function() {
         btnToggle.onclick = window.toggleFiltros;
     }
 };
-// ============================================================================
-// 🔧 FUNCIONES UTILITARIAS DE CARTERA (FALTANTES)
-// ============================================================================
-
-// 1️⃣ Sanitiza y normaliza una posición de cartera
-window.sanitizarPosicionCartera = function(pos) {
-  if (!pos || typeof pos !== 'object') return { ...pos };
-  
-  return {
-    id: pos.id || (window.crypto?.randomUUID ? window.crypto.randomUUID() : Date.now().toString(36)),
-    tipo: String(pos.tipo || 'Bolsa').trim(),
-    ticker: String(pos.ticker || pos.simbolo || 'UNKNOWN').toUpperCase().trim(),
-    nombre: String(pos.nombre || pos.ticker || 'Sin nombre').trim(),
-    cuenta: String(pos.cuenta || pos.cuentaAsociada || 'General').trim(),
-    cantidad: parseFloat(pos.cantidad) || 0,
-    precioCompra: parseFloat(pos.precioCompra) || 0,
-    precioActual: parseFloat(pos.precioActual) || parseFloat(pos.precioCompra) || 0,
-    fechaInversion: pos.fechaInversion ? new Date(pos.fechaInversion).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-    notas: String(pos.notas || '').trim(),
-    autocustodia: Boolean(pos.autocustodia)
-  };
-};
-
-// 2️⃣ Calcula el COSTE TOTAL de una posición (cantidad × precio de compra)
-window.getCostePosicionCartera = function(pos) {
-  const p = typeof window.sanitizarPosicionCartera === 'function' 
-    ? window.sanitizarPosicionCartera(pos) 
-    : pos;
-  return (parseFloat(p.cantidad) || 0) * (parseFloat(p.precioCompra) || 0);
-};
-
-// 3️⃣ Calcula el VALOR DE MERCADO actual (cantidad × precio actual)
-window.getValorMercadoPosicionCartera = function(pos) {
-  const p = typeof window.sanitizarPosicionCartera === 'function' 
-    ? window.sanitizarPosicionCartera(pos) 
-    : pos;
-  return (parseFloat(p.cantidad) || 0) * (parseFloat(p.precioActual) || parseFloat(p.precioCompra) || 0);
-};
 // ============================================================
 // 📈 MOTOR CARTERA DE INVERSIONES — MÓDULOS 1-4 COMPLETOS
 // ============================================================
@@ -10828,7 +10822,15 @@ const costes = hist.map(h => (typeof h.coste === 'number' ? h.coste : primerCost
   const plusvalias = valores.map((v, i) => v - costes[i]);
   const rentabilidades = plusvalias.map((p, i) => costes[i] > 0 ? (p / costes[i]) * 100 : 0);
 
- 
+  // Determinar colores para el área de plusvalía
+  const areaColorStops = valores.map((v, i) => {
+    const isGain = v >= costeActual;
+    return {
+      offset: i / (valores.length - 1),
+      color: isGain ? 'rgba(57, 255, 20, 0.25)' : 'rgba(255, 46, 77, 0.25)'
+    };
+  });
+
   chart.setOption({
     backgroundColor: 'transparent',
     grid: { top:20, right:10, bottom:25, left:55 },
