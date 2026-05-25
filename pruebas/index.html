@@ -2419,13 +2419,19 @@ DN
         <!-- TARJETA 1: MI CARTERA (copia exacta de la tarjeta de inicio) -->
         <div class="master-card" style="margin-top: 10px; border-color: rgba(0,184,255,0.2); background: rgba(5,8,15,0.9); border-radius: 18px; padding: 18px 16px 14px 16px;">
 
-            <!-- CABECERA: título + botones LIVE -->
+            <!-- CABECERA: título + botones LIVE + NUEVA POSICIÓN -->
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <span style="font-size:10px; font-weight:900; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.4);">📈 MI CARTERA</span>
-                <button id="btn-precios-live" onclick="window.actualizarPreciosAutomatico && window.actualizarPreciosAutomatico()"
-                    style="background:rgba(0,184,255,0.1); border:1px solid rgba(0,184,255,0.35); color:#00B8FF; padding:3px 10px; border-radius:20px; font-size:9px; font-weight:900; cursor:pointer; letter-spacing:1px;">
-                    <span id="precios-live-icon">⚡</span> LIVE
-                </button>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button id="btn-precios-live" onclick="window.actualizarPreciosAutomatico && window.actualizarPreciosAutomatico()"
+                        style="background:rgba(0,184,255,0.1); border:1px solid rgba(0,184,255,0.35); color:#00B8FF; padding:3px 10px; border-radius:20px; font-size:9px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                        <span id="precios-live-icon">⚡</span> LIVE
+                    </button>
+                    <button onclick="window.abrirModalNuevaPosicion && window.abrirModalNuevaPosicion()"
+                        style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:3px 10px; border-radius:20px; font-size:9px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                        <span class="material-icons" style="font-size:11px; vertical-align:middle;">add</span> NUEVA
+                    </button>
+                </div>
             </div>
 
             <!-- FILA 1: VALOR INVERTIDO + VALOR DE MERCADO -->
@@ -2493,10 +2499,31 @@ DN
 
         <!-- TARJETA 4: MIS POSICIONES -->
         <div class="master-card" style="margin-top: 15px; margin-bottom: 20px;">
-            <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+            <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
                 <span class="card-title" style="font-size: 12px; color: #aaa;">📋 MIS POSICIONES</span>
+                <button onclick="window.abrirModalNuevaPosicion && window.abrirModalNuevaPosicion()" style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:4px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                    <span class="material-icons" style="font-size:12px; vertical-align:middle;">add</span> NUEVA
+                </button>
             </div>
-            <div id="contenedor-tabla-inversiones" style="padding-top: 10px; overflow-x: auto;"></div>
+            <!-- Pills de resumen rápido: Invertido / Rentabilidad / Posiciones -->
+            <div style="display:flex; gap:8px; padding:10px 4px 6px 4px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:80px; background:rgba(0,184,255,0.06); border:1px solid rgba(0,184,255,0.15); border-radius:10px; padding:8px 10px; text-align:center;">
+                    <div style="font-size:8px; color:rgba(0,184,255,0.7); font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:3px;">INVERTIDO</div>
+                    <div id="inv-total-coste" style="font-size:13px; font-weight:900; color:#00B8FF;">---</div>
+                </div>
+                <div style="flex:1; min-width:80px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:8px 10px; text-align:center;">
+                    <div style="font-size:8px; color:rgba(255,255,255,0.35); font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:3px;">RENTAB.</div>
+                    <div id="inv-total-rent" style="font-size:13px; font-weight:900; color:#39FF14;">---</div>
+                </div>
+                <div style="flex:1; min-width:60px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:8px 10px; text-align:center;">
+                    <div style="font-size:8px; color:rgba(255,255,255,0.35); font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:3px;">POSIC.</div>
+                    <div id="inv-total-num" style="font-size:13px; font-weight:900; color:#fff;">---</div>
+                </div>
+            </div>
+            <!-- Elementos ocultos para compatibilidad con renderizarCartera -->
+            <span id="inv-total-valor" style="display:none;">---</span>
+            <span id="inv-total-plusvalia" style="display:none;">---</span>
+            <div id="contenedor-tabla-inversiones" style="padding-top: 6px; overflow-x: auto;"></div>
         </div>
 
     </div>
@@ -3763,23 +3790,32 @@ window.cambiarSubVistaPatrimonio = function(subVista) {
             }
             
             // Forzar despertar explícito a los gráficos de la sub-vista Cartera
-            if (typeof echarts !== 'undefined') {
-                const donutDom = document.getElementById('chart-cartera-donut');
-                if (donutDom) {
-                    const donutChart = echarts.getInstanceByDom(donutDom);
-                    if (donutChart) donutChart.resize();
+            // Si ECharts aún no cargó, esperamos y reintentamos una vez
+            const despertarGraficosCartera = () => {
+                if (typeof echarts !== 'undefined') {
+                    const donutDom = document.getElementById('chart-cartera-donut');
+                    if (donutDom) {
+                        const donutChart = echarts.getInstanceByDom(donutDom);
+                        if (donutChart) donutChart.resize();
+                        else if (typeof window.renderizarDonutCartera === 'function') window.renderizarDonutCartera();
+                    }
+                    const evolDom = document.getElementById('chart-cartera-evol');
+                    if (evolDom) {
+                        const evolChart = echarts.getInstanceByDom(evolDom);
+                        if (evolChart) evolChart.resize();
+                        else if (typeof window.renderizarEvolCartera === 'function') window.renderizarEvolCartera();
+                    }
+                } else {
+                    // ECharts aún no cargó: cargar y reintentar
+                    if (window.AppAssets) {
+                        window.AppAssets.echarts().then(() => {
+                            if (typeof window.renderizarDonutCartera === 'function') window.renderizarDonutCartera();
+                            if (typeof window.renderizarEvolCartera === 'function') window.renderizarEvolCartera();
+                        }).catch(() => {});
+                    }
                 }
-                const evolDom = document.getElementById('chart-cartera-evol');
-                if (evolDom) {
-                    const evolChart = echarts.getInstanceByDom(evolDom);
-                    if (evolChart) evolChart.resize();
-                }
-                const treemapDom = document.getElementById('chart-TreeMap');
-                if (treemapDom) {
-                    const treemapChart = echarts.getInstanceByDom(treemapDom);
-                    if (treemapChart) treemapChart.resize();
-                }
-            }
+            };
+            despertarGraficosCartera();
         } 
         // 🚀 Si regresamos a "Balance Neto", aseguramos que despierten sus respectivos gráficos
         else if (subVista === 'balance') {
@@ -10537,15 +10573,21 @@ window.renderizarCartera = function() {
     const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
     const r = window.resumenCartera;
     
-    // Si no hay datos, limpiamos el total principal por seguridad
+    // Si no hay datos, limpiamos todos los elementos por seguridad
     if (!r || r.numPosiciones === 0) {
         const elVal = document.getElementById('inv-total-valor');
         const elPlus = document.getElementById('inv-total-plusvalia');
+        const elCosteEmpty = document.getElementById('inv-total-coste');
+        const elRentEmpty  = document.getElementById('inv-total-rent');
+        const elNumEmpty   = document.getElementById('inv-total-num');
         if (elVal) elVal.innerText = '0,00 €';
         if (elPlus) elPlus.innerText = '+0,00% (Plusvalía Latente)';
+        if (elCosteEmpty) elCosteEmpty.innerText = '0 €';
+        if (elRentEmpty)  { elRentEmpty.innerText = '0.00%'; elRentEmpty.style.color = '#888'; }
+        if (elNumEmpty)   elNumEmpty.innerText = '0';
         
-        const lista = document.getElementById('contenedor-tabla-inversiones'); // Selector HTML real
-        if (lista) lista.innerHTML = '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones</div>';
+        const lista = document.getElementById('contenedor-tabla-inversiones');
+        if (lista) lista.innerHTML = '<div style="padding:20px;text-align:center;color:#555;">Sin posiciones. Pulsa <b style="color:#39FF14;">+ NUEVA</b> para añadir.</div>';
         return;
     }
 
@@ -10563,9 +10605,10 @@ window.renderizarCartera = function() {
     if (elBeneficio)  { elBeneficio.innerText  = `${signo}${fmt2(r.plusvalia)}`;  elBeneficio.style.color  = colorBenef; }
     if (elRentab)     { elRentab.innerText      = `${signo}${r.rentabilidad.toFixed(2)}%`; elRentab.style.color = colorBenef; }
 	// Pills: Invertido, Rentabilidad, Posiciones
-    const elNum   = document.getElementById('inv-total-num');
-    const fmtSin  = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-    const elCoste = document.getElementById('inv-total-coste');
+    const elNum    = document.getElementById('inv-total-num');
+    const elCoste  = document.getElementById('inv-total-coste');
+    const elRent   = document.getElementById('inv-total-rent');
+    const fmtSin   = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
     if (elCoste) elCoste.innerText = fmtSin(r.totalCoste);
     if (elNum)   elNum.innerText   = r.numPosiciones;
     if (elRent) {
@@ -10586,7 +10629,7 @@ window.renderizarCartera = function() {
     posicionesFiltradas.forEach(pos => {
         const tipo = window.normalizarTipoCartera(pos.tipo);
         if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
-        const valPos = window.getValorMarket = window.getValorMercadoPosicionCartera(pos);
+        const valPos = window.getValorMercadoPosicionCartera(pos);
         grupos[tipo].total += valPos;
         grupos[tipo].posiciones.push(pos);
     });
