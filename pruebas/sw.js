@@ -4,7 +4,6 @@ const CACHE_URLS = [
     './', 
     './index.html', 
     './manifest.json', 
-    './favicon.ico', 
     'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
     'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
     'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
