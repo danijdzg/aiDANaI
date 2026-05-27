@@ -366,9 +366,6 @@ display: none;
 .master-card.orange-card { border-color: rgba(255, 214, 10, 0.25); box-shadow: 0 12px 32px rgba(255, 214, 10, 0.1), inset 0 0 20px rgba(255, 214, 10, 0.05); }
 .master-card.green-card { border-color: rgba(57, 255, 20, 0.25); box-shadow: 0 12px 32px rgba(57, 255, 20, 0.1), inset 0 0 20px rgba(57, 255, 20, 0.05); }
 /* Tipografías unificadas */
-.orange-val { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--c-warning); }
-.green-val-freedom { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: var(--c-success); }
-.freedom-icon { font-size: 16px; margin-right: 6px; vertical-align: middle; }
 .card-header { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px; margin-bottom: 12px; }
 .card-title { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 800; color: var(--c-warning, #FFD60A); text-transform: uppercase; letter-spacing: 1.5px; }
 /* Controles de fecha y desplegables */
@@ -438,7 +435,6 @@ TARJETAS KPI (ESTILO iOS / EFECTO CRISTAL)
 }
 .val-std-pos { color: var(--c-success); text-shadow: 0 0 15px rgba(57, 255, 20, 0.2); }
 .val-std-neg { color: var(--c-danger); text-shadow: 0 0 15px rgba(255, 46, 77, 0.2); }
-.val-std-blue { color: var(--c-primary); text-shadow: 0 0 15px rgba(0, 184, 255, 0.2); }
 /* =========================================
 FILTROS AVANZADOS: ESTILO CRISTAL MORADO COMPACTO
 ========================================= */
@@ -744,10 +740,6 @@ transition: transform 0.2s;
 .patri-acc-pct { color: var(--c-warning) !important; font-weight: 700 !important; }
 ::placeholder { color: var(--c-primary); opacity: 0.5; }
 input, select, textarea { color: #FFFFFF !important; font-weight: 600; text-transform: uppercase !important; }
-.patri-breakdown { background: rgba(0,0,0,0.3); border-top: 1px solid #222; border-radius: 12px; padding: 12px 10px; margin-top: 15px; display: flex; justify-content: space-between; position: relative; }
-.patri-breakdown::after { content: ''; position: absolute; left: 50%; top: 10px; bottom: 10px; width: 1px; background: #222; }
-.patri-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.val-breakdown { font-size: 18px; font-weight: 700; color: var(--c-success); text-shadow: 0 0 10px rgba(57, 255, 20, 0.2); margin-top: 4px; }
 /* Altura reducida a casi la mitad (de 250px a 140px) */
 .chart-container {
 position: relative;
@@ -1533,8 +1525,6 @@ MODO CAJA FUERTE (OCULTAR SALDOS)
 ========================================= */
 body.modo-caja-fuerte .kpi-value,
 body.modo-caja-fuerte .val-breakdown,
-body.modo-caja-fuerte .orange-val,
-body.modo-caja-fuerte .green-val-freedom,
 body.modo-caja-fuerte .td-amount,
 body.modo-caja-fuerte .patri-acc-val,
 body.modo-caja-fuerte .patri-group-total,
@@ -3656,7 +3646,6 @@ try { cb(datos); } catch (err) { console.error('UIEvents error:', evento, err); 
 // Suscribimos todas las actualizaciones visuales al evento maestro sin repintar pantallas ocultas
 window.UIEvents.on('datos:actualizados', function() {
 if (window.AppRuntime) window.AppRuntime.invalidateFinanceCaches();
-if (window.FinanceModel) window.estadoFinanciero = window.FinanceModel.snapshots.crear();
 if (typeof actualizarDesplegablesRestringidos === 'function') actualizarDesplegablesRestringidos();
 if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
 if (window.AppRuntime) window.AppRuntime.refreshAfterDataLoaded();
@@ -3703,31 +3692,6 @@ window.ChartLifecycle = (function() {
     'ajustes': []
 };
     return {
-        // Elimina de RAM todo lo que no pertenezca a la pestaña actual
-        limpiarMemoria: function(tabDestino) {
-            if (typeof echarts === 'undefined') return;
-            const graficosEnTab = registry[tabDestino] || [];
-            // Recorremos todos los posibles contenedores de gráficos
-            const todosLosIds = Object.values(registry).flat();
-            todosLosIds.forEach(id => {
-                // Si el gráfico NO pertenece a la pestaña a la que vamos, lo matamos
-                if (!graficosEnTab.includes(id)) {
-                    const dom = document.getElementById(id);
-                    if (dom) {
-                        const instance = echarts.getInstanceByDom(dom);
-                        if (instance) {
-                            instance.dispose();
-                        }
-                        // Limpiar ResizeObserver asociado para evitar fugas de memoria
-                        const obsKey = '_resizeObs_' + id;
-                        if (window[obsKey]) {
-                            window[obsKey].disconnect();
-                            window[obsKey] = null;
-                        }
-                    }
-                }
-            });
-        },
         // Redibuja solo los gráficos de la pestaña activa si hay datos
         despertarGraficos: function(tabActiva) {
             // Pequeño delay para dejar que el DOM respire tras la navegación gummy
@@ -3858,21 +3822,10 @@ window.irPestana = function(pestanaId) {
     if (botonActivo) {
         botonActivo.classList.add('active');
     }
-    
-    // 5. Cierre automático defensivo del panel de filtros lateral (si estuviera abierto)
-    const overlayFiltros = document.getElementById('filter-overlay');
-    if (overlayFiltros && overlayFiltros.classList.contains('active')) {
-        overlayFiltros.classList.remove('active');
-    }
-    
-    // 6. Lanzar de forma segura el ciclo de vida de los gráficos asignados a la pestaña
+        
+    // 5. Lanzar de forma segura el ciclo de vida de los gráficos asignados a la pestaña
     if (typeof window.ChartLifecycle !== 'undefined') {
         window.ChartLifecycle.despertarGraficos(pestanaId);
-    }
-    
-    // 7. Notificar al programador de ejecuciones el cambio de escenario
-    if (typeof window.AppRuntime !== 'undefined' && window.AppRuntime.triggerRender) {
-        window.AppRuntime.triggerRender();
     }
 };
 
@@ -4318,7 +4271,6 @@ actualizarSemaforo: function(color) {
 },
 setGuardando: function(estado) {
 this.isSaving = estado;
-window.isSaving = estado;
 if (estado) {
 this.actualizarSemaforo('cargando');
 } else {
@@ -5029,13 +4981,6 @@ if (wsHistCarteraName) {
 } else {
   window.historicoCartera = window.historicoCartera || [];
 }
-window.estadoFinanciero = FM.snapshots.crear({
-  movimientos: window.datos,
-  cuentas: window.mapaCuentas,
-  fijos: window.datosfijos,
-  cartera: window.datosCartera,
-  historicoCartera: window.historicoCartera
-});
 // Actualizar UI de forma reactiva
 window.UIEvents.emitir('datos:actualizados');
 // ✅ BD cargada: actualizar semáforo según estado de pendientes
@@ -9461,7 +9406,7 @@ window._animacionCargaInterval = null;
 
 window.iniciarAnimacionCargaNumeros = function() {
     // Buscamos las etiquetas que muestran dinero clave en el inicio y patrimonio
-    const elementos = document.querySelectorAll('.kpi-value, .val-breakdown, .orange-val, .green-val-freedom');
+    const elementos = document.querySelectorAll('.kpi-value');
     
     // Añadimos el efecto visual
     elementos.forEach(el => el.classList.add('scrambling-number'));
@@ -10982,20 +10927,6 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
