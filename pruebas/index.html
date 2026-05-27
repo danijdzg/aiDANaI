@@ -2278,6 +2278,22 @@ DN
 </div>
 <div class="app-main">
 <div id="tab-inicio" class="view-section active">
+<div id="banner-simulacion"
+     onclick="window.cerrarSimulador()"
+     style="display: none;
+            background: rgba(255, 46, 77, 0.15);
+            border: 1px solid #FF2E4D;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            color: #FF2E4D;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            text-transform: uppercase;">
+</div>
 <div class="master-card blue-card" id="card-kpi-liquidez" style="margin-top: 0px; padding: 15px; text-align: center; border-color: rgba(10, 132, 255, 0.3);">
 <span style="font-size: 16px; color: #0A84FF; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;">LIQUIDEZ+INVERSIÓN</span>
 <div id="d-metalico" class="kpi-value" style="color: #0A84FF; font-size: 28px; font-weight: 1000; margin-top: 4px; text-shadow: 0 0 10px rgba(10, 132, 255, 0.4);">0,00 €</div>
@@ -2518,9 +2534,9 @@ DN
                 <span class="card-title" style="font-size:14px; letter-spacing:1px;">📈 EVOLUCIÓN DEL PATRIMONIO</span>
                  </div>
              </div>
-        <div style="width: 100%; height: 280px; position: relative;">
-            <div id="chartPatrimonio" style="width: 100%; height: 100%;"></div>
-        </div>
+        <div id="box-grafico" style="width: 100%; height: 280px; position: relative;">
+    <div id="chartPatrimonio" style="width: 100%; height: 100%;"></div>
+</div>
     </div>
     </div>
 	</div>  <!-- cierre subview-patrimonio-balance -->
@@ -3570,12 +3586,12 @@ window.AppRuntime = (function() {
         window._datosEvoCache = null;
     }
     function dashboardKey() {
-        const period = document.getElementById('dash-period')?.value || '';
-        const start = document.getElementById('d-start')?.value || '';
-        const end = document.getElementById('d-end')?.value || '';
-        const user = (typeof filtroUsuarioActual !== 'undefined') ? filtroUsuarioActual : 'todos';
-        return [dataVersion, user, period, start, end, window.simuladorImpacto || 0, (window.datos || []).length, (window.datosCartera || []).length].join('|');
-    }
+    const period = document.getElementById('dash-period')?.value || '';
+    const start = document.getElementById('d-start')?.value || '';
+    const end = document.getElementById('d-end')?.value || '';
+    const user = (typeof filtroUsuarioActual !== 'undefined') ? filtroUsuarioActual : 'todos';
+    return [dataVersion, user, period, start, end, (window.datos || []).length, (window.datosCartera || []).length].join('|');
+}
     function shouldSkipDashboard() {
         const key = dashboardKey();
         if (dashboardSignature === key) return true;
@@ -5171,7 +5187,7 @@ filasHTML.push(`
 ${tituloMes}
 </span>
 <span style="color: #BF5AF2; font-weight: 800; font-size: 15px; flex-shrink: 0; line-height: 1;">
-${FMT_PCT.format(gMes.neto)} €
+${FMT_EUR2.format(gMes.neto)}
 </span>
 </div>
 </td>
@@ -6125,7 +6141,7 @@ function actualizarPatrimonio() {
                             </div>
                         </div>
                         <div class="patri-acc-val-col">
-                            <div class="patri-acc-val" style="color:${colorVal}">${FMT_PCT.format(c.valor)}€</div>
+                            <div class="patri-acc-val" style="color:${colorVal}">${FMT_EUR2.format(c.valor)}</div>
                             <div class="patri-acc-pct" style="color:var(--c-warning); font-size:10px;">${pctCuenta}%</div>
                         </div>
                     </div>
@@ -6665,94 +6681,6 @@ window.guardarUniversal = async function(nuevasFilas) {
 }; // <-- Aquí cierra de forma segura e impecable window.guardarUniversal
 
 
-// ==========================================
-// ⚙️ PROCESADOR AUTOMÁTICO DE MOVIMIENTOS fijos (ADAPTADO)
-// ==========================================
-window.procesarfijos = async function() {
-    // Usamos datosfijos que es la variable nativa de tu index.html
-    if (!window.datosfijos || window.datosfijos.length === 0) return;
-    
-    const hoy = new Date();
-    const anioActual = hoy.getFullYear();
-    const mesActual = hoy.getMonth() + 1; // Mes de 1 a 12
-    const diaActual = hoy.getDate();
-    
-    let nuevosMovs = [];
-    
-    for (let regla of window.datosfijos) {
-        if (!regla.frecuencia) continue;
-        
-        // Obtención ultra-segura del día de cobro (por número directo o fechaProx)
-        let diaRegla = regla.dia ? parseInt(regla.dia) : null;
-        if (!diaRegla && regla.fechaProx) {
-            const dObj = new Date(regla.fechaProx);
-            if (!isNaN(dObj.getTime())) {
-                diaRegla = dObj.getDate();
-            }
-        }
-        
-        if (!diaRegla) continue; 
-        
-        const ultimaEjecucion = regla.ultima_ejecucion || "";
-        const claveMesAnio = `${anioActual}-${String(mesActual).padStart(2, '0')}`;
-        
-        // Si ya ha sido procesada este mes, la saltamos
-        if (ultimaEjecucion.startsWith(claveMesAnio)) {
-            continue; 
-        }
-        
-        let tocaEjecutar = false;
-        if (regla.frecuencia === 'mensual') {
-            if (diaActual >= diaRegla) {
-                tocaEjecutar = true;
-            }
-        }
-        
-        if (tocaEjecutar) {
-            const fechaEfectiva = new Date(anioActual, mesActual - 1, diaRegla, 12, 0, 0);
-            const importeNum = parseFloat(regla.importe || 0);
-            
-            const nuevoMov = {
-                id: typeof uuid === 'function' ? uuid() : crypto.randomUUID(),
-                fecha: fechaEfectiva, 
-                cuenta: regla.cuenta,
-                concepto: regla.concepto,
-                importe: importeNum,
-                descripcion: `[RECURRENTE] ${regla.descripcion || ""}`.trim(),
-                beneficiario: regla.beneficiario || "DN",
-                tipo: (importeNum >= 0) ? 'ingreso' : 'gasto',
-                ts: fechaEfectiva.getTime()
-            };
-            
-            nuevosMovs.push(nuevoMov);
-            
-            // Marcamos el sello de ejecución
-            regla.ultima_ejecucion = `${anioActual}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`;
-            
-            // Desplazamos la fecha estética al mes siguiente
-            const proximoMes = mesActual === 12 ? 1 : mesActual + 1;
-            const proximoAnio = mesActual === 12 ? anioActual + 1 : anioActual;
-            regla.fechaProx = `${proximoAnio}-${String(proximoMes).padStart(2, '0')}-${String(diaRegla).padStart(2, '0')}`;
-        }
-    }
-    
-    if (nuevosMovs.length > 0) {
-        if (!window.datos) window.datos = [];
-        window.datos.push(...nuevosMovs);
-        window.datos.sort((a, b) => b.ts - a.ts);
-        
-        if (typeof renderizar === 'function') renderizar();
-        if (typeof recalcularSaldosGlobal === 'function') recalcularSaldosGlobal();
-        if (typeof actualizarDashboard === 'function') actualizarDashboard();
-        
-        // Subimos a OneDrive los cambios
-        await window.guardarUniversal();
-        
-        if (typeof window.mostrarToast === 'function') {
-            window.mostrarToast(`✅ Autogenerados ${nuevosMovs.length} movimientos fijos.`, "success");
-        }
-    }
-};
 // ==========================================
 // 🌊 GRÁFICO SANKEY (RÍOS DE DINERO) - [OPTIMIZADO RAM]
 // ==========================================
@@ -7349,12 +7277,6 @@ if (window.mapaCuentas) {
  totalLiquidez += saldo;
  }
  });
-}
-
-// --- 🚀 MÁQUINA DEL TIEMPO (SIMULADOR DE IMPACTO) ---
-if (window.simuladorImpacto && window.simuladorImpacto > 0) {
- totalLiquidez -= window.simuladorImpacto;
- totalPatrimonio -= window.simuladorImpacto;
 }
 
 // Actualización del Patrimonio Total mediante animación nativa
@@ -8607,7 +8529,6 @@ setTimeout(() => focused.scrollIntoView({ behavior: 'smooth', block: 'center' })
 // Añadimos un estado al historial para interceptar el botón atrás
 history.pushState({ aidanai: true }, '');
 window.addEventListener('popstate', e => {
-const calcModal = document.getElementById('modal-calculadora');
 const manualModal = document.getElementById('modal-manual');
 if (calcModal && calcModal.style.display === 'flex') {
 // Cerrar calculadora
@@ -9439,54 +9360,8 @@ window.detenerAnimacionCargaNumeros = function() {
 </div>
 <div id="spotlight-results"></div>
 </div>
-<div id="modal-simulador" class="modal-backdrop-pro" style="display: none; z-index: 30000;">
-<div class="modal-card-pro" style="border: 1px solid var(--c-warning); box-shadow: 0 0 30px rgba(255, 214, 10, 0.2);">
-<div class="modal-icon-pro">🚀</div>
-<h3 style="color: var(--c-warning); margin-bottom: 10px; font-weight: 900; letter-spacing: 1px;">MÁQUINA DEL TIEMPO</h3>
-<p style="margin-bottom: 20px; color: #ccc;">¿Qué pasará con tu salud financiera si haces un desembolso importante hoy?</p>
-<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-<label style="display: block; color: var(--c-warning); font-size: 10px; font-weight: 800; margin-bottom: 5px; text-transform: uppercase;">IMPORTE A SIMULAR</label>
-<input type="number" inputmode="decimal"  id="input-simulador" placeholder="Ej: 15000" style="width: 100%; background: transparent; border: none; color: white; font-size: 32px; font-weight: 900; text-align: center; outline: none; font-family: 'Inter', sans-serif;" autocomplete="off">
-</div>
-<div class="modal-actions-pro">
-<button class="btn-secondary-pro" onclick="document.getElementById('modal-simulador').style.display='none'">Cancelar</button>
-<button class="btn-primary-pro" style="background: var(--c-warning); color: #000;" onclick="activarSimulador()">Simular</button>
-</div>
-</div>
-</div>
 <script>
-window.simuladorImpacto = 0;
-window.abrirSimulador = function() {
-document.getElementById('input-simulador').value = '';
-document.getElementById('modal-simulador').style.display = 'flex';
-setTimeout(() => document.getElementById('input-simulador').focus(), 100);
-};
-window.activarSimulador = function() {
-const input = document.getElementById('input-simulador').value;
-const cantidad = window.FinanceModel.parseMoney(input);
-if (isNaN(cantidad) || cantidad <= 0) {
-notify('⚠️ Introduce un importe válido', 'warning');
-return;
-}
-window.simuladorImpacto = cantidad;
-document.getElementById('modal-simulador').style.display = 'none';
-// Mostrar el banner rojo indicando peligro
-const banner = document.getElementById('banner-simulacion');
-banner.style.display = 'block';
-banner.innerHTML = `⚠️ MODO SIMULACIÓN ACTIVO: -${new Intl.NumberFormat('de-DE').format(cantidad)} € (Toca para apagar)`;
-// Recalcular toda la app con la trampa matemática
-window.actualizarDashboard();
-notify('🚀 Viajando en el tiempo...', 'info');
-if(typeof vibrar === 'function') vibrar('tecla');
-};
-window.cerrarSimulador = function() {
-window.simuladorImpacto = 0;
-document.getElementById('banner-simulacion').style.display = 'none';
-// Devolvemos la app a la realidad
-window.actualizarDashboard();
-notify('✅ Simulación terminada', 'success');
-if(typeof vibrar === 'function') vibrar('tecla');
-};
+
 // ══════════════════════════════════════════════════════════════════
 // 📊 MÓDULO: PRESUPUESTO 2026 + COMPARATIVA ANUAL
 // Análisis financiero avanzado sin datos adicionales
