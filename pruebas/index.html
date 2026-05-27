@@ -2926,19 +2926,7 @@ GUARDAR OPERACIÓN <span class="material-icons">rocket_launch</span>
     </div>
 </template>
 <script>
-// ── FILTRO DEFENSIVO CONTRA ERRORES FANTASMA DE EXTENSIONES ─────────────────
-window.addEventListener('unhandledrejection', function(event) {
-    if (event.reason && event.reason.message) {
-        const msg = event.reason.message;
-        // Interceptamos el error exacto del canal de mensajes cerrado por extensiones
-        if (msg.includes('A listener indicated an asynchronous response') || 
-            msg.includes('message channel closed before a response was received')) {
-            event.preventDefault(); // Evita que el error salte a la consola
-            return;
-        }
-    }
-});
-// ────────────────────────────────────────────────────────────────────────────
+
 // ============================================================
 // MODELO FINANCIERO CENTRAL
 // Se define al inicio para que cualquier carga local/nube tenga
@@ -3357,6 +3345,7 @@ window.FinanceModel = (function() {
         snapshots: { crear: crearSnapshot }
     };
 })();
+window.uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 // Aliases legacy: mantienen compatible el resto del archivo y evitan carreras de carga.
 window.CARTERA_TIPOS = window.FinanceModel.cartera.tipos;
@@ -5400,8 +5389,6 @@ window.addEventListener('click', function(event) {
 // ambas llamadas (cerrarModal() local y window.cerrarModal()) funcionen.
 window.cerrarModal = cerrarModal;
 
-// --- GENERADOR DE IDs CANÓNICO (única implementación en toda la app) ---
-const uuid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // ==========================================
 // 🛡️ GUARDAR MOVIMIENTO (GRABACIÓN DIRECTA EN LA NUBE - ESTILO INDEXXX)
 // ==========================================
@@ -10373,72 +10360,7 @@ if ('serviceWorker' in navigator) {
     var observer = new MutationObserver(corregirEspaciado);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 })();
-// ============================================================================
-// 🛠️ PARCHE DE INYECCIÓN DE SEGURIDAD: FORMATOS Y FUNCIONES FALTANTES
-// ============================================================================
 
-// 1. Inicialización de Formateadores Internacionales de Moneda y Números
-window.FMT_NUM = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-window.FMT_EUR2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-window.FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// 2. Buscador del Diario con control de rebote (Debounce de 300ms) para rendimiento
-let tBusquedaDebounce;
-window.aplicarFiltrosDebounced = function() {
-    clearTimeout(tBusquedaDebounce);
-    tBusquedaDebounce = setTimeout(() => {
-        // Ejecuta el filtro dinámico sobre el Diario sin cerrar el panel visual
-        if (typeof window.aplicarFiltros === 'function') {
-            window.aplicarFiltros(false); 
-        }
-    }, 300);
-};
-
-// 3. Marcador defensivo para la detección de texto intuitivo
-window.detectarMagia = function(valor) {
-    // Espacio reservado para lógica futura de autocompletado inteligente
-    // Evita el colapso de la app al escribir descripciones
-};
-
-// 4. Lógica de profundización para las tarjetas KPI del Dashboard Principal
-window.verDetalleKPI = function(tipoKPI) {
-    if (!window.filtros) return;
-    
-    // Muta el filtro del diario según la tarjeta pulsada
-    if (tipoKPI === 'ingreso' || tipoKPI === 'gasto') {
-        window.filtros.tipo = tipoKPI;
-    } else {
-        window.filtros.tipo = ''; // 'neto' o todos
-    }
-    
-    // Sincroniza selectores visuales si existen
-    const selectTipo = document.getElementById('f-tipo');
-    if (selectTipo) selectTipo.value = window.filtros.tipo;
-
-    // UX Premium: Redirección gummy instantánea y renderizado
-    window.irPestana('diario');
-    if (typeof window.aplicarFiltros === 'function') {
-        window.aplicarFiltros(false);
-    }
-};
-
-// 5. Controlador UI interactivo para hacer transacciones recurrentes (Fijos)
-window.alternarRecurrenteUnificado = function() {
-    const chk = document.getElementById('m-es-recurrente');
-    const panelOpciones = document.getElementById('m-opciones-recurrente');
-    if (chk && panelOpciones) {
-        panelOpciones.style.display = chk.checked ? 'block' : 'none';
-    }
-};
-
-// 6. Controlador UI para mostrar los botones de días de la semana
-window.alternarDiasDiarioUnificado = function() {
-    const selectFrecuencia = document.getElementById('m-frecuencia-recurrente');
-    const boxDias = document.getElementById('m-dias-semana-box');
-    if (selectFrecuencia && boxDias) {
-        boxDias.style.display = selectFrecuencia.value === 'Semanal' ? 'block' : 'none';
-    }
-};
 </script>
 </body>
 </html>
