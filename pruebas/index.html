@@ -4011,6 +4011,26 @@ Object.defineProperty(window, 'modoTransaccionActual', {
     },
     configurable: true
 });
+// ============================================================================
+// 🛡️ BLINDAJE DE PRODUCCIÓN: FILTRADO DE PROPIETARIO Y FORMATOS GLOBALES
+// ============================================================================
+window.FMT_NUM = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+window.FMT_EUR2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+window.FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Motor inteligente de segmentación de perfil para la base de datos conjunta
+window.pasaFiltroPropietario = function(m) {
+    const usuario = window.filtroUsuarioActual || 'todos';
+    if (usuario === 'todos') return true;
+    
+    // Analiza las cuentas asignadas (Ej: D-EFECTIVO, N-TARJETA) o el beneficiario
+    const cuenta = String(m?.cuenta || '').toUpperCase().trim();
+    const beneficiario = String(m?.beneficiario || '').toUpperCase().trim();
+    
+    if (usuario === 'D') return cuenta.startsWith('D-') || beneficiario === 'D';
+    if (usuario === 'N') return cuenta.startsWith('N-') || beneficiario === 'N';
+    return true;
+};
 // ============================================================
 // 🍞 SISTEMA TOAST FINTECH (Global Alert Override)
 // ============================================================
@@ -8342,20 +8362,20 @@ setTimeout(() => focused.scrollIntoView({ behavior: 'smooth', block: 'center' })
 // Añadimos un estado al historial para interceptar el botón atrás
 history.pushState({ aidanai: true }, '');
 window.addEventListener('popstate', e => {
-const manualModal = document.getElementById('modal-manual');
-if (calcModal && calcModal.style.display === 'flex') {
-// Cerrar calculadora
-calcModal.style.display = 'none';
-history.pushState({ aidanai: true }, '');
-return;
-}
-if (manualModal && manualModal.classList.contains('active')) {
-if (typeof cerrarModal === 'function') cerrarModal();
-history.pushState({ aidanai: true }, '');
-return;
-}
-// Si no hay nada que cerrar, volvemos a añadir el estado
-history.pushState({ aidanai: true }, '');
+    const manualModal = document.getElementById('modal-manual');
+    const calcModal = document.getElementById('calc-modal'); // Declaración explícita defensiva
+    
+    if (calcModal && calcModal.style.display === 'flex') {
+        calcModal.style.display = 'none';
+        history.pushState({ aidanai: true }, '');
+        return;
+    }
+    if (manualModal && manualModal.classList.contains('active')) {
+        if (typeof cerrarModal === 'function') cerrarModal();
+        history.pushState({ aidanai: true }, '');
+        return;
+    }
+    history.pushState({ aidanai: true }, '');
 });
 // ─────────────────────────────────────────────────────────────
 // 9. DETECCIÓN: ¿Estamos corriendo como app instalada?
