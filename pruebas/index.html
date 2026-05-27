@@ -5279,14 +5279,19 @@ if(campoImporte) {
     // 1. LIMPIEZA Y PREPARACIÓN VISUAL
     if (!esEdicion) {
     window.idEnEdicion = null;
-    // Poner fecha de hoy
+	const chkRecurrente = document.getElementById('m-es-recurrente');
+        if (chkRecurrente) {
+            chkRecurrente.disabled = false;
+            chkRecurrente.checked = false;
+        }
+	 // Poner fecha de hoy
     const hoy = new Date().toISOString().split('T')[0];
     const elFecha = document.getElementById('m-fecha');
     if (elFecha) elFecha.value = hoy;
     if (campoImporte) campoImporte.value = '';
     const elDesc = document.getElementById('m-desc');
     if (elDesc) elDesc.value = '';
-    // Títulos y botones
+	// Títulos y botones
     if (btnAction) btnAction.innerText = "GUARDAR";
     if (areaExtras) areaExtras.style.display = 'none';
     // Foco automático en el importe para un registro ultra-rápido
@@ -5351,6 +5356,11 @@ if (usuario === 'D') {
 // CIERRE DE MODAL BLINDADO Y UX PREMIUM
 // =========================================================
 function cerrarModal() {
+	const chkRecurrente = document.getElementById('m-es-recurrente');
+if (chkRecurrente) {
+    chkRecurrente.disabled = false;
+    chkRecurrente.checked = false;
+}
     const modal = document.getElementById('modal-manual');
     if (!modal) return;
 
@@ -7309,20 +7319,24 @@ window.toggleUsuario = function() {
 };
 // === FUNCIÓN DE EDICIÓN (VERSIÓN BLINDADA) ===
 window.editarMovimiento = function(idMov) {
-const mov = datos.find(m => m.id === idMov);
-if (!mov) return notify("❌ Movimiento no encontrado", "error");
-// 1. DETECTAR TIPO REAL Y GUARDARLO EN EL GLOBAL (¡ESTO FALTABA!)
-let tipo = 'gasto'; // Por defecto asumimos gasto si no es positivo
-if (mov.tipo === 'traspaso' || (mov.concepto && mov.concepto.toUpperCase().includes('TRASPASO'))) {
-tipo = 'traspaso';
-} else if (mov.importe >= 0) {
-tipo = 'ingreso';
-}
-// CRÍTICO: Decirle al sistema global en qué modo estamos para que 'guardarManual' sepa poner el signo (-)
-window.modoTransaccionActual = mov.tipo; // Aquí el "setter" actualiza AppState
-window.idEnEdicion = mov.id;
-// 2. ABRIR EL MODAL (Pasamos 'true' para indicar que es edición)
-if(typeof abrirModal === 'function') abrirModal(true);
+    const mov = datos.find(m => m.id === idMov);
+    if (!mov) return notify("❌ Movimiento no encontrado", "error");
+    
+    let tipo = 'gasto';
+    if (mov.tipo === 'traspaso' || (mov.concepto && mov.concepto.toUpperCase().includes('TRASPASO'))) {
+        tipo = 'traspaso';
+    } else if (mov.importe >= 0) {
+        tipo = 'ingreso';
+    }
+    
+    window.modoTransaccionActual = mov.tipo;
+    window.idEnEdicion = mov.id;
+    
+    // 👇 NUEVO: Deshabilitar checkbox recurrente al editar
+    const chkRecurrente = document.getElementById('m-es-recurrente');
+    if (chkRecurrente) chkRecurrente.disabled = true;
+    
+    if(typeof abrirModal === 'function') abrirModal(true);
 // 3. CONFIGURAR COLORES VISUALES
 const modal = document.getElementById('modal-manual');
 const titulo = modal.querySelector('.cockpit-title');
@@ -7736,10 +7750,10 @@ if(chk) chk.checked = true;
 window.alternarRecurrenteUnificado(); // Despliega las opciones
 document.getElementById('m-frecuencia-recurrente').value = regla.frecuencia;
 window.alternarDiasDiarioUnificado(); // Muestra los días si es diario
-if(regla.frecuencia === 'Diario' && regla.diasSemana) {
-const diasArr = regla.diasSemana.split(',');
-const checks = document.querySelectorAll('.chk-dia-unificado');
-checks.forEach(c => c.checked = diasArr.includes(c.value));
+if((regla.frecuencia === 'Diario' || regla.frecuencia === 'Semanal') && regla.diasSemana) {
+    const diasArr = regla.diasSemana.split(',');
+    const checks = document.querySelectorAll('.chk-dia-unificado');
+    checks.forEach(c => c.checked = diasArr.includes(c.value));
 }
 const btnGuardar = document.getElementById('btn-modal-action');
 const titulo = document.querySelector('.cockpit-title');
@@ -7766,24 +7780,33 @@ else if (frecuencia === 'Anual') {
 fecha.setFullYear(fecha.getFullYear() + 1);
 }
 else if (frecuencia === 'Semanal') {
-fecha.setDate(fecha.getDate() + 7);
+    if (diasSemana && diasSemana.trim() !== '') {
+        const diasPermitidos = diasSemana.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d) && d >= 0 && d <= 6);
+        if (diasPermitidos.length > 0) {
+            let intento = new Date(fecha);
+            intento.setDate(intento.getDate() + 1);
+            let pasos = 0;
+            while (!diasPermitidos.includes(intento.getDay()) && pasos < 7) {
+                intento.setDate(intento.getDate() + 1);
+                pasos++;
+            }
+            fecha = intento;
+        } else {
+            fecha.setDate(fecha.getDate() + 7);
+        }
+    } else {
+        fecha.setDate(fecha.getDate() + 7);
+    }
 }
 else if (frecuencia === 'Diario') {
-// ✅ FIX BUG-5: Antes siempre sumaba exactamente 1 día ignorando diasSemana.
-// Una regla "Lunes, Miércoles" ejecutada un martes avanzaba al miércoles por
-// casualidad, pero ejecutada un miércoles avanzaba al jueves (incorrecto).
-// Ahora busca el siguiente día de la semana válido en la lista.
 if (diasSemana && diasSemana.trim() !== '') {
-// diasSemana llega como "1,3,5" (0=Dom, 1=Lun, ..., 6=Sáb)
 const diasPermitidos = diasSemana
 .split(',')
 .map(d => parseInt(d.trim()))
 .filter(d => !isNaN(d) && d >= 0 && d <= 6);
 if (diasPermitidos.length > 0) {
-// Avanzamos desde el día SIGUIENTE a fechaActual
 let intento = new Date(fecha);
 intento.setDate(intento.getDate() + 1);
-// Iteramos hasta encontrar un día de la semana permitido (máx 7 pasos)
 let pasos = 0;
 while (!diasPermitidos.includes(intento.getDay()) && pasos < 7) {
 intento.setDate(intento.getDate() + 1);
@@ -7791,11 +7814,9 @@ pasos++;
 }
 fecha = intento;
 } else {
-// Lista vacía o inválida → +1 día por seguridad
 fecha.setDate(fecha.getDate() + 1);
 }
 } else {
-// Sin días concretos marcados → frecuencia diaria pura (+1 día)
 fecha.setDate(fecha.getDate() + 1);
 }
 }
@@ -7947,12 +7968,14 @@ window.guardarComoRecurrenteUnificado = async function() {
     const desc = document.getElementById('m-desc').value;
     const frec = document.getElementById('m-frecuencia-recurrente').value;
     
-    let diasStr = '';
-    if (frec === 'Diario') {
-        const checks = document.querySelectorAll('.chk-dia-unificado:checked');
-        diasStr = Array.from(checks).map(c => c.value).join(',');
-    }
-
+   let diasStr = '';
+if (frec === 'Diario' || frec === 'Semanal') {
+    const checks = document.querySelectorAll('.chk-dia-unificado:checked');
+    diasStr = Array.from(checks).map(c => c.value).join(',');
+}
+if ((frec === 'Diario' || frec === 'Semanal') && diasStr === '') {
+    throw new Error("Debes seleccionar al menos un día de la semana");
+}
     if (!importeStr || !fecha || !cta || !conc) {
         throw new Error("Rellena los campos obligatorios para la regla");
     }
