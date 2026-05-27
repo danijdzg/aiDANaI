@@ -257,7 +257,7 @@ font-size: 18px; /* Tamaño pequeño universal */
     overflow-y: auto !important;
     overflow-x: hidden !important;
     padding: 0 10px !important;
-    padding-top: calc(48px + 10px) !important;
+    padding-top: calc(50px + 5px) !important;
     padding-bottom: calc(var(--bar-height, 70px) + 10px + env(safe-area-inset-bottom, 0px)) !important;
     background-color: #000;
     position: relative;
@@ -2185,11 +2185,10 @@ body #fab-main:active {
     height: 0 !important;
 }
 
-/* 2. DIARIO — primer elemento en flujo: el botón de filtros.
-      Cabecera=50px, .app-main padding-top=58px → hueco actual=8px.
-      Con -3px el hueco queda en exactamente 5px. */
+/* 2. DIARIO — el botón de filtros arranca en el flujo normal.
+      El padding-top de .app-main ya garantiza exactamente 5px de hueco. */
 #tab-diario > .filters-toggle {
-    margin-top: -3px !important;
+    margin-top: 0 !important;
 }
 
 /* 3. FIJOS — wrapper directo + contenedor JS + primer ítem generado */
@@ -11217,6 +11216,65 @@ if ('serviceWorker' in navigator) {
         });
     });
 }
+(function() {
+    'use strict';
+    
+    function corregirEspaciado() {
+        var header = document.querySelector('header');
+        if (!header) return;
+        
+        // Altura real del header (incluyendo bordes)
+        var headerAltura = header.offsetHeight;
+        var appMain = document.querySelector('.app-main');
+        if (!appMain) return;
+        
+        var pestañaActiva = document.querySelector('.view-section.active');
+        var esProblema = pestañaActiva && (
+            pestañaActiva.id === 'tab-diario' ||
+            pestañaActiva.id === 'tab-fijos' ||
+            pestañaActiva.id === 'tab-ajustes'
+        );
+        
+        if (esProblema) {
+            // Eliminar por completo el padding-top del contenedor principal
+            appMain.style.setProperty('padding-top', '0px', 'important');
+            
+            // Buscar el primer elemento visible dentro de la pestaña y quitarle márgenes superiores
+            var elementos = pestañaActiva.querySelectorAll('*');
+            for (var i = 0; i < elementos.length; i++) {
+                var el = elementos[i];
+                var estilo = window.getComputedStyle(el);
+                if (estilo.display !== 'none' && estilo.visibility !== 'hidden' && el.offsetHeight > 0) {
+                    el.style.setProperty('margin-top', '0px', 'important');
+                    el.style.setProperty('padding-top', '0px', 'important');
+                    break; // Solo el primero
+                }
+            }
+        } else {
+            // Para Inicio y Patrimonio: mantener el espaciado original (header + 5px)
+            appMain.style.setProperty('padding-top', (headerAltura + 5) + 'px', 'important');
+        }
+    }
+    
+    // Ejecutar al cargar
+    window.addEventListener('load', corregirEspaciado);
+    
+    // Ejecutar al cambiar de pestaña (interceptando la función original)
+    if (typeof window.irPestana === 'function') {
+        var original = window.irPestana;
+        window.irPestana = function(pestanaId) {
+            original(pestanaId);
+            setTimeout(corregirEspaciado, 30);
+        };
+    }
+    
+    // Ejecutar al redimensionar la ventana
+    window.addEventListener('resize', corregirEspaciado);
+    
+    // Observar cambios en el DOM (por si el contenido se carga dinámicamente)
+    var observer = new MutationObserver(corregirEspaciado);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+})();
 
 </script>
 </body>
