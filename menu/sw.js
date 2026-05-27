@@ -1,71 +1,77 @@
-const CACHE_NAME = 'aidanai-v3'; // Subimos la versión para forzar la actualización
-const urlsToCache = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png'
+// sw.js
+const CACHE_NAME = 'aidanai-v2'; // Versión bumpeada para limpiar caché con código MSAL antiguo // Subimos versión
+const CACHE_URLS = [
+    './', 
+    './index.html', 
+    './manifest.json', 
+    'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+    'https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js',
+    'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
+    'https://fonts.googleapis.com/icon?family=Material+Icons',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
 ];
 
-// 1. INSTALACIÓN: Precargar y forzar actualización
-self.addEventListener('install', event => {
-  // self.skipWaiting() obliga al Service Worker a instalarse inmediatamente,
-  // sin esperar a que el usuario cierre todas las pestañas de la app.
-  self.skipWaiting(); 
-  
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('[Service Worker] Precargando recursos estáticos');
-        return cache.addAll(urlsToCache);
-      })
-  );
-});
-
-// 2. ACTIVACIÓN: Limpiar cachés antiguas y tomar el control
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[Service Worker] Borrando caché antigua:', cacheName);
-            return caches.delete(cacheName);
-          }
+// 1. INSTALACIÓN
+self.addEventListener('install', e => {
+    e.waitUntil(
+        caches.open(CACHE_NAME).then(cache => {
+            console.log('📦 SW: Cacheando archivos estáticos');
+            return Promise.allSettled(
+                CACHE_URLS.map(url => cache.add(url).catch(err => console.warn('No se pudo cachear:', url, err)))
+            );
         })
-      );
-    })
-    // self.clients.claim() hace que el Service Worker tome el control de la página 
-    // en la primera carga, sin requerir recargar la página.
-    .then(() => self.clients.claim()) 
-  );
+    );
+    self.skipWaiting(); 
 });
 
-// 3. FETCH: Estrategia Stale-While-Revalidate (Sirve rápido, actualiza en silencio)
-self.addEventListener('fetch', event => {
-  // Solo interceptamos peticiones GET
-  if (event.request.method !== 'GET') return;
-  
-  // SOLUCIÓN: Ignorar peticiones de extensiones de Chrome u otros protocolos no soportados
-  if (!event.request.url.startsWith('http')) return;
+// 2. ACTIVACIÓN: Limpiamos cachés antiguas
+self.addEventListener('activate', e => {
+    e.waitUntil(
+        caches.keys().then(keys =>
+            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+        )
+    );
+    self.clients.claim(); 
+});
 
-  event.respondWith(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.match(event.request).then(cachedResponse => {
-        
-        // Petición a la red que se ejecuta en segundo plano
-        const fetchedResponse = fetch(event.request).then(networkResponse => {
-          // Si la respuesta es válida y es HTTP/HTTPS, actualizamos la caché
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'opaque') {
-            cache.put(event.request, networkResponse.clone());
-          }
-          return networkResponse;
-        }).catch(() => {
-          console.log('[Service Worker] Red no disponible, usando solo caché.');
-        });
-
-        return cachedResponse || fetchedResponse;
-      });
-    })
-  );
+// 3. INTERCEPTOR DE RED (Fetch) - MODO VELOCIDAD EXTREMA
+self.addEventListener('fetch', e => {
+    const url = e.request.url;
+    
+    // 🛑 REGLA 1: Llamadas a la nube NUNCA se cachean (Microsoft y Graph)
+    if (
+        url.includes('graph.microsoft.com') || 
+        url.includes('login.microsoftonline.com') || 
+        url.includes('login.live.com') || 
+        url.includes('msauth') || 
+        url.includes('alcdn.msauth.net') ||  // MSAL library auth calls
+        url.includes('login.microsoft.com') ||
+        url.includes('api.binance.com') ||   // API de precios en tiempo real
+        url.includes('api.coingecko.com') || // API de precios crypto
+        url.includes('www.alphavantage.co')  // API de precios acciones
+    ) {
+        return; // Deja pasar a la red nativamente (datos en tiempo real / auth)
+    }
+    
+    // 🟢 REGLA 2: Stale-While-Revalidate (La app vuela y se actualiza en la sombra)
+    e.respondWith(
+        caches.match(e.request).then(cachedResponse => {
+            const fetchPromise = fetch(e.request).then(networkResponse => {
+                if (e.request.url.startsWith('http') && networkResponse && networkResponse.status === 200 && networkResponse.type !== 'opaque') {
+                    const clone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+                }
+                return networkResponse;
+            }).catch(() => {
+                // Si falla la red y no hay caché, devolver respuesta offline
+                return new Response('Sin conexión', { 
+                    status: 503, 
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+                });
+            });
+            
+            // Devuelve la caché de inmediato si existe, si no, espera a la red
+            return cachedResponse || fetchPromise;
+        })
+    );
 });
