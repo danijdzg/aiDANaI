@@ -3632,6 +3632,20 @@ window.cambiarSubVistaPatrimonio = function(subVista) {
 window.irPestana = function(pestanaId) {
     window._tabActiva = 'tab-' + pestanaId;
     
+    // 0. Si salimos de patrimonio, forzar subvista a 'balance' para que la cartera
+    //    quede oculta (display:none) antes de cambiar de pestaña.
+    //    Esto evita que el contenido de cartera se superponga al entrar en otra pestaña.
+    const tabPatrimonio = document.getElementById('tab-patrimonio');
+    if (tabPatrimonio && tabPatrimonio.classList.contains('active') && pestanaId !== 'patrimonio') {
+        document.querySelectorAll('.patrimonio-subview').forEach(function(v) { v.style.display = 'none'; });
+        const svBalance = document.getElementById('subview-patrimonio-balance');
+        if (svBalance) svBalance.style.display = 'block';
+        const btnBalance = document.getElementById('subnav-balance');
+        const btnCartera = document.getElementById('subnav-cartera');
+        if (btnBalance) { btnBalance.style.background = 'rgba(255,255,255,0.1)'; btnBalance.style.color = '#fff'; }
+        if (btnCartera) { btnCartera.style.background = 'transparent'; btnCartera.style.color = '#888'; }
+    }
+
     // 1. Ocultar todas las pantallas principales del DOM
     document.querySelectorAll('.view-section').forEach(e => {
         e.classList.remove('active');
@@ -9877,10 +9891,15 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
     }]
   }, { notMerge: true });
 
-  if (!window._donutCarteraResizeObs) {
-    window._donutCarteraResizeObs = new ResizeObserver(() => { if (chart) chart.resize(); });
-    window._donutCarteraResizeObs.observe(container);
+  // Desconectar el observer anterior y crear uno nuevo que apunte al chart actual
+  if (window._donutCarteraResizeObs) {
+    window._donutCarteraResizeObs.disconnect();
   }
+  window._donutCarteraResizeObs = new ResizeObserver(() => {
+    const c = echarts.getInstanceByDom(container);
+    if (c) c.resize();
+  });
+  window._donutCarteraResizeObs.observe(container);
 };
 
 // ── GRÁFICO EVOLUCIÓN HISTÓRICA ───────────────────────────────────────
@@ -10040,10 +10059,15 @@ const costes = hist.map(h => (typeof h.coste === 'number' ? h.coste : primerCost
     `;
   }
 
-  if (!window._evolCarteraResizeObs) {
-    window._evolCarteraResizeObs = new ResizeObserver(() => { if (chart) chart.resize(); });
-    window._evolCarteraResizeObs.observe(container);
+  // Desconectar el observer anterior y crear uno nuevo que apunte al chart actual
+  if (window._evolCarteraResizeObs) {
+    window._evolCarteraResizeObs.disconnect();
   }
+  window._evolCarteraResizeObs = new ResizeObserver(() => {
+    const c = echarts.getInstanceByDom(container);
+    if (c) c.resize();
+  });
+  window._evolCarteraResizeObs.observe(container);
 };
 // ── MODAL: NUEVA / EDITAR POSICIÓN ───────────────────────────────────
 window.abrirModalNuevaPosicion = function() {
@@ -10352,6 +10376,17 @@ if ('serviceWorker' in navigator) {
             appMain.style.setProperty('padding-top', (headerAltura + 5) + 'px', 'important');
         }
     }
+
+    // Versión con throttle para el MutationObserver: evita que disparos masivos
+    // durante renderizarCartera (innerHTML) interfieran con la transición de pestañas.
+    var _corregirTimer = null;
+    function corregirEspaciadoThrottled() {
+        if (_corregirTimer) return;
+        _corregirTimer = setTimeout(function() {
+            _corregirTimer = null;
+            corregirEspaciado();
+        }, 80);
+    }
     
     // Ejecutar al cargar
     window.addEventListener('load', corregirEspaciado);
@@ -10370,8 +10405,9 @@ if ('serviceWorker' in navigator) {
     // Ejecutar al redimensionar la ventana
     window.addEventListener('resize', corregirEspaciado);
     
-    // Observar cambios en el DOM (por si el contenido se carga dinámicamente)
-    var observer = new MutationObserver(corregirEspaciado);
+    // Observar cambios en el DOM usando la versión throttled para no interferir
+    // con inyecciones masivas de innerHTML (ej: renderizarCartera)
+    var observer = new MutationObserver(corregirEspaciadoThrottled);
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 })();
 
