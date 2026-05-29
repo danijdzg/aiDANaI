@@ -4191,13 +4191,27 @@ async function iniciarSistema() {
         // ÉXITO: Activamos modo nube
         cambiarModo('cloud');
         if(barra) barra.innerText = "✅ Sincronizado";
-    } catch (error) {
-        
-        // ---> 🛑 DETENEMOS TAMBIÉN EN CASO DE ERROR DE RED <---
-        if (typeof window.detenerAnimacionCargaNumeros === 'function') {
-            window.detenerAnimacionCargaNumeros();
-        }
-        notify("❌ No se pudo conectar a OneDrive. Usa el botón 📂 para cargar un archivo Excel local.", "error");    
+   } catch (error) {
+    if (typeof window.detenerAnimacionCargaNumeros === 'function') {
+        window.detenerAnimacionCargaNumeros();
+    }
+
+    // 🔧 FIX: diagnóstico granular en lugar de un solo error genérico.
+    const msg = (error && error.message) || String(error);
+    console.warn('[iniciarSistema] error:', msg);
+
+    // Si el archivo cacheado ya no existe, lo limpiamos para que el próximo
+    // intento vuelva a buscarlo por nombre.
+    if (msg.includes('No encuentro') || msg.includes('404')) {
+        localStorage.removeItem('aidanai_file_id');
+        notify("📂 No encuentro 'aidanai-ctas.xlsx' en tu OneDrive. Pulsa 📂 para cargar uno local o crea el archivo en la raíz.", "warning");
+    } else if (msg.includes('Sesión caducada') || msg.includes('No hay ninguna sesión')) {
+        notify("🔐 Sesión OneDrive caducada. Pulsa ☁️ para volver a entrar.", "warning");
+    } else if (msg.includes('TIMEOUT') || msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        notify("📵 Sin conexión con OneDrive. Trabajando offline — pulsa 📂 para cargar local.", "warning");
+    } else {
+        notify("⚠️ No se pudo sincronizar. Pulsa 📂 para cargar local o ☁️ para reintentar.", "warning");
+    }
     // Resaltar el botón de carga local
     const btnLoadLocal = document.getElementById('btn-load-local');
     if (btnLoadLocal) {
@@ -8413,9 +8427,14 @@ window.desbloquearApp = function() {
         window.iniciarAnimacionCargaNumeros();
     }
 
-    // 5. Arrancamos el motor financiero (sin volver a mostrar el overlay)
+        // 5. Arrancamos el motor financiero en segundo plano (no bloquea la UI)
     if (typeof window.AppInitializer !== 'undefined') {
-        window.AppInitializer.iniciar();
+        // Damos 1 frame para que el overlay se oculte y el viewport sea visible
+        // ANTES de pedir el token (mantiene la "user activation" del último tap).
+        requestAnimationFrame(() => {
+            try { window.AppInitializer.iniciar(); }
+            catch (e) { console.error('[AppInitializer] fallo no fatal:', e); }
+        });
     }
 };
 // ──────────────────────────────────────────────────────────────────────
@@ -8480,22 +8499,52 @@ e.target.value = '';
 const urlParams = new URLSearchParams(window.location.search);
 const esWeb = window.location.href.includes('aidanai.netlify.app') || window.location.href.includes('github.io');
 const pideNube = urlParams.get('mode') === 'cloud';
-const hasToken = typeof oneDrive !== 'undefined' && oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0;
-if (esWeb || pideNube || hasToken) {
-if (typeof cambiarModo === 'function') cambiarModo('cloud');
+
+// 🔧 FIX: inicializamos MSAL ANTES de mirar cuentas (antes msalInstance era null
+//        y hasToken siempre daba false en la primera carga).
+let cuentaMsalExistente = false;
 if (typeof oneDrive !== 'undefined') {
-const token = await oneDrive.getToken().catch(() => null);
-if (token) {
-if (typeof iniciarSistema === 'function') await iniciarSistema();
-} else {
-if (typeof mostrarEstado === 'function') notify("⚠️ Nube pausada. Pulsa el botón para conectar.", "warning");
+    try {
+        await oneDrive._ensureMsalReady();
+        cuentaMsalExistente = oneDrive.msalInstance.getAllAccounts().length > 0;
+    } catch (e) {
+        console.warn('[Init] MSAL no pudo inicializarse:', e);
+    }
 }
-}
-} else {
-            if (typeof cambiarModo === 'function') cambiarModo('local');
-            // ---> 🛑 DETENEMOS SI ENTRA 100% OFFLINE <---
-            if (typeof window.detenerAnimacionCargaNumeros === 'function') window.detenerAnimacionCargaNumeros();
+
+// Solo intentamos nube si:
+//  - el usuario YA tenía sesión MSAL guardada (cuentaMsalExistente), o
+//  - viene con ?mode=cloud explícito
+const debeIntentarNube = cuentaMsalExistente || pideNube;
+
+if (debeIntentarNube) {
+    if (typeof cambiarModo === 'function') cambiarModo('cloud');
+    // Pedimos token SOLO si hay cuenta; nunca abrimos popup al arranque.
+    if (cuentaMsalExistente) {
+        const token = await oneDrive.getToken().catch(err => {
+            console.warn('[Init] getToken silencioso falló:', err && err.message);
+            return null;
+        });
+        if (token) {
+            try {
+                if (typeof iniciarSistema === 'function') await iniciarSistema();
+            } catch (e) {
+                console.error('[Init] iniciarSistema falló:', e);
+                notify("⚠️ No pude sincronizar ahora. Pulsa ☁️ para reintentar o 📂 para cargar local.", "warning");
+            }
+        } else {
+            notify("⚠️ Sesión OneDrive caducada. Pulsa ☁️ para volver a entrar.", "warning");
         }
+    } else {
+        // Es web pero NUNCA se ha logado: modo local silencioso, sin popup ni error.
+        if (typeof cambiarModo === 'function') cambiarModo('local');
+        if (typeof window.detenerAnimacionCargaNumeros === 'function') window.detenerAnimacionCargaNumeros();
+    }
+} else {
+    if (typeof cambiarModo === 'function') cambiarModo('local');
+    if (typeof window.detenerAnimacionCargaNumeros === 'function') window.detenerAnimacionCargaNumeros();
+}
+    
 },
 revisarRecibosProximos: function() {
 let fijos = window.datosfijos || [];
