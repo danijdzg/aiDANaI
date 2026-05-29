@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self' https://login.microsoftonline.com https://login.live.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.sheetjs.com https://cdn.jsdelivr.net https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com https://login.live.com https://alcdn.msauth.net https://api.binance.com https://cdn.sheetjs.com https://cdn.jsdelivr.net; frame-src 'self' https://login.microsoftonline.com https://login.live.com; worker-src 'self' blob:; frame-ancestors 'none'; upgrade-insecure-requests;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com https://cdn.sheetjs.com https://alcdn.msauth.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; frame-src 'self' https://login.microsoftonline.com https://login.live.com; worker-src 'self' blob:;">
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2789,46 +2789,30 @@ window.sumarDinero = function(a, b) {
 // --- HERRAMIENTA DE FUSIÓN DE DATOS (NUBE + MÓVIL) ---
 // NUEVO: SMART MERGE (Fusión Inteligente Fintech)
 window.fusionarMovimientos = function(movimientosNube, movimientosLocales) {
-    const FM = window.FinanceModel;
-    function norm(m) {
-        if (!m || typeof m !== 'object') return null;
-        const id = m.Id || m.ID || m.id;
-        if (!id) return null;
-        const fechaRaw = m.Fecha || m.FECHA || m.fecha;
-        let fecha = fechaRaw instanceof Date ? fechaRaw : new Date(fechaRaw || m.ts || Date.now());
-        if (isNaN(fecha.getTime())) fecha = new Date(Number(m.ts) || Date.now());
-        const importe = FM.parseMoney(m.Importe ?? m.IMPORTE ?? m.importe ?? 0);
-        return {
-            ...m,
-            id: String(id),
-            fecha,
-            cuenta: String(m.Cuenta || m.CUENTA || m.cuenta || '').toUpperCase().trim(),
-            concepto: String(m.Concepto || m.CONCEPTO || m.concepto || '').toUpperCase().trim(),
-            importe,
-            descripcion: String(m.Descripcion || m.DESCRIPCION || m.descripcion || '').toUpperCase().trim(),
-            beneficiario: String(m.Beneficiario || m.BENEFICIARIO || m.beneficiario || '').toUpperCase().trim(),
-            tipo: m.Tipo || m.TIPO || m.tipo || (importe >= 0 ? 'ingreso' : 'gasto'),
-            ts: Number(m.ts) || fecha.getTime(),
-            _updatedAt: Number(m._updatedAt) || Number(m.actualizadoEn) || Number(m.ts) || fecha.getTime()
-        };
-    }
-    const mapa = new Map();
-    const insertar = (mov, origenPeso) => {
-        const n = norm(mov);
-        if (!n) return;
-        const prev = mapa.get(n.id);
-        if (!prev) { mapa.set(n.id, { ...n, _origenPeso: origenPeso }); return; }
-        const tA = Number(prev._updatedAt) || 0;
-        const tB = Number(n._updatedAt) || 0;
-        if (tB > tA || (tB === tA && origenPeso >= (prev._origenPeso || 0))) {
-            mapa.set(n.id, { ...n, _origenPeso: origenPeso });
+    if (!movimientosNube || movimientosNube.length === 0) return movimientosLocales || [];
+    if (!movimientosLocales || movimientosLocales.length === 0) return movimientosNube;
+    // 1. Usamos un Map (diccionario) para garantizar unicidad y facilitar la sobrescritura
+    const mapaFusionado = new Map();
+    // 2. Cargamos la "verdad de la nube" como base
+    movimientosNube.forEach(function(mov) {
+        const idNube = mov.Id || mov.id;
+        if (idNube) mapaFusionado.set(idNube, mov);
+    });
+    // 3. 🟢 SMART MERGE: Aplicamos los datos locales por encima
+    // Si el ID ya existe (ej. una edición tuya), Map.set() machaca el antiguo con tu versión fresca.
+    // Si es un ID nuevo (un gasto recién creado), simplemente lo añade al final.
+    movimientosLocales.forEach(function(movLocal) {
+        const idLocal = movLocal.Id || movLocal.id;
+        if (idLocal) {
+            mapaFusionado.set(idLocal, movLocal);
         }
-    };
-    (Array.isArray(movimientosNube) ? movimientosNube : []).forEach(m => insertar(m, 1));
-    (Array.isArray(movimientosLocales) ? movimientosLocales : []).forEach(m => insertar(m, 2));
-    return Array.from(mapa.values())
-        .map(m => { const limpio = { ...m }; delete limpio._origenPeso; return limpio; })
-        .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0) || String(a.id).localeCompare(String(b.id)));
+    });
+    // 4. Convertir a Array y ordenar por fecha (de más antiguo a más nuevo)
+    const listaFusionada = Array.from(mapaFusionado.values());
+    listaFusionada.sort(function(a, b) {
+        return new Date(a.Fecha || a.fecha) - new Date(b.Fecha || b.fecha);
+    });
+    return listaFusionada;
 };
 // --- FIN HERRAMIENTA DE FUSIÓN DE DATOS ---
 // ============================================================
@@ -3332,20 +3316,15 @@ const IV_LEN    = 12;        // 96 bits (óptimo GCM)
 const enc       = new TextEncoder();
 const dec       = new TextDecoder();
 async function _derivarClave(password, salt) {
-const passBytes = enc.encode(String(password));
-try {
 const keyMaterial = await crypto.subtle.importKey(
-'raw', passBytes, 'PBKDF2', false, ['deriveKey']
+'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
 );
-return await crypto.subtle.deriveKey(
+return crypto.subtle.deriveKey(
 { name: 'PBKDF2', salt, iterations: ITER, hash: 'SHA-256' },
 keyMaterial,
 { name: 'AES-GCM', length: KEY_LEN },
 false, ['encrypt', 'decrypt']
 );
-} finally {
-try { passBytes.fill(0); } catch (e) { /* zeroing best-effort */ }
-}
 }
 async function encriptar(objeto, password) {
     // [F6-B] Guard clauses + manejo defensivo. El contrato (lanzar excepción
@@ -3364,12 +3343,7 @@ async function encriptar(objeto, password) {
         const iv   = crypto.getRandomValues(new Uint8Array(IV_LEN));
         const key  = await _derivarClave(password, salt);
         const data = enc.encode(JSON.stringify(objeto));
-        let cifrado;
-        try {
-            cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-        } finally {
-            try { data.fill(0); } catch (e) { /* zeroing best-effort */ }
-        }
+        const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
         // Formato: salt(16) || iv(12) || ciphertext
         const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
         blob.set(salt, 0);
@@ -3415,15 +3389,7 @@ async function desencriptar(b64, password) {
         const cifrado = bytes.slice(SALT_LEN + IV_LEN);
         const key     = await _derivarClave(password, salt);
         const plano   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cifrado);
-        try {
-            const obj = JSON.parse(dec.decode(plano));
-            if (!validarEstructura(obj, { tolerante: true })) {
-                throw new Error('CryptoSystem.desencriptar: estructura JSON no válida');
-            }
-            return obj;
-        } finally {
-            try { bytes.fill(0); cifrado.fill(0); } catch (e) { /* zeroing best-effort */ }
-        }
+        return JSON.parse(dec.decode(plano));
     } catch (err) {
         // Nota: un fallo aquí suele ser PIN incorrecto (OperationError de
         // crypto.subtle.decrypt) o blob corrupto. Lo identificamos para
@@ -3433,19 +3399,7 @@ async function desencriptar(b64, password) {
         throw err; // re-lanzamos: contrato preservado
     }
 }
-function validarEstructura(obj, opts) {
-    opts = opts || {};
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
-    const hasKnownRoot = Array.isArray(obj.movimientos) || Array.isArray(obj.fijos) || obj.config || Array.isArray(obj.cartera) || Array.isArray(obj.historicoCartera);
-    if (!hasKnownRoot) return !!opts.tolerante;
-    if (obj.movimientos && !Array.isArray(obj.movimientos)) return false;
-    if (obj.fijos && !Array.isArray(obj.fijos)) return false;
-    if (obj.cartera && !Array.isArray(obj.cartera)) return false;
-    if (obj.historicoCartera && !Array.isArray(obj.historicoCartera)) return false;
-    if (obj.config && (typeof obj.config !== 'object' || Array.isArray(obj.config))) return false;
-    return true;
-}
-return Object.freeze({ encriptar, desencriptar, validarEstructura });
+return { encriptar, desencriptar };
 })();
 /* ============================================================
    🔐 SISTEMA DE SEGURIDAD DEFINITIVO (Limpio y Exclusivo)
@@ -3474,13 +3428,12 @@ const PinSecurity = (() => {
         }
         return (await _hash(pin)) === stored;
     }
-    function setSession(pin) { sessionPin = (typeof pin === 'string') ? String(pin) : ''; }
+    function setSession(pin) { sessionPin = pin; }
     function getSession() { return sessionPin; }
-    function clearSession() { sessionPin = ''; }
     function esVirgen() {
         return !localStorage.getItem(STORAGE_KEY);
     }
-    return Object.freeze({ guardarNuevo, verificar, setSession, getSession, clearSession, esVirgen, hashear: _hash });
+    return { guardarNuevo, verificar, setSession, getSession, esVirgen, hashear: _hash };
 })();
 
 // ==========================================
@@ -3677,7 +3630,6 @@ window.CarteraManager = window.CarteraManager || Object.create(null);
 // ════════════════════════════════════════════════════════════════════════════
 window.ChartManager = (function() {
     const _resizeObservers = Object.create(null); // key → ResizeObserver
-    const _resizeObserverTargets = Object.create(null); // key → Element
 
     function _hasEcharts() {
         return typeof echarts !== 'undefined' && echarts && typeof echarts.init === 'function';
@@ -3718,56 +3670,29 @@ window.ChartManager = (function() {
         }
     }
 
-    function _disconnectObserverKey(key) {
-        try {
-            if (_resizeObservers[key]) _resizeObservers[key].disconnect();
-        } catch (e) { /* noop */ }
-        delete _resizeObservers[key];
-        delete _resizeObserverTargets[key];
-    }
-
     function dispose(container) {
         const inst = get(container);
         if (inst) {
             try { inst.dispose(); } catch (e) { /* noop */ }
         }
-        Object.keys(_resizeObserverTargets).forEach(key => {
-            if (_resizeObserverTargets[key] === container) _disconnectObserverKey(key);
-        });
-    }
-
-    function disposeById(id) {
-        const el = typeof id === 'string' ? document.getElementById(id) : id;
-        if (el) dispose(el);
-    }
-
-    function disposeManyByIds(ids) {
-        (ids || []).forEach(disposeById);
     }
 
     function attachResizeObserver(container, key) {
         if (!container || typeof ResizeObserver === 'undefined') return;
-        if (_resizeObservers[key] && _resizeObserverTargets[key] === container) return; // idempotente por contenedor
-        if (_resizeObservers[key]) _disconnectObserverKey(key);
+        if (_resizeObservers[key]) return; // idempotente
         try {
-            let raf = 0;
             const obs = new ResizeObserver(() => {
-                if (raf) return;
-                raf = requestAnimationFrame(() => {
-                    raf = 0;
-                    const inst = get(container);
-                    if (inst) inst.resize();
-                });
+                const inst = get(container);
+                if (inst) inst.resize();
             });
             obs.observe(container);
             _resizeObservers[key] = obs;
-            _resizeObserverTargets[key] = container;
         } catch (e) {
             console.warn('[ChartManager] ResizeObserver falló:', e);
         }
     }
 
-    return Object.freeze({ mount, get, dispose, disposeById, disposeManyByIds, attachResizeObserver });
+    return { mount, get, dispose, attachResizeObserver };
 })();
 
 
@@ -3881,31 +3806,35 @@ modoTransaccion: '',              // 'ingreso'|'gasto'|'traspaso' (espejo de mod
 hayPendientes: function() {
 try {
 const sala = JSON.parse(localStorage.getItem('salaEsperaMovimientos') || '[]');
-const buzon = JSON.parse(localStorage.getItem('aidanai_buzon') || '[]');
-return (Array.isArray(sala) && sala.length > 0) || (Array.isArray(buzon) && buzon.length > 0);
+return sala.length > 0;
 } catch(e) { return false; }
 },
 actualizarSemaforo: function(color) {
-    let estado = ({ ok: 'verde', success: 'verde', loading: 'naranja', cargando: 'naranja', warning: 'amarillo', error: 'rojo', sinDatos: 'rojo' }[color]) || color || 'verde';
-    if (!navigator.onLine) estado = 'rojo';
-    else if (estado === 'verde' && this.hayPendientes()) estado = 'amarillo';
-    if (!['verde', 'amarillo', 'naranja', 'rojo'].includes(estado)) estado = 'rojo';
-    this.estadoSemaforo = estado;
-    window.estadoSemaforo = estado;
+    this.estadoSemaforo = color;
+    window.estadoSemaforo = color;
     const dot = document.getElementById('semaforo-dot');
     if (dot) {
-        const paleta = {
-            verde:    { c: '#39FF14', glow: '0 0 10px #39FF14', pulse: false, label: 'Sincronizado' },
-            amarillo: { c: '#FFD60A', glow: '0 0 10px #FFD60A', pulse: false, label: 'Pendientes locales sin subir' },
-            naranja:  { c: '#FF9F1C', glow: '0 0 15px #FF9F1C', pulse: true,  label: 'Guardando o subiendo' },
-            rojo:     { c: '#FF2E4D', glow: '0 0 10px #FF2E4D', pulse: false, label: 'Error crítico o sin conexión' }
-        };
-        const cfg = paleta[estado];
-        dot.style.backgroundColor = cfg.c;
-        dot.style.boxShadow = cfg.glow;
-        dot.title = cfg.label;
-        dot.setAttribute('aria-label', cfg.label);
-        dot.classList.toggle('parpadeo-neon', cfg.pulse);
+        // Si hay internet, verde pero hay pendientes → amarillo
+        if (navigator.onLine && color === 'verde' && this.hayPendientes()) {
+            color = 'amarillo';
+        }
+        if (!navigator.onLine || color === 'rojo' || color === 'error' || color === 'sinDatos') {
+            dot.style.backgroundColor = '#FF2E4D'; // Rojo: sin BD o sin conexión
+            dot.style.boxShadow = '0 0 10px #FF2E4D';
+            dot.classList.remove('parpadeo-neon');
+        } else if (color === 'naranja' || color === 'cargando') {
+            dot.style.backgroundColor = '#FF9F1C'; // Naranja: guardando
+            dot.style.boxShadow = '0 0 15px #FF9F1C';
+            dot.classList.add('parpadeo-neon');
+        } else if (color === 'amarillo' || color === 'warning') {
+            dot.style.backgroundColor = '#FFD60A'; // Amarillo: pendientes sin guardar
+            dot.style.boxShadow = '0 0 10px #FFD60A';
+            dot.classList.remove('parpadeo-neon');
+        } else {
+            dot.style.backgroundColor = '#39FF14'; // Verde: todo OK
+            dot.style.boxShadow = '0 0 10px #39FF14';
+            dot.classList.remove('parpadeo-neon');
+        }
     }
 },
 setGuardando: function(estado) {
@@ -4212,7 +4141,6 @@ async function iniciarSistema() {
 }
 }
 
-let _ultimoPulsoVibracion = 0;
 function vibrar(tipo) {
 const patrones = {
 'ingreso': [80],          // Pulso largo y firme → dinero que entra ✅
@@ -4224,9 +4152,6 @@ const patrones = {
 'success': [40, 20, 80],  // Patrón corto-pausa-largo → éxito 🎉
 };
 const patron = patrones[tipo] || [50];
-const ahora = Date.now();
-if (ahora - _ultimoPulsoVibracion < 70) return;
-_ultimoPulsoVibracion = ahora;
 try { if (navigator.vibrate) navigator.vibrate(patron); } catch (e) {}
 }
 /* --- SEGURIDAD: SANITIZACIÓN DE HTML --- */
@@ -5250,7 +5175,7 @@ if (hayErrorVisual) {
 
 window.toggleBotonCarga('btn-modal-action', true);
 
-try { if (typeof vibrar === 'function') vibrar('success'); } catch(e){}
+try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){}
 
 // --- INTERCEPTOR RECURRENTE ---
 const chkRecurrente = document.getElementById('m-es-recurrente');
@@ -5468,7 +5393,7 @@ if(typeof vibrar === 'function') vibrar('clonar');
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
 window.borrarMovimiento = async function(id) {
 // --- NUEVA MEDIDA 1: EL TOQUE MÁGICO (Vibración al instante) ---
-try { if (typeof vibrar === 'function') vibrar('success'); } catch(e){}
+try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){}
 // -------------------------------------------------------------
 // 1. Confirmación de seguridad
 const confirmado = await window.pedirConfirmacion(
@@ -5937,7 +5862,7 @@ function accionFab(tipo) {
     const inputDesc = document.getElementById('m-desc');
 
     // Feedback táctil sutil (si el móvil lo soporta)
-    if (typeof vibrar === 'function') vibrar('tecla');
+    if("vibrate" in navigator) navigator.vibrate(8);
 
     // 4. Lógica de Modos (Cambia colores y textos al vuelo)
     if (tipo === 'pagos') {
@@ -5970,74 +5895,6 @@ function accionFab(tipo) {
         }
     }
 }
-
-// ════════════════════════════════════════════════════════════════════════════
-// 📬 OfflineQueue — recámara transaccional determinista (localStorage)
-// ════════════════════════════════════════════════════════════════════════════
-window.OfflineQueue = (function() {
-    const KEYS = Object.freeze(['aidanai_buzon', 'salaEsperaMovimientos']);
-    const FM = () => window.FinanceModel;
-    function _safeRead(key) {
-        try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; }
-        catch (e) { return []; }
-    }
-    function _safeWrite(key, arr) {
-        localStorage.setItem(key, JSON.stringify(Array.isArray(arr) ? arr : []));
-    }
-    function _norm(m) {
-        const clean = (txt) => String(txt || '').toUpperCase().trim();
-        const rawFecha = m && (m.FECHA || m.Fecha || m.fecha);
-        let fecha = rawFecha instanceof Date ? rawFecha : new Date(rawFecha || Date.now());
-        if (isNaN(fecha.getTime())) fecha = new Date();
-        const importe = FM().parseMoney(m && (m.IMPORTE ?? m.Importe ?? m.importe ?? 0));
-        const id = (m && (m.ID || m.Id || m.id)) || (typeof uuid === 'function' ? uuid() : String(Date.now()) + '-' + Math.random());
-        return {
-            id,
-            fecha,
-            cuenta: clean(m && (m.CUENTA || m.Cuenta || m.cuenta)),
-            concepto: clean(m && (m.CONCEPTO || m.Concepto || m.concepto)),
-            importe,
-            descripcion: clean(m && (m.DESCRIPCION || m.Descripcion || m.descripcion || m.detalle)),
-            beneficiario: clean(m && (m.BENEFICIARIO || m.Beneficiario || m.beneficiario)),
-            ts: Number(m && m.ts) || fecha.getTime(),
-            tipo: (m && (m.TIPO || m.Tipo || m.tipo)) || (importe >= 0 ? 'ingreso' : 'gasto'),
-            _updatedAt: Number(m && m._updatedAt) || Date.now()
-        };
-    }
-    function peek() {
-        const mapa = new Map();
-        KEYS.forEach(key => _safeRead(key).forEach(item => {
-            const n = _norm(item);
-            const prev = mapa.get(n.id);
-            if (!prev || (n._updatedAt || 0) >= (prev._updatedAt || 0)) mapa.set(n.id, n);
-        }));
-        return Array.from(mapa.values()).sort((a,b) => (b._updatedAt || b.ts || 0) - (a._updatedAt || a.ts || 0));
-    }
-    function has() { return peek().length > 0; }
-    function add(items) {
-        const actuales = peek();
-        const mapa = new Map(actuales.map(m => [m.id, m]));
-        (Array.isArray(items) ? items : [items]).filter(Boolean).forEach(item => {
-            const n = _norm(item);
-            const prev = mapa.get(n.id);
-            if (!prev || (n._updatedAt || 0) >= (prev._updatedAt || 0)) mapa.set(n.id, n);
-        });
-        const merged = Array.from(mapa.values()).sort((a,b) => (b._updatedAt || b.ts || 0) - (a._updatedAt || a.ts || 0));
-        KEYS.forEach(key => _safeWrite(key, merged));
-        if (window.AppState) window.AppState.actualizarSemaforo(navigator.onLine ? 'amarillo' : 'rojo');
-        return merged;
-    }
-    function clear() { KEYS.forEach(key => localStorage.removeItem(key)); }
-    async function flush() {
-        const pendientes = peek();
-        if (!pendientes.length || !navigator.onLine || !window.modoNube || typeof window.guardarUniversal !== 'function') return false;
-        if (window.AppState && window.AppState.isSaving) return false;
-        if (typeof notify === 'function') notify('📬 Subiendo movimientos pendientes...', 'loading');
-        return await window.guardarUniversal(pendientes);
-    }
-    return Object.freeze({ add, peek, has, clear, flush });
-})();
-
 // ==========================================
 // 💾 GUARDADO MAESTRO BLINDADO (V6: Rendimiento + AES-GCM) - CORREGIDO fijos & CARTERA
 // ==========================================
@@ -6062,13 +5919,6 @@ window.guardarUniversal = async function(nuevasFilas) {
         const CLEAN = (txt) => String(txt || "").toUpperCase().trim();
         const FM = window.FinanceModel;
         let datosFinales = [...(window.datos || [])];
-        if (window.OfflineQueue && navigator.onLine) {
-            const pendientesRecamara = window.OfflineQueue.peek();
-            if (pendientesRecamara.length > 0) {
-                const entrada = nuevasFilas ? (Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas]) : [];
-                nuevasFilas = entrada.concat(pendientesRecamara);
-            }
-        }
 
         // --- 2. GESTIÓN DE NUEVAS FILAS (Anti-duplicados) ---
         if (nuevasFilas) {
@@ -6091,8 +5941,7 @@ window.guardarUniversal = async function(nuevasFilas) {
                     descripcion: CLEAN(f.DESCRIPCION || f.descripcion),
                     beneficiario: CLEAN(f.BENEFICIARIO || f.beneficiario),
                     ts: fechaFinal.getTime(),
-                    tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto'),
-                    _updatedAt: Number(f._updatedAt) || Date.now()
+                    tipo: f.tipo || f.TIPO || ((FM.parseMoney(f.IMPORTE || f.importe || 0) >= 0) ? 'ingreso' : 'gasto')
                 };
             });
             filasProcesadas.forEach(f => {
@@ -6121,16 +5970,6 @@ window.guardarUniversal = async function(nuevasFilas) {
             };
             const datosEncriptados = await CryptoSystem.encriptar(paqueteDeDatos, pinSession);
             localStorage.setItem('DATA_ENCRIPTADA', datosEncriptados);
-        }
-
-        const _quiereNube = (window.modoNube || (typeof oneDrive !== 'undefined' && oneDrive.msalInstance && oneDrive.msalInstance.getAllAccounts().length > 0));
-        if (_quiereNube && !navigator.onLine && nuevasFilas) {
-            if (window.OfflineQueue) window.OfflineQueue.add(nuevasFilas);
-            window.datos = datosFinales;
-            if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
-            if (typeof notify === 'function') notify('📵 Sin conexión. Movimiento guardado en recámara local.', 'warning');
-            if (window.AppState) window.AppState.actualizarSemaforo('rojo');
-            return true;
         }
 
         // --- 4. CONSTRUIR EL EXCEL PARA LA NUBE ---
@@ -6241,7 +6080,7 @@ window.guardarUniversal = async function(nuevasFilas) {
                             const historicoLocal = window.historicoCartera ? JSON.parse(JSON.stringify(window.historicoCartera)) : [];
                             // ---- FIN MEJORA ----
                             
-                            if(typeof procesarLibroLeido === 'function') await procesarLibroLeido(wbFresco);
+                            if(typeof procesarLibroLeido === 'function') procesarLibroLeido(wbFresco);
                             
                             // ---- INICIO MEJORA: fusionar cartera (local prevalece) ----
                             if (carteraLocal.length > 0 || window.datosCartera.length > 0) {
@@ -6348,8 +6187,7 @@ window.guardarUniversal = async function(nuevasFilas) {
             if (!exito) throw new Error("Fallo conexión OneDrive.");
             
             // Éxito: limpiamos el buzón offline
-            if (window.OfflineQueue) window.OfflineQueue.clear();
-            else { localStorage.removeItem('aidanai_buzon'); localStorage.removeItem('salaEsperaMovimientos'); }
+            localStorage.removeItem('aidanai_buzon');
             if (window.AppState) window.AppState.actualizarSemaforo('ok');
             if (btn) btn.innerHTML = '<span class="material-icons">cloud_done</span> OK';
 
@@ -6369,18 +6207,16 @@ window.guardarUniversal = async function(nuevasFilas) {
     console.error("🚨 ERROR CRÍTICO AL GUARDAR:", errorCritico);
     // --- 7. FALLO: BUZÓN DE SALIDA (OFFLINE QUEUE) ---
     if (nuevasFilas) {
-        if (window.OfflineQueue) window.OfflineQueue.add(nuevasFilas);
-        else {
-            const buzonAnterior = JSON.parse(localStorage.getItem('aidanai_buzon') || '[]');
-            const filasArray = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
-            filasArray.forEach(f => {
-                if (!buzonAnterior.find(b => (b.id || b.ID) === (f.id || f.ID))) buzonAnterior.push(f);
-            });
-            localStorage.setItem('aidanai_buzon', JSON.stringify(buzonAnterior));
-            localStorage.setItem('salaEsperaMovimientos', JSON.stringify(buzonAnterior));
-        }
-        if (typeof notify === 'function') notify("📶 Sin conexión o red inestable. Guardado offline en espera.", "warning");
-        if (window.AppState) window.AppState.actualizarSemaforo(navigator.onLine ? 'amarillo' : 'rojo');
+        const buzonAnterior = JSON.parse(localStorage.getItem('aidanai_buzon') || '[]');
+        const filasArray = Array.isArray(nuevasFilas) ? nuevasFilas : [nuevasFilas];
+        filasArray.forEach(f => {
+            if (!buzonAnterior.find(b => b.id === (f.id || f.ID))) {
+                buzonAnterior.push(f);
+            }
+        });
+        localStorage.setItem('aidanai_buzon', JSON.stringify(buzonAnterior));
+        if (typeof notify === 'function') notify("📶 Sin conexión. Guardado offline en espera.", "warning");
+        if (window.AppState) window.AppState.actualizarSemaforo('naranja');
         
         window.datos = datosFinales;
         if (window.UIEvents) window.UIEvents.emitir('datos:actualizados');
@@ -7404,7 +7240,7 @@ notify('🔄 Verificando PIN actual...', 'loading');
 const correcta = await PinSecurity.verificar(oldVal);
 if (!correcta) {
 notify('❌ El PIN actual no es correcto', 'error');
-if (typeof vibrar === 'function') vibrar('error');
+if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
 if (oldInput) oldInput.focus();
 return;
 }
@@ -8199,7 +8035,7 @@ indicator.classList.remove('releasing');
 indicator.classList.add('loading');
 if (ptrText) ptrText.textContent = 'Actualizando...';
 }
-if (typeof vibrar === 'function') vibrar('success');
+if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
 try {
     if (window.modoNube && typeof cargarDesdeNube === 'function') {
         await cargarDesdeNube();
@@ -8227,14 +8063,6 @@ if(window.AppState) window.AppState.actualizarSemaforo('rojo');
 window.addEventListener('online', () => {
 notify('📶 Conexión restaurada', 'success');
 if(window.AppState) window.AppState.actualizarSemaforo('verde');
-setTimeout(() => {
-    if (window.OfflineQueue && window.OfflineQueue.has()) {
-        window.OfflineQueue.flush().catch(err => {
-            console.warn('[OfflineQueue] flush pendiente:', err);
-            if (window.AppState) window.AppState.actualizarSemaforo('amarillo');
-        });
-    }
-}, 700);
 });
 // ─────────────────────────────────────────────────────────────
 // 6. TECLADO VIRTUAL — Ajustar viewport cuando aparece
@@ -8324,7 +8152,7 @@ window.limpiarPin = function() {
     window.pinActualUI = "";
     window.actualizarPuntosPin();
     // Opcional: un pequeño feedback visual o vibración
-    if (typeof vibrar === 'function') vibrar('error');
+    if (navigator.vibrate) navigator.vibrate(50);
 };
 window.actualizarPuntosPin = function() {
     const dots = document.querySelectorAll('.pin-dot');
@@ -8377,7 +8205,7 @@ window.verificarPinCriptografico = async function() {
             setTimeout(() => pinDots.style.transform = 'translateX(10px)', 150);
             setTimeout(() => pinDots.style.transform = 'translateX(0)', 200);
         }
-        if (typeof vibrar === 'function') vibrar('error');
+        if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
         window.pinActualUI = "";
         setTimeout(window.actualizarPuntosPin, 300);
     }
@@ -10238,7 +10066,7 @@ window.guardarPosicion = async function() {
     }
 
     window.mostrarToast(`Posición ${ticker} guardada`, "success");
-    if (typeof vibrar === 'function') vibrar('success');
+    if ("vibrate" in navigator) navigator.vibrate(40);
 };
 
 window.borrarPosicion = async function(id) {
@@ -10340,87 +10168,6 @@ if ('serviceWorker' in navigator) {
         });
     });
 }
-
-// ════════════════════════════════════════════════════════════════════════════
-// 🛡️ Guards de producción: gráficos, PIN, búsquedas y validación estructural
-// ════════════════════════════════════════════════════════════════════════════
-(function _productionHardeningGuards() {
-    'use strict';
-    const CHART_IDS = Object.freeze(['chart-Sankey', 'chart-Sunburst', 'chart-TreeMap', 'chartPatrimonio', 'chart-cartera-donut', 'chart-cartera-evol']);
-    const TAB_CHARTS = Object.freeze({
-        inicio: ['chart-Sankey'],
-        patrimonio: ['chart-Sunburst', 'chart-TreeMap', 'chartPatrimonio', 'chart-cartera-donut', 'chart-cartera-evol']
-    });
-    function disposeInactive(idsKeep) {
-        if (!window.ChartManager || typeof window.ChartManager.disposeManyByIds !== 'function') return;
-        const keep = new Set(idsKeep || []);
-        window.ChartManager.disposeManyByIds(CHART_IDS.filter(id => !keep.has(id)));
-    }
-    if (typeof window.irPestana === 'function' && !window.irPestana.__chartGuarded) {
-        const originalIr = window.irPestana;
-        window.irPestana = function(pestanaId) {
-            disposeInactive(TAB_CHARTS[pestanaId] || []);
-            return originalIr.apply(this, arguments);
-        };
-        window.irPestana.__chartGuarded = true;
-    }
-    if (typeof window.cambiarSubVistaPatrimonio === 'function' && !window.cambiarSubVistaPatrimonio.__chartGuarded) {
-        const originalSub = window.cambiarSubVistaPatrimonio;
-        window.cambiarSubVistaPatrimonio = function(subVista) {
-            if (subVista === 'cartera') window.ChartManager && window.ChartManager.disposeManyByIds(['chart-Sunburst', 'chart-TreeMap', 'chartPatrimonio']);
-            if (subVista === 'balance') window.ChartManager && window.ChartManager.disposeManyByIds(['chart-cartera-donut', 'chart-cartera-evol']);
-            return originalSub.apply(this, arguments);
-        };
-        window.cambiarSubVistaPatrimonio.__chartGuarded = true;
-    }
-    if (typeof window.procesarLibroLeido === 'function' && !window.procesarLibroLeido.__validated) {
-        const originalProcesar = window.procesarLibroLeido;
-        window.procesarLibroLeido = async function(wb) {
-            const valido = !!(wb && typeof wb === 'object' && Array.isArray(wb.SheetNames) && wb.Sheets && typeof wb.Sheets === 'object');
-            if (!valido) {
-                if (typeof notify === 'function') notify('❌ Estructura de base de datos inválida', 'error');
-                throw new Error('Workbook inválido: no se procesará la base de datos');
-            }
-            return await originalProcesar.apply(this, arguments);
-        };
-        window.procesarLibroLeido.__validated = true;
-    }
-    if (typeof window.cambiarPinSeguridad === 'function' && !window.cambiarPinSeguridad.__zeroing) {
-        const originalCambiarPin = window.cambiarPinSeguridad;
-        window.cambiarPinSeguridad = async function() {
-            try { return await originalCambiarPin.apply(this, arguments); }
-            finally {
-                ['sec-old-pin','sec-new-pin','sec-confirm-pin'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) { el.value = ''; el.setAttribute('value', ''); }
-                });
-            }
-        };
-        window.cambiarPinSeguridad.__zeroing = true;
-    }
-    if (typeof window.buscarSpotlight === 'function' && !window.buscarSpotlight.__debouncedRAF) {
-        const originalBuscar = window.buscarSpotlight;
-        let t = 0, raf = 0, ultimo = '';
-        window.buscarSpotlight = function(texto) {
-            ultimo = String(texto || '');
-            clearTimeout(t);
-            if (raf) cancelAnimationFrame(raf);
-            if (!ultimo || ultimo.length < 2) return originalBuscar.call(this, ultimo);
-            t = setTimeout(() => { raf = requestAnimationFrame(() => originalBuscar.call(window, ultimo)); }, 90);
-        };
-        window.buscarSpotlight.__debouncedRAF = true;
-    }
-    if (typeof window.aplicarFiltrosDebounced === 'function' && !window.aplicarFiltrosDebounced.__raf) {
-        let timer = 0, raf = 0;
-        window.aplicarFiltrosDebounced = function() {
-            clearTimeout(timer);
-            if (raf) cancelAnimationFrame(raf);
-            timer = setTimeout(() => { raf = requestAnimationFrame(() => window.aplicarFiltros(false)); }, 220);
-        };
-        window.aplicarFiltrosDebounced.__raf = true;
-    }
-})();
-
 (function() {
     'use strict';
     
@@ -10520,9 +10267,9 @@ if ('serviceWorker' in navigator) {
         }
     }
 
-    // ─── UIManager (37 funciones) ─────────────────────────────
+    // ─── UIManager (36 funciones) ─────────────────────────────
     expone(window.UIManager, [
-        'irPestana', 'cambiarSubVistaPatrimonio', 'notify', 'alert', 'toggleBotonCarga', 'verExtractoPatrimonio', 'cerrarModalExtracto', 'mostrarDesgloseCuentas', 'mostrarDesgloseAmbos', 'cerrarDesgloseCuentas', 'pedirConfirmacion', 'abrirSpotlight', 'cerrarSpotlight', 'buscarSpotlight', 'mostrarPin', 'teclaPin', 'borrarPin', 'limpiarPin', 'actualizarPuntosPin', 'toggleCajaFuerte', 'toggleFiltros', 'limpiarFiltros', 'aplicarFiltros', 'aplicarFiltrosDebounced', 'filtroRapido', 'actualizarChivatoFiltros', 'actualizarDesplegablesRestringidos', 'toggleUsuario', 'actualizarBotonUsuarioVisual', 'pasaFiltroPropietario', 'toggleCustomDates', 'getFechasDashboard', 'alternarRecurrenteUnificado', 'alternarDiasSemana', 'iniciarAnimacionCargaNumeros', 'detenerAnimacionCargaNumeros', 'actualizarPreviewPnl'
+        'irPestana', 'cambiarSubVistaPatrimonio', 'notify', 'toggleBotonCarga', 'verExtractoPatrimonio', 'cerrarModalExtracto', 'mostrarDesgloseCuentas', 'mostrarDesgloseAmbos', 'cerrarDesgloseCuentas', 'pedirConfirmacion', 'abrirSpotlight', 'cerrarSpotlight', 'buscarSpotlight', 'mostrarPin', 'teclaPin', 'borrarPin', 'limpiarPin', 'actualizarPuntosPin', 'toggleCajaFuerte', 'toggleFiltros', 'limpiarFiltros', 'aplicarFiltros', 'aplicarFiltrosDebounced', 'filtroRapido', 'actualizarChivatoFiltros', 'actualizarDesplegablesRestringidos', 'toggleUsuario', 'actualizarBotonUsuarioVisual', 'pasaFiltroPropietario', 'toggleCustomDates', 'getFechasDashboard', 'alternarRecurrenteUnificado', 'alternarDiasSemana', 'iniciarAnimacionCargaNumeros', 'detenerAnimacionCargaNumeros', 'actualizarPreviewPnl'
     ]);
 
     // ─── DataManager (19 funciones) ─────────────────────────────
@@ -10535,9 +10282,9 @@ if ('serviceWorker' in navigator) {
         'iniciarCargaNube', 'crearBackupNube', 'cambiarPinSeguridad', 'verificarPinCriptografico', 'desbloquearApp', 'salirAppSeguro'
     ]);
 
-    // ─── ChartsManager (8 funciones) ─────────────────────────────
+    // ─── ChartsManager (7 funciones) ─────────────────────────────
     expone(window.ChartsManager, [
-        'ensureEChartsReady', 'renderizarSankey', 'renderTreeMap', 'renderizarSunburstPatrimonio', 'renderizarDonutCartera', 'renderizarEvolCartera', 'actualizarPlusvaliaPatrimonio', 'actualizarDashCartera'
+        'renderizarSankey', 'renderTreeMap', 'renderizarSunburstPatrimonio', 'renderizarDonutCartera', 'renderizarEvolCartera', 'actualizarPlusvaliaPatrimonio', 'actualizarDashCartera'
     ]);
 
     // ─── CarteraManager (14 funciones) ─────────────────────────────
@@ -10587,19 +10334,10 @@ if ('serviceWorker' in navigator) {
     } catch (e) {
         console.warn('[F6-C] No se pudieron crear aliases recurrentes:', e);
     }
-
-    // Blindaje F5: congelación defensiva de namespaces semánticos.
-    try {
-        [window.UIManager, window.DataManager, window.SyncManager, window.ChartsManager, window.CarteraManager].forEach(function(modulo) {
-            if (modulo && !Object.isFrozen(modulo)) Object.freeze(modulo);
-        });
-    } catch (e) {
-        console.warn('[F5] No se pudieron congelar namespaces:', e);
-    }
 })();
 
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0341869ea23d862',t:'MTc4MDA0Mjk4OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
 
 
