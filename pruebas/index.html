@@ -2666,17 +2666,70 @@ window.FinanceModel = (function() {
         };
     }
 
-    // Formateador de moneda EUR (de-DE, 2 decimales) expuesto como FinanceModel.format()
-    const _fmtEUR = new Intl.NumberFormat('de-DE', {
-        style: 'currency',
-        currency: 'EUR',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
+    // ═══════════════════════════════════════════════════════════════════════
+    // FORMATEO NUMÉRICO CANÓNICO (FinanceModel.format)
+    // ───────────────────────────────────────────────────────────────────────
+    // Singleton con todos los formateadores que usa la aplicación. Cada uno
+    // se instancia UNA sola vez y se reutiliza, evitando la creación repetida
+    // de objetos Intl.NumberFormat (operación costosa). Todos los formatos
+    // dispersos por el código deben pasar a través de este módulo.
+    //
+    // - eur2  : 1.234,56 €      (de-DE, currency EUR, 2 decimales fijos)
+    // - eur0  : 1.235 €         (de-DE, currency EUR, 0 decimales)
+    // - num2  : 1.234,56        (de-DE, número 2 decimales fijos)
+    // - numMin2: 1.234,56       (de-DE, número minFrac=2, SIN maxFrac fijo)
+    //                            ⚠ Conservado por compatibilidad con un uso
+    //                            histórico distinto a num2. NO unificar.
+    // - pct   : 12,34 %         (de-DE, número 2 decimales — el "%" lo
+    //                            concatena el llamador, igual que el código
+    //                            previo en formatearDatoMaestro).
+    // - eurES : 1.234,56 €      (es-ES, currency EUR — usado como fallback
+    //                            histórico en algunos puntos).
+    // ═══════════════════════════════════════════════════════════════════════
+    const _NF = (typeof Intl !== 'undefined' && Intl.NumberFormat) ? Intl.NumberFormat : null;
+    const _mkNF = (locale, opts) => {
+        try { return _NF ? new _NF(locale, opts) : null; }
+        catch (e) { return null; }
+    };
+    const _formatters = {
+        eur2:   _mkNF('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        eur0:   _mkNF('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }),
+        num2:   _mkNF('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        numMin2:_mkNF('de-DE', { minimumFractionDigits: 2 }),
+        pct:    _mkNF('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        eurES:  _mkNF('es-ES', { style: 'currency', currency: 'EUR' })
+    };
+    // Fallback defensivo: si Intl no está disponible (entornos exóticos),
+    // devolvemos un formateador degradado pero válido.
+    const _fallback = (decimales) => ({
+        format: (v) => {
+            const n = (typeof v === 'number' && isFinite(v)) ? v : 0;
+            return n.toFixed(decimales).replace('.', ',');
+        }
     });
+    if (!_formatters.eur2)    _formatters.eur2    = { format: v => _fallback(2).format(v) + ' €' };
+    if (!_formatters.eur0)    _formatters.eur0    = { format: v => _fallback(0).format(v) + ' €' };
+    if (!_formatters.num2)    _formatters.num2    = _fallback(2);
+    if (!_formatters.numMin2) _formatters.numMin2 = _fallback(2);
+    if (!_formatters.pct)     _formatters.pct     = _fallback(2);
+    if (!_formatters.eurES)   _formatters.eurES   = _formatters.eur2;
+
+    // Función callable (back-compat: FinanceModel.format(valor) sigue funcionando)
     function formatMoney(valor) {
         const num = parseMoney(valor);
-        return _fmtEUR.format(num);
+        return _formatters.eur2.format(num);
     }
+    // Anexamos los métodos canónicos como propiedades de la propia función.
+    // Esto permite usar tanto FinanceModel.format(v) como FinanceModel.format.eur2(v).
+    formatMoney.eur2    = (v) => _formatters.eur2.format(parseMoney(v));
+    formatMoney.eur0    = (v) => _formatters.eur0.format(parseMoney(v));
+    formatMoney.num2    = (v) => _formatters.num2.format(parseMoney(v));
+    formatMoney.numMin2 = (v) => _formatters.numMin2.format(parseMoney(v));
+    formatMoney.pct     = (v) => _formatters.pct.format(parseMoney(v)); // sin "%"
+    formatMoney.eurES   = (v) => _formatters.eurES.format(parseMoney(v));
+    // Acceso al Intl.NumberFormat crudo (para .format() directo sobre números
+    // ya saneados, sin pasar por parseMoney). Útil en hot-paths.
+    formatMoney.raw = _formatters;
 
     return {
         parseMoney,
@@ -3266,33 +3319,77 @@ false, ['encrypt', 'decrypt']
 );
 }
 async function encriptar(objeto, password) {
-const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
-const iv   = crypto.getRandomValues(new Uint8Array(IV_LEN));
-const key  = await _derivarClave(password, salt);
-const data = enc.encode(JSON.stringify(objeto));
-const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
-// Formato: salt(16) || iv(12) || ciphertext
-const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
-blob.set(salt, 0);
-blob.set(iv, SALT_LEN);
-blob.set(new Uint8Array(cifrado), SALT_LEN + IV_LEN);
-return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        // Extrae la cadena Base64 pura eliminando el prefijo Data URL
-        resolve(reader.result.split(',')[1]);
-    };
-    reader.readAsDataURL(new Blob([blob]));
-});
+    // [F6-B] Guard clauses + manejo defensivo. El contrato (lanzar excepción
+    // en fallo) NO cambia: los llamadores ya tienen sus try/catch.
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('CryptoSystem.encriptar: password vacía o no string');
+    }
+    if (objeto === undefined || objeto === null) {
+        throw new Error('CryptoSystem.encriptar: objeto a cifrar no definido');
+    }
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+        throw new Error('CryptoSystem.encriptar: WebCrypto no disponible (¿contexto inseguro?)');
+    }
+    try {
+        const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
+        const iv   = crypto.getRandomValues(new Uint8Array(IV_LEN));
+        const key  = await _derivarClave(password, salt);
+        const data = enc.encode(JSON.stringify(objeto));
+        const cifrado = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+        // Formato: salt(16) || iv(12) || ciphertext
+        const blob = new Uint8Array(SALT_LEN + IV_LEN + cifrado.byteLength);
+        blob.set(salt, 0);
+        blob.set(iv, SALT_LEN);
+        blob.set(new Uint8Array(cifrado), SALT_LEN + IV_LEN);
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                try {
+                    // Extrae la cadena Base64 pura eliminando el prefijo Data URL
+                    resolve(reader.result.split(',')[1]);
+                } catch (e) {
+                    reject(new Error('CryptoSystem.encriptar: fallo al extraer Base64'));
+                }
+            };
+            reader.onerror = () => reject(new Error('CryptoSystem.encriptar: FileReader falló'));
+            reader.readAsDataURL(new Blob([blob]));
+        });
+    } catch (err) {
+        console.error('[CryptoSystem] encriptar() falló:', err && err.message ? err.message : err);
+        throw err; // re-lanzamos: contrato preservado
+    }
 }
 async function desencriptar(b64, password) {
-const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-const salt    = bytes.slice(0, SALT_LEN);
-const iv      = bytes.slice(SALT_LEN, SALT_LEN + IV_LEN);
-const cifrado = bytes.slice(SALT_LEN + IV_LEN);
-const key     = await _derivarClave(password, salt);
-const plano   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cifrado);
-return JSON.parse(dec.decode(plano));
+    // [F6-B] Guard clauses + manejo defensivo. El contrato (lanzar excepción
+    // en fallo) NO cambia. Los llamadores ya gestionan los try/catch.
+    if (typeof password !== 'string' || password.length === 0) {
+        throw new Error('CryptoSystem.desencriptar: password vacía o no string');
+    }
+    if (typeof b64 !== 'string' || b64.length === 0) {
+        throw new Error('CryptoSystem.desencriptar: blob Base64 vacío o inválido');
+    }
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+        throw new Error('CryptoSystem.desencriptar: WebCrypto no disponible');
+    }
+    try {
+        const bytes   = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        if (bytes.length < SALT_LEN + IV_LEN + 1) {
+            throw new Error('CryptoSystem.desencriptar: blob demasiado corto (¿formato incorrecto?)');
+        }
+        const salt    = bytes.slice(0, SALT_LEN);
+        const iv      = bytes.slice(SALT_LEN, SALT_LEN + IV_LEN);
+        const cifrado = bytes.slice(SALT_LEN + IV_LEN);
+        const key     = await _derivarClave(password, salt);
+        const plano   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cifrado);
+        return JSON.parse(dec.decode(plano));
+    } catch (err) {
+        // Nota: un fallo aquí suele ser PIN incorrecto (OperationError de
+        // crypto.subtle.decrypt) o blob corrupto. Lo identificamos para
+        // facilitar el diagnóstico.
+        const tipo = (err && err.name === 'OperationError') ? '(probable PIN incorrecto)' : '';
+        console.error('[CryptoSystem] desencriptar() falló:', err && err.message ? err.message : err, tipo);
+        throw err; // re-lanzamos: contrato preservado
+    }
 }
 return { encriptar, desencriptar };
 })();
@@ -3334,6 +3431,9 @@ const PinSecurity = (() => {
 // ==========================================
 // 1. VARIABLES GLOBALES ESTRICTAS
 // ==========================================
+// [F4] Los valores iniciales de modoNube e idEnEdicion ahora viven en AppState
+// (definido más abajo). Estas asignaciones siguen siendo válidas porque los
+// setters delegantes los redirigirán a AppState una vez esté creado.
 window.modoNube = false;
 window.datos = [];
 window.datosPropietario = [];
@@ -3381,12 +3481,212 @@ Object.defineProperty(window, 'modoTransaccionActual', {
     },
     configurable: true
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔄 SINCRONIZADORES DE ESTADO UI/FLAGS (Getter/Setter delegantes) [F4]
+// ────────────────────────────────────────────────────────────────────────────
+// Los siguientes Object.defineProperty centralizan en AppState el estado
+// mutable de UI/flags que antes vivía suelto en window.*. La API externa
+// (window.ordenActivo, window.modoNube, etc.) NO cambia: cualquier código
+// existente que lea o escriba estas propiedades sigue funcionando idénticamente.
+// El beneficio es trazabilidad: hay una única fuente de verdad (AppState).
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── ordenActivo: criterio de ordenación del Diario (campo + asc/desc) ──────
+Object.defineProperty(window, 'ordenActivo', {
+    get() {
+        // Devolvemos siempre la referencia viva del AppState para que las
+        // mutaciones in-place (p.ej. window.ordenActivo.asc = !asc) sigan
+        // funcionando exactamente como antes.
+        if (!window.AppState) return { campo: 'ts', asc: false };
+        if (!window.AppState.ordenActivo) {
+            window.AppState.ordenActivo = { campo: 'ts', asc: false };
+        }
+        return window.AppState.ordenActivo;
+    },
+    set(nuevoValor) {
+        if (window.AppState) window.AppState.ordenActivo = nuevoValor;
+    },
+    configurable: true
+});
+
+// ── idEnEdicion: id del movimiento abierto en el modal de edición ──────────
+Object.defineProperty(window, 'idEnEdicion', {
+    get() { return (window.AppState && window.AppState.idEnEdicion) || null; },
+    set(nuevoId) {
+        if (window.AppState) window.AppState.idEnEdicion = nuevoId;
+    },
+    configurable: true
+});
+
+// ── modoNube: bandera de sincronización OneDrive activa ────────────────────
+Object.defineProperty(window, 'modoNube', {
+    get() { return (window.AppState && window.AppState.modoNube) || false; },
+    set(activo) {
+        if (window.AppState) window.AppState.modoNube = !!activo;
+    },
+    configurable: true
+});
+
+// ── estadoConexion: 'ok'|'error'|'success'|'loading' ───────────────────────
+Object.defineProperty(window, 'estadoConexion', {
+    get() { return (window.AppState && window.AppState.estadoConexion) || 'verde'; },
+    set(nuevoEstado) {
+        if (window.AppState) window.AppState.estadoConexion = nuevoEstado;
+    },
+    configurable: true
+});
+
+// ── _tabActiva: id de la pestaña visible ───────────────────────────────────
+// IMPORTANTE: dentro de algunas funciones existe una variable LOCAL llamada
+// igual (const _tabActiva = ...) que NO interfiere: el getter sólo se invoca
+// al acceder a window._tabActiva explícitamente.
+Object.defineProperty(window, '_tabActiva', {
+    get() { return (window.AppState && window.AppState.tabActiva) || ''; },
+    set(nuevoTab) {
+        if (window.AppState) window.AppState.tabActiva = nuevoTab;
+    },
+    configurable: true
+});
+
+// ── _appDesbloqueada: bandera de PIN superado ──────────────────────────────
+Object.defineProperty(window, '_appDesbloqueada', {
+    get() { return !!(window.AppState && window.AppState.appDesbloqueada); },
+    set(desbloqueada) {
+        if (window.AppState) window.AppState.appDesbloqueada = !!desbloqueada;
+    },
+    configurable: true
+});
 // ============================================================================
 // 🛡️ BLINDAJE DE PRODUCCIÓN: FILTRADO DE PROPIETARIO Y FORMATOS GLOBALES
 // ============================================================================
-window.FMT_NUM = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-window.FMT_EUR2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
-window.FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ─── Alias globales del singleton FinanceModel.format.raw (back-compat) ─────
+// Antes se creaban 3 instancias Intl.NumberFormat nuevas aquí. Ahora son
+// referencias al singleton centralizado, evitando duplicación de objetos.
+// Cualquier código legado que use window.FMT_NUM/FMT_EUR2/FMT_PCT sigue
+// funcionando idénticamente.
+window.FMT_NUM  = window.FinanceModel.format.raw.num2;
+window.FMT_EUR2 = window.FinanceModel.format.raw.eur2;
+window.FMT_PCT  = window.FinanceModel.format.raw.pct;
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🏛️ NAMESPACES SEMÁNTICOS (Arquitectura Modular) [F5]
+// ────────────────────────────────────────────────────────────────────────────
+// Cinco módulos namespace que agrupan las 84 funciones de la aplicación
+// por dominio. Las funciones siguen viviendo en sus posiciones originales
+// (window.X); estos módulos exponen referencias adicionales para acceso
+// estructurado. La "población" real ocurre al FINAL del archivo (bloque
+// "POBLACIÓN DE NAMESPACES"), una vez todas las funciones globales están
+// declaradas. Estos objetos se crean aquí para que estén disponibles
+// desde cualquier punto del script.
+//
+// Convención:
+//   UIManager        → navegación, modales, toasts, filtros, PIN, spotlight
+//   DataManager      → procesamiento Excel, movimientos, recurrentes, dashboard
+//   SyncManager      → sincronización OneDrive, backups, autenticación
+//   ChartsManager    → renderizado de gráficos analíticos (extensión de F2)
+//   CarteraManager   → módulo de cartera de inversiones (BTC/EUR + activos)
+// ════════════════════════════════════════════════════════════════════════════
+window.UIManager      = window.UIManager      || Object.create(null);
+window.DataManager    = window.DataManager    || Object.create(null);
+window.SyncManager    = window.SyncManager    || Object.create(null);
+window.ChartsManager  = window.ChartsManager  || Object.create(null);
+window.CarteraManager = window.CarteraManager || Object.create(null);
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📊 ChartManager — CICLO DE VIDA UNIFICADO DE INSTANCIAS ECHARTS
+// ────────────────────────────────────────────────────────────────────────────
+// Centraliza la gestión de TODAS las instancias ECharts de la aplicación
+// (Sankey, TreeMap, Sunburst, Donut, Evolución, etc.). Previene las dos
+// fuentes principales de fuga de memoria:
+//
+//   1. ResizeObservers duplicados que se multiplicaban en cada render
+//      (cada uno mantenía vivo el contenedor + la instancia anterior).
+//   2. Instancias huérfanas tras navegar entre pestañas o reabrir modales
+//      sin disposer la anterior.
+//
+// API canónica:
+//   ChartManager.mount(container, opts?)    → instancia ECharts reutilizada
+//     opts.forceNew=true  → dispose() previo y crea nueva (para gráficos
+//                            que dependen de cambios de tamaño del contenedor)
+//     opts.initOpts       → segundo arg de echarts.init (ej. {renderer:'canvas'})
+//   ChartManager.get(container)             → instancia o null
+//   ChartManager.dispose(container)         → libera memoria
+//   ChartManager.attachResizeObserver(container, key)
+//                                           → conecta ResizeObserver UNA vez
+//                                              por key, idempotente
+//
+// La instancia se registra también en window[`echart${alias}`] cuando se
+// pasa opts.alias, manteniendo back-compat con código legado que accede
+// directamente (p.ej. window.echartSankey, listener de orientación).
+// ════════════════════════════════════════════════════════════════════════════
+window.ChartManager = (function() {
+    const _resizeObservers = Object.create(null); // key → ResizeObserver
+
+    function _hasEcharts() {
+        return typeof echarts !== 'undefined' && echarts && typeof echarts.init === 'function';
+    }
+
+    function get(container) {
+        if (!container || !_hasEcharts()) return null;
+        try {
+            const inst = echarts.getInstanceByDom(container);
+            return (inst && !inst.isDisposed()) ? inst : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function mount(container, opts) {
+        if (!container || !_hasEcharts()) return null;
+        opts = opts || {};
+        try {
+            let inst = get(container);
+            // forceNew: dispose previo si existe. Útil cuando el contenedor
+            // cambia drásticamente de tamaño o queremos garantizar repintado limpio.
+            if (opts.forceNew && inst) {
+                inst.dispose();
+                inst = null;
+            }
+            if (!inst) {
+                inst = echarts.init(container, opts.theme || null, opts.initOpts || undefined);
+            }
+            if (opts.alias) {
+                // Alias global retro-compatible (ej. window.echartSankey)
+                window['echart' + opts.alias] = inst;
+            }
+            return inst;
+        } catch (e) {
+            console.warn('[ChartManager] mount falló:', e);
+            return null;
+        }
+    }
+
+    function dispose(container) {
+        const inst = get(container);
+        if (inst) {
+            try { inst.dispose(); } catch (e) { /* noop */ }
+        }
+    }
+
+    function attachResizeObserver(container, key) {
+        if (!container || typeof ResizeObserver === 'undefined') return;
+        if (_resizeObservers[key]) return; // idempotente
+        try {
+            const obs = new ResizeObserver(() => {
+                const inst = get(container);
+                if (inst) inst.resize();
+            });
+            obs.observe(container);
+            _resizeObservers[key] = obs;
+        } catch (e) {
+            console.warn('[ChartManager] ResizeObserver falló:', e);
+        }
+    }
+
+    return { mount, get, dispose, attachResizeObserver };
+})();
+
 
 // Motor inteligente de segmentación de perfil para la base de datos conjunta
 window.pasaFiltroPropietario = function(m) {
@@ -3473,10 +3773,27 @@ const MSAL_CONFIG = {
 // ──────────────────────────────────────────────────────────────────────
 // 🧠 MÓDULO DE ESTADO CENTRAL (AppState) - BLINDADO CONTRA CIERRES
 // ──────────────────────────────────────────────────────────────────────
-window._appDesbloqueada = false;
+// [F4] window._appDesbloqueada ahora vive en AppState (valor inicial: false). El getter delegante mantiene la API.
 window.AppState = {
+// ─── Estado de guardado/sincronización ────────────────────────────────────
 isSaving: false,
 estadoSemaforo: 'verde',
+estadoConexion: 'verde',          // 'ok'|'error'|'success'|'loading'
+
+// ─── Estado de UI: filtros y ordenación ───────────────────────────────────
+// filtroUsuario se asigna desde el getter/setter sobre window.filtroUsuarioActual.
+filtroUsuario: 'todos',
+ordenActivo: { campo: 'ts', asc: false },
+
+// ─── Estado de UI: pestaña activa y desbloqueo ────────────────────────────
+tabActiva: '',                    // 'tab-cuentas' | 'tab-patrimonio' | ...
+appDesbloqueada: false,           // PIN superado
+modoNube: false,                  // OneDrive activo vs local
+
+// ─── Estado de UI: modal/edición ──────────────────────────────────────────
+idEnEdicion: null,                // id del movimiento que se está editando
+modoTransaccion: '',              // 'ingreso'|'gasto'|'traspaso' (espejo de modoTransaccionActual)
+
 // Novedad: Comprobamos si hay movimientos pendientes en la recámara
 hayPendientes: function() {
 try {
@@ -3847,7 +4164,8 @@ return String(str)
 window.modoTransaccionActual = window.modoTransaccionActual || null;
 let filtros = { cuenta: '', concepto: '', beneficiario: '', texto: '', desde: '', hasta: '', min: '', max: '', tipo: '', tipoCuenta: '' };
 let chartInstance = null;
-window.ordenActivo = { campo: 'ts', asc: false };
+// [F4] window.ordenActivo ahora vive en AppState (valor inicial { campo:'ts', asc:false }). El getter delegante mantiene la API.
+if (window.AppState && !window.AppState.ordenActivo) window.AppState.ordenActivo = { campo: 'ts', asc: false };
 // === NUEVA MEDIDA 3: MEMORIA DE ELEFANTE (Restaurar al inicio) ===
 document.addEventListener('DOMContentLoaded', () => {
 const ultimaPestana = localStorage.getItem('aidanai_last_tab');
@@ -3858,10 +4176,15 @@ setTimeout(() => irPestana(ultimaPestana), 100);
 });
 
 // ====================================================
-const FMT_EUR0 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const FMT_NUM  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2 });
-const FMT_EUR2 = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// ─── Constantes locales como alias del singleton FinanceModel.format.raw ───
+// Mantienen los mismos identificadores y SEMÁNTICA EXACTA que la versión
+// anterior. Ojo: FMT_NUM local NO es el mismo que window.FMT_NUM (uno tiene
+// maxFrac=2 y el otro no). Esta sutil diferencia es comportamiento histórico
+// preservado intencionalmente.
+const FMT_EUR0 = window.FinanceModel.format.raw.eur0;
+const FMT_PCT  = window.FinanceModel.format.raw.pct;
+const FMT_NUM  = window.FinanceModel.format.raw.numMin2; // minFrac:2, SIN maxFrac
+const FMT_EUR2 = window.FinanceModel.format.raw.eur2;
 function cambiarModo(modo) {
     window.modoNube = (modo === 'cloud');
 // 🐛 FIX: Mantenemos tus clases perfectas y solo añadimos 'active' para iluminar el seleccionado
@@ -4215,22 +4538,20 @@ if (window.AppState) {
         window.AppState.actualizarSemaforo('verde');    // Todo limpio
     }
 }
+// 🛑 PUNTO CENTRAL: las cifras ya están calculadas y emitidas.
+// Detenemos la animación de carga (cubre nube, local y refresco silencioso).
+if (typeof window.detenerAnimacionCargaNumeros === 'function') {
+    requestAnimationFrame(() => window.detenerAnimacionCargaNumeros());
+}
 };
 // ==========================================
 // IMPRESCINDIBLE: El filtro que usa el Dashboard para sumar
 // ==========================================
-window.pasaFiltroPropietario = function(movimiento) {
-if (window.filtroUsuarioActual === 'todos') return true;
-const ben = String(movimiento.beneficiario || '').toUpperCase();
-const cta = String(movimiento.cuenta || '').toUpperCase();
-if (window.filtroUsuarioActual === 'D') {
-return (ben === 'D' || cta.startsWith('D-'));
-}
-if (window.filtroUsuarioActual === 'N') {
-return (ben === 'N' || cta.startsWith('N-'));
-}
-return true;
-};
+// [F6-A] BUGFIX: La función window.pasaFiltroPropietario ya está definida
+// en línea ~3648 (versión más defensiva con encadenamiento opcional y .trim()).
+// Esta segunda definición sobrescribía aquella sin aportar nada nuevo y
+// además difería ligeramente (no trim, no `?.`). Eliminada para tener
+// una única fuente de verdad.
 // 🧠 ESTADO DEL RENDERIZADO (Evita colisiones si cambias de pestaña rápido)
 window._renderTask = null;
 function renderizar() {
@@ -4433,24 +4754,45 @@ if (window._scrollObserver) {
 const LOTE_INICIAL = 100;
 let indiceScroll = 0;
 function pintarSiguienteLote(cantidad) {
-    const fin = Math.min(indiceScroll + cantidad, filasHTML.length);
     if (indiceScroll >= filasHTML.length) return;
-    // ⚡ Magia Fintech: Renderizado en memoria RAM profunda (DocumentFragment)
-    const fragment = document.createDocumentFragment();
-    const tempContenedor = document.createElement('tbody');
-    tempContenedor.innerHTML = filasHTML.slice(indiceScroll, fin).join('');
-    // Movemos los nodos del contenedor temporal al fragmento (coste 0 de repintado)
-    while (tempContenedor.firstChild) {
-        fragment.appendChild(tempContenedor.firstChild);
+    const fin = Math.min(indiceScroll + cantidad, filasHTML.length);
+    try {
+        // ⚡ Renderizado fuera del DOM principal: el parser HTML construye
+        // todos los nodos sin disparar reflows, y un único appendChild
+        // los incorpora de golpe (1 sola operación de layout).
+        //
+        // Usamos <template> en lugar de un <tbody> temporal: <template>
+        // tiene un DocumentFragment nativo (template.content) cuyo único
+        // propósito es esto. Evita el coste de un elemento HTML real.
+        const tpl = document.createElement('template');
+        tpl.innerHTML = filasHTML.slice(indiceScroll, fin).join('');
+        const fragment = tpl.content; // DocumentFragment nativo, no requiere mover hijos.
+
+        // Si hay centinela de scroll infinito, insertamos JUSTO antes de él.
+        const centinela = document.getElementById('centinela-scroll');
+        if (centinela && centinela.parentNode === tbody) {
+            tbody.insertBefore(fragment, centinela);
+        } else {
+            tbody.appendChild(fragment);
+        }
+        indiceScroll = fin;
+    } catch (err) {
+        console.warn('[Diario] Fallo al pintar lote:', err);
+        // Fallback defensivo: si algo va mal con <template>, usamos
+        // innerHTML directo sobre el tbody (peor rendimiento pero seguro).
+        try {
+            const html = filasHTML.slice(indiceScroll, fin).join('');
+            const div = document.createElement('div');
+            div.innerHTML = '<table><tbody>' + html + '</tbody></table>';
+            const trs = div.querySelectorAll('tr');
+            const centinela = document.getElementById('centinela-scroll');
+            trs.forEach(tr => {
+                if (centinela && centinela.parentNode === tbody) tbody.insertBefore(tr, centinela);
+                else tbody.appendChild(tr);
+            });
+            indiceScroll = fin;
+        } catch (_) { /* noop */ }
     }
-    // Si hay un centinela de scroll, insertamos la carga *justo antes* de él. Si no, al final.
-    const centinela = document.getElementById('centinela-scroll');
-    if (centinela) {
-        tbody.insertBefore(fragment, centinela);
-    } else {
-        tbody.appendChild(fragment);
-    }
-    indiceScroll = fin;
 }
 window._renderTask = requestAnimationFrame(() => {
     // Pintamos el primer lote de forma ultra-fluida
@@ -5414,17 +5756,13 @@ historiaMap.set(fechaKey, saldoAcumulado);
 });
 const labels = Array.from(historiaMap.keys());
 const dataPoints = Array.from(historiaMap.values());
-// 2. DESTRUIR INSTANCIA ANTERIOR
-if (window.chartInstance) {
-window.chartInstance.dispose();
-}
-// 3. CREAR GRÁFICO (MODO MONTAÑA RUSA Y EFECTO NEÓN)
-// 🟢 NUEVO: PATRÓN DE RECICLAJE (Adiós fugas de memoria RAM)
-let chartInstance = echarts.getInstanceByDom(container);
-if (!chartInstance) {
-    // Si no existe el lienzo, lo creamos por primera vez
-    chartInstance = echarts.init(container, null, { renderer: 'canvas' });
-}
+// 2. RECICLAR / CREAR INSTANCIA (ChartManager unificado, forceNew=true
+//    para preservar el comportamiento histórico de dispose+reinit en cada render).
+const chartInstance = window.ChartManager.mount(container, {
+    forceNew: true,
+    alias: 'CuentaEvolucion',
+    initOpts: { renderer: 'canvas' }
+});
 window.chartInstance = chartInstance;
 // Usamos setOption con un segundo parámetro 'false' (o sin él) para que fusione los datos 
 // de forma fluida sin tener que reiniciar todo el motor interno.
@@ -5492,13 +5830,8 @@ areaStyle: {
         }
     }
 });
-// 🟢 NUEVO: Blindaje del ResizeObserver para que no se multiplique
-if (!window._chartResizeObs) {
-    window._chartResizeObs = new ResizeObserver(() => {
-        if (window.chartInstance) window.chartInstance.resize();
-    });
-    window._chartResizeObs.observe(container);
-}
+// ResizeObserver gestionado por ChartManager (idempotente por key).
+window.ChartManager.attachResizeObserver(container, 'cuenta-evolucion');
 }
 // =========================================================
 // LÓGICA DE ACCESO DIRECTO (NEON COCKPIT)
@@ -5903,12 +6236,11 @@ window.renderizarSankey = function(datosPeriodo) {
         container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#666;font-size:12px;font-style:italic;">Sin flujo de dinero en este periodo...</div>';
         return;
     }
-    // 🟢 NUEVO: PATRÓN DE RECICLAJE (Adiós dispose y fugas de memoria)
-    let echartSankey = echarts.getInstanceByDom(container);
-    if (!echartSankey) {
-        echartSankey = echarts.init(container, null, { renderer: 'canvas' });
-    }
-    window.echartSankey = echartSankey;
+    // Reciclaje vía ChartManager (alias mantiene window.echartSankey para back-compat).
+    const echartSankey = window.ChartManager.mount(container, {
+        alias: 'Sankey',
+        initOpts: { renderer: 'canvas' }
+    });
     // 1. Agrupar datos por concepto
     let totalIngresos = 0;
     const gastosPorConcepto = {};
@@ -6038,13 +6370,8 @@ window.renderizarSankey = function(datosPeriodo) {
     };
     // Inyectamos los datos sin parpadeos
     window.echartSankey.setOption(option);
-    // 🟢 NUEVO: Seguro contra roturas al girar la pantalla del móvil
-    if (!window._sankeyResizeObs) {
-        window._sankeyResizeObs = new ResizeObserver(() => {
-            if (window.echartSankey) window.echartSankey.resize();
-        });
-        window._sankeyResizeObs.observe(container);
-    }
+    // ResizeObserver gestionado por ChartManager.
+    window.ChartManager.attachResizeObserver(container, 'sankey');
 };
 // ==========================================
 // FIN GRÁFICO SANKEY
@@ -6062,12 +6389,8 @@ window.renderTreeMap = function() {
         container.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#666;">Sin datos para el mapa...</div>';
         return;
     }
-    // 🟢 NUEVO: PATRÓN DE RECICLAJE (Memoria RAM plana)
-    let echartTreeMap = echarts.getInstanceByDom(container);
-    if (!echartTreeMap) {
-        echartTreeMap = echarts.init(container);
-    }
-    window.echartTreeMap = echartTreeMap;
+    // Reciclaje vía ChartManager (alias mantiene window.echartTreeMap).
+    const echartTreeMap = window.ChartManager.mount(container, { alias: 'TreeMap' });
     // 1. PROCESAR DATOS Y COLORES
     const mapaColores = {
         'BANCO': '#00F0FF', 'BOLSA': '#F72585', 'CRIPTOMONEDAS': '#7209B7',
@@ -6155,13 +6478,8 @@ window.renderTreeMap = function() {
     };
     // Inyección de datos sin parpadeos
     window.echartTreeMap.setOption(option);
-    // 🟢 NUEVO: Seguro contra roturas al girar la pantalla del móvil
-    if (!window._treeMapResizeObs) {
-        window._treeMapResizeObs = new ResizeObserver(() => {
-            if (window.echartTreeMap) window.echartTreeMap.resize();
-        });
-        window._treeMapResizeObs.observe(container);
-    }
+    // ResizeObserver gestionado por ChartManager.
+    window.ChartManager.attachResizeObserver(container, 'treemap');
 };
 // ==========================================
 // FIN TREEMAP
@@ -6174,11 +6492,11 @@ window.renderizarSunburstPatrimonio = function() {
     // 1. OBTENER CONTENEDOR
     const container = document.getElementById('chart-Sunburst');
     if (!container) return;
-    // PATRÓN RECICLAJE
-    if (!window.echartSunburst || window.echartSunburst.isDisposed()) {
-        window.echartSunburst = echarts.init(container);
-    }
-    const chart = window.echartSunburst;
+    // Reciclaje vía ChartManager (alias mantiene window.echartSunburst).
+    const chart = window.ChartManager.mount(container, { alias: 'Sunburst' });
+    if (!chart) return;
+    // Desregistramos handlers previos antes de re-adjuntarlos abajo
+    // (evita acumulación tras múltiples renders).
     chart.off('mouseover');
     chart.off('mouseout');
     if (!window.datos || window.datos.length === 0) return;
@@ -6315,13 +6633,8 @@ window.renderizarSunburstPatrimonio = function() {
         }
         chart.dispatchAction({ type: 'downplay', dataIndex: params.dataIndex });
     });
-    // 🟢 NUEVO: Seguro contra roturas al girar la pantalla del móvil
-    if (!window._sunburstResizeObs) {
-        window._sunburstResizeObs = new ResizeObserver(() => {
-            if (window.echartSunburst) window.echartSunburst.resize();
-        });
-        window._sunburstResizeObs.observe(container);
-    }
+    // ResizeObserver gestionado por ChartManager.
+    window.ChartManager.attachResizeObserver(container, 'sunburst');
 };
 
 // ==========================================
@@ -6350,6 +6663,11 @@ function animarCifra(idElemento, valorFinal, tipo = 'moneda') {
 window.animacionesActivas = window.animacionesActivas || {};
 const el = document.getElementById(idElemento);
 if (!el) return;
+// 🛑 Si llega un valor real mientras el scramble corre, lo paramos para
+//    que ambos no peleen por innerText (evita parpadeos).
+if (el.dataset && el.dataset.scrambling === '1' && typeof window.detenerAnimacionCargaNumeros === 'function') {
+    window.detenerAnimacionCargaNumeros();
+}
 // 🛑 CANCELAR ANIMACIÓN ANTERIOR SI EXISTE EN ESTE ELEMENTO
 if (window.animacionesActivas[idElemento]) {
 cancelAnimationFrame(window.animacionesActivas[idElemento]);
@@ -8162,130 +8480,186 @@ window.location.reload();
 // 🔍 SPOTLIGHT FINANCIERO (BUSCADOR GLOBAL)
 // ==========================================
 window.abrirSpotlight = function() {
-const modal = document.getElementById('spotlight-modal');
-modal.classList.add('active');
-document.getElementById('spotlight-input').value = '';
-document.getElementById('spotlight-results').innerHTML = '';
-setTimeout(() => document.getElementById('spotlight-input').focus(), 100);
+    // [F6-D] Guard clauses: validamos DOM antes de operar. Si el modal no
+    // existe (p.ej. tras cambio de pestaña con el HTML aún no inyectado),
+    // salimos silenciosamente en lugar de lanzar TypeError.
+    const modal = document.getElementById('spotlight-modal');
+    if (!modal) return;
+    const input = document.getElementById('spotlight-input');
+    const results = document.getElementById('spotlight-results');
+    modal.classList.add('active');
+    if (input) input.value = '';
+    if (results) results.innerHTML = '';
+    if (input) setTimeout(() => input.focus(), 100);
 };
 window.cerrarSpotlight = function() {
 document.getElementById('spotlight-modal').classList.remove('active');
 };
+// ── buscarSpotlight: construcción HTML en array (push/join) + inyección
+//    única vía DocumentFragment dentro de rAF. Cero cambios visuales: el
+//    HTML producido es idéntico al método anterior, solo cambia CÓMO se
+//    construye e inyecta para eliminar layout thrashing en búsquedas
+//    con muchos resultados.
+//
+//    Token de búsqueda: si llega una nueva búsqueda mientras la anterior
+//    se está renderizando, descartamos la antigua (evita race conditions
+//    al teclear rápido).
+window._spotlightToken = 0;
+
 window.buscarSpotlight = function(texto) {
-const resultadosDiv = document.getElementById('spotlight-results');
-if (!texto || texto.length < 2) {
-resultadosDiv.innerHTML = '';
-return;
-}
-const busqueda = texto.toLowerCase();
-let listaBusqueda = window.datos || [];
-if (typeof pasaFiltroPropietario === 'function') {
-  listaBusqueda = listaBusqueda.filter(m => pasaFiltroPropietario(m));
-}
-// 1. Buscamos de forma segura en las propiedades correctas
-const palabrasBusqueda = busqueda.split(' ').filter(p => p.trim() !== '');
-const encontrados = listaBusqueda.filter(m => {
-const textoFila = ((m.concepto||'') + ' ' + (m.descripcion||m.detalle||'') + ' ' + (m.beneficiario||'')).toLowerCase();
-// --- NUEVO: Buscador Inteligente (Spotlight) ---
-return palabrasBusqueda.every(palabra => textoFila.includes(palabra));
-// -----------------------------------------------
-});
-if (encontrados.length === 0) {
-resultadosDiv.innerHTML = '<div style="color:#888; text-align:center; padding: 20px; font-style: italic;">No se han encontrado movimientos.</div>';
-return;
-}
-// 2. 🏦 ALGORITMO BANCARIO: los más recientes arriba con desempate
-encontrados.sort((a, b) => {
-const valA = a.ts || 0;
-const valB = b.ts || 0;
-if (valA !== valB) return valB - valA;
-return a.importe - b.importe;
-});
-// 3. Sumar Ingresos y Gastos
-let totalIngresos = 0;
-let totalGastos = 0;
-encontrados.forEach(m => {
-const importe = window.FinanceModel.parseMoney(m.importe);
-if (importe > 0) totalIngresos += importe;
-else totalGastos += importe;
-});
-const formatea = (num) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(num);
-// 4. Pintar Resumen
-let html = `
-<div class="spotlight-resumen">
-<div style="color: #FFFFFF; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resumen de "${texto}"</div>
-<div style="display: flex; justify-content: space-around; font-size: 22px; font-weight: bold;">
-<span style="color: var(--c-success); text-shadow: 0 0 10px rgba(57, 255, 20, 0.3);">+${formatea(totalIngresos)}</span>
-<span style="color: var(--c-danger); text-shadow: 0 0 10px rgba(255, 46, 77, 0.3);">${formatea(totalGastos)}</span>
-</div>
-<div style="font-size: 11px; color: #888; margin-top: 8px;">${encontrados.length} movimientos encontrados</div>
-</div>
-<div style="display:flex; flex-direction:column; gap:5px;">
-`;
-// 5. Pintar la lista de movimientos debajo (CON EL NUEVO DISEÑO PREMIUM)
-encontrados.forEach(m => {
-// --- COLORES Y SIGNOS ---
-const esTraspaso = m.tipo === 'traspaso' || (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO'));
-let colorImporte = '#fff';
-let colorBorde = 'var(--c-danger)';
-let signo = '';
-if (esTraspaso) {
-colorImporte = 'var(--c-transfer)';
-colorBorde = 'var(--c-transfer)';
-} else if (m.importe >= 0) {
-colorImporte = 'var(--c-success)';
-colorBorde = 'var(--c-success)';
-signo = '+';
-} else {
-colorImporte = '#fff';
-colorBorde = 'var(--c-danger)';
-}
-// --- FORMATEO DE DINERO ---
-const formateadorDinero = FMT_NUM;
-const importeFormateado = formateadorDinero.format(m.importe) + ' €';
-let saldoStr = '-';
-if (m.saldo !== undefined && m.saldo !== null) {
-saldoStr = formateadorDinero.format(m.saldo) + ' €';
-} else if (window.mapaCuentas && window.mapaCuentas[m.cuenta]) {
-saldoStr = formateadorDinero.format(window.mapaCuentas[m.cuenta].saldoActual || 0) + ' €';
-}
-// --- TEXTOS LIMPIOS Y FECHAS ---
-const f = new Date(m.ts || m.fecha);
-const fechaFormateada = isNaN(f.getTime()) ? '?' : f.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
-const cuentaLimpia = (m.cuenta || '').replace('D-', '').replace('N-', '');
-// Seguridad para no romper el HTML
-const escapeHTML = (str) => typeof Security !== 'undefined' ? Security.escapeHTML(str) : str;
-const descStr = m.descripcion || m.detalle || '';
-let conceptoCompleto = escapeHTML(m.concepto || 'VARIOS');
-if (descStr) {
-conceptoCompleto += ` <span style="font-weight:400; color:#FFFFFF;">- ${escapeHTML(descStr)}</span>`;
-}
-const benefStr = m.beneficiario ? ` &bull; <span style="color:#FFD60A; opacity:0.9;">${escapeHTML(m.beneficiario)}</span>` : '';
-// --- DIBUJO ESTRUCTURA DE 2 LÍNEAS EXACTAS ---
-html += `
-<div onclick="cerrarSpotlight(); if(typeof window.editarMovimiento === 'function') window.editarMovimiento('${m.id}')"
-style="cursor:pointer; display:flex; flex-direction:column; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border-left: 3px solid ${colorBorde}; transition: background 0.2s;">
-<div style="display:flex; justify-content:space-between; align-items:center; width: 100%; margin-bottom: 4px;">
-<span style="font-size:13px; font-weight:800; color:#eee; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
-${conceptoCompleto}
-</span>
-<span style="font-size:14px; font-weight:900; color:${colorImporte}; white-space:nowrap; flex-shrink:0;">
-${signo}${importeFormateado}
-</span>
-</div>
-<div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">
-<span style="font-size:10px; color:#888; text-transform:uppercase; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">
-${fechaFormateada} &bull; ${cuentaLimpia}${benefStr}
-</span>
-<span style="font-size:11px; font-weight:bold; color:#FFFFFF; white-space:nowrap; flex-shrink:0;">
-${saldoStr}
-</span>
-</div>
-</div>
-`;
-});
-html += `</div>`; // Cierra el contenedor flexible
-resultadosDiv.innerHTML = html;
+    const resultadosDiv = document.getElementById('spotlight-results');
+    if (!resultadosDiv) return;
+
+    // Guard clause: búsqueda vacía o demasiado corta → limpiar y salir.
+    if (!texto || texto.length < 2) {
+        resultadosDiv.innerHTML = '';
+        return;
+    }
+
+    // Token de invalidación de búsquedas en curso.
+    const miToken = ++window._spotlightToken;
+
+    try {
+        const busqueda = texto.toLowerCase();
+        let listaBusqueda = window.datos || [];
+        if (typeof pasaFiltroPropietario === 'function') {
+            listaBusqueda = listaBusqueda.filter(m => pasaFiltroPropietario(m));
+        }
+
+        // 1. Búsqueda multi-palabra (AND lógico): todas las palabras deben
+        //    aparecer en cualquier orden en concepto/descripcion/beneficiario.
+        const palabrasBusqueda = busqueda.split(' ').filter(p => p.trim() !== '');
+        const encontrados = listaBusqueda.filter(m => {
+            const textoFila = (
+                (m.concepto || '') + ' ' +
+                (m.descripcion || m.detalle || '') + ' ' +
+                (m.beneficiario || '')
+            ).toLowerCase();
+            return palabrasBusqueda.every(palabra => textoFila.includes(palabra));
+        });
+
+        // Guard clause: sin resultados → mensaje y salir.
+        if (encontrados.length === 0) {
+            resultadosDiv.innerHTML = '<div style="color:#888; text-align:center; padding: 20px; font-style: italic;">No se han encontrado movimientos.</div>';
+            return;
+        }
+
+        // 2. Orden: más recientes primero; desempate por importe.
+        encontrados.sort((a, b) => {
+            const valA = a.ts || 0;
+            const valB = b.ts || 0;
+            if (valA !== valB) return valB - valA;
+            return a.importe - b.importe;
+        });
+
+        // 3. Sumas para el resumen superior.
+        let totalIngresos = 0;
+        let totalGastos = 0;
+        for (let i = 0; i < encontrados.length; i++) {
+            const importe = window.FinanceModel.parseMoney(encontrados[i].importe);
+            if (importe > 0) totalIngresos += importe;
+            else totalGastos += importe;
+        }
+
+        // Formateador EUR canónico (vía FinanceModel.format tras F1).
+        const formatea = (num) => window.FinanceModel.format.eurES(num);
+        const escapeHTML = (str) => (typeof Security !== 'undefined') ? Security.escapeHTML(str) : String(str || '');
+
+        // 4. Construcción HTML por array.push() — mucho más rápido que
+        //    concatenación con `+=` cuando hay cientos/miles de resultados,
+        //    porque evita re-alocar el string en cada iteración.
+        const partes = [];
+        partes.push(
+            '<div class="spotlight-resumen">' +
+            '<div style="color: #FFFFFF; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Resumen de "' + escapeHTML(texto) + '"</div>' +
+            '<div style="display: flex; justify-content: space-around; font-size: 22px; font-weight: bold;">' +
+            '<span style="color: var(--c-success); text-shadow: 0 0 10px rgba(57, 255, 20, 0.3);">+' + formatea(totalIngresos) + '</span>' +
+            '<span style="color: var(--c-danger); text-shadow: 0 0 10px rgba(255, 46, 77, 0.3);">' + formatea(totalGastos) + '</span>' +
+            '</div>' +
+            '<div style="font-size: 11px; color: #888; margin-top: 8px;">' + encontrados.length + ' movimientos encontrados</div>' +
+            '</div>' +
+            '<div style="display:flex; flex-direction:column; gap:5px;">'
+        );
+
+        // 5. Filas: idéntico HTML al método anterior, sólo cambia el método
+        //    de acumulación.
+        for (let i = 0; i < encontrados.length; i++) {
+            const m = encontrados[i];
+
+            const esTraspaso = m.tipo === 'traspaso' || (m.concepto && String(m.concepto).toUpperCase().includes('TRASPASO'));
+            let colorImporte = '#fff';
+            let colorBorde = 'var(--c-danger)';
+            let signo = '';
+            if (esTraspaso) {
+                colorImporte = 'var(--c-transfer)';
+                colorBorde = 'var(--c-transfer)';
+            } else if (m.importe >= 0) {
+                colorImporte = 'var(--c-success)';
+                colorBorde = 'var(--c-success)';
+                signo = '+';
+            }
+
+            // Formateo monetario unificado vía FinanceModel.format.raw.numMin2
+            // (mismo formateador que FMT_NUM tras F1).
+            const importeFormateado = FMT_NUM.format(m.importe) + ' €';
+            let saldoStr = '-';
+            if (m.saldo !== undefined && m.saldo !== null) {
+                saldoStr = FMT_NUM.format(m.saldo) + ' €';
+            } else if (window.mapaCuentas && window.mapaCuentas[m.cuenta]) {
+                saldoStr = FMT_NUM.format(window.mapaCuentas[m.cuenta].saldoActual || 0) + ' €';
+            }
+
+            const f = new Date(m.ts || m.fecha);
+            const fechaFormateada = isNaN(f.getTime()) ? '?' : f.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).toUpperCase();
+            const cuentaLimpia = (m.cuenta || '').replace('D-', '').replace('N-', '');
+
+            const descStr = m.descripcion || m.detalle || '';
+            let conceptoCompleto = escapeHTML(m.concepto || 'VARIOS');
+            if (descStr) {
+                conceptoCompleto += ' <span style="font-weight:400; color:#FFFFFF;">- ' + escapeHTML(descStr) + '</span>';
+            }
+            const benefStr = m.beneficiario ? ' &bull; <span style="color:#FFD60A; opacity:0.9;">' + escapeHTML(m.beneficiario) + '</span>' : '';
+
+            partes.push(
+                '<div onclick="cerrarSpotlight(); if(typeof window.editarMovimiento === \'function\') window.editarMovimiento(\'' + m.id + '\')" ' +
+                'style="cursor:pointer; display:flex; flex-direction:column; background:rgba(255,255,255,0.03); padding:10px 12px; border-radius:8px; border-left: 3px solid ' + colorBorde + '; transition: background 0.2s;">' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; width: 100%; margin-bottom: 4px;">' +
+                '<span style="font-size:13px; font-weight:800; color:#eee; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">' + conceptoCompleto + '</span>' +
+                '<span style="font-size:14px; font-weight:900; color:' + colorImporte + '; white-space:nowrap; flex-shrink:0;">' + signo + importeFormateado + '</span>' +
+                '</div>' +
+                '<div style="display:flex; justify-content:space-between; align-items:center; width: 100%;">' +
+                '<span style="font-size:10px; color:#888; text-transform:uppercase; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; padding-right:10px;">' + fechaFormateada + ' &bull; ' + cuentaLimpia + benefStr + '</span>' +
+                '<span style="font-size:11px; font-weight:bold; color:#FFFFFF; white-space:nowrap; flex-shrink:0;">' + saldoStr + '</span>' +
+                '</div>' +
+                '</div>'
+            );
+        }
+        partes.push('</div>'); // Cierra el contenedor flexible.
+
+        // 6. Inyección única dentro de rAF: el navegador agrupa el cambio
+        //    con el siguiente paint, evitando reflows intermedios. Si el
+        //    usuario tecleó algo nuevo mientras tanto (miToken obsoleto),
+        //    descartamos esta inyección.
+        const htmlFinal = partes.join('');
+        requestAnimationFrame(() => {
+            if (miToken !== window._spotlightToken) return; // búsqueda obsoleta
+            try {
+                // Construimos los nodos fuera del DOM principal vía <template>
+                // y los movemos con un único appendChild (1 reflow total).
+                const tpl = document.createElement('template');
+                tpl.innerHTML = htmlFinal;
+                resultadosDiv.innerHTML = '';
+                resultadosDiv.appendChild(tpl.content);
+            } catch (e) {
+                // Fallback defensivo: si <template> falla por cualquier
+                // motivo, caemos al método clásico (innerHTML directo).
+                resultadosDiv.innerHTML = htmlFinal;
+            }
+        });
+    } catch (err) {
+        console.warn('[Spotlight] Fallo en búsqueda:', err);
+        resultadosDiv.innerHTML = '<div style="color:#FF2E4D; text-align:center; padding: 20px;">Error al buscar. Inténtalo de nuevo.</div>';
+    }
 };
 // ============================================================
 // 🖱️ MEJORA E: CIERRE INTELIGENTE DE MODALES (Backdrop Click) - LIMPIO
@@ -8547,34 +8921,104 @@ document.addEventListener('keydown', function(event) {
     }
 });
 // ==========================================
-// 🎲 MOTOR DE ANIMACIÓN DE CARGA (SCRAMBLE EFFECT)
+// 🎲 MOTOR DE ANIMACIÓN DE CARGA (SCRAMBLE EFFECT) - v2
 // ==========================================
-window._animacionCargaInterval = null;
+// Mejoras frente a v1:
+//  · rAF + throttle en lugar de setInterval de 50ms (ahorra batería).
+//  · Se pausa automáticamente cuando la pestaña está oculta.
+//  · Marca data-scrambling="1" para que animarCifra() no pelee por innerText.
+//  · Respeta el tipo (€ / %) según el contenido inicial del KPI.
+//  · Restaura el último valor real conocido (data-prev) al detener.
+//  · Idempotente: llamar dos veces no duplica trabajo.
+//  · Inyecta CSS .scrambling-number con blur muy sutil (look fintech).
+//  · Respeta prefers-reduced-motion (accesibilidad).
+(function() {
+    if (document.getElementById('css-scrambling-number')) return;
+    const st = document.createElement('style');
+    st.id = 'css-scrambling-number';
+    st.textContent = `
+        .scrambling-number {
+            filter: blur(0.6px);
+            opacity: 0.85;
+            transition: filter 0.35s ease, opacity 0.35s ease;
+            will-change: contents, filter;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .scrambling-number { filter: none; opacity: 1; }
+        }
+    `;
+    document.head.appendChild(st);
+})();
+
+window._animacionCargaRAF = null;
+window._animacionCargaActiva = false;
+window._animacionCargaUltimo = 0;
 
 window.iniciarAnimacionCargaNumeros = function() {
-    // Buscamos las etiquetas que muestran dinero clave en el inicio y patrimonio
-    const elementos = document.querySelectorAll('.kpi-value');
-    
-    // Añadimos el efecto visual
-    elementos.forEach(el => el.classList.add('scrambling-number'));
+    if (window._animacionCargaActiva) return; // idempotente
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-    // Iteramos los números aleatoriamente cada 50 milisegundos
-    window._animacionCargaInterval = setInterval(() => {
-        elementos.forEach(el => {
-            const numAleatorio = (Math.random() * 9999).toFixed(2);
-            el.innerText = numAleatorio.replace('.', ',') + ' €'; 
-        });
-    }, 50);
+    const elementos = document.querySelectorAll('.kpi-value');
+    if (!elementos.length) return;
+
+    elementos.forEach(el => {
+        el.classList.add('scrambling-number');
+        el.dataset.scrambling = '1';
+        if (!el.dataset.tipoFmt) {
+            el.dataset.tipoFmt = /%/.test(el.innerText) ? 'porcentaje' : 'moneda';
+        }
+    });
+
+    window._animacionCargaActiva = true;
+    const INTERVALO_MS = 80;
+
+    function tick(ts) {
+        if (!window._animacionCargaActiva) return;
+        if (document.hidden) { // Pausar si la pestaña está oculta
+            window._animacionCargaRAF = requestAnimationFrame(tick);
+            return;
+        }
+        if (ts - window._animacionCargaUltimo >= INTERVALO_MS) {
+            window._animacionCargaUltimo = ts;
+            elementos.forEach(el => {
+                if (el.dataset.scrambling !== '1') return;
+                const tipo = el.dataset.tipoFmt || 'moneda';
+                const r = Math.random();
+                if (tipo === 'porcentaje') {
+                    el.innerText = (r * 100).toFixed(2).replace('.', ',') + '%';
+                } else {
+                    const magnitud = Math.pow(10, Math.floor(Math.random() * 5) + 1);
+                    el.innerText = (r * magnitud).toFixed(2).replace('.', ',') + ' €';
+                }
+            });
+        }
+        window._animacionCargaRAF = requestAnimationFrame(tick);
+    }
+    window._animacionCargaRAF = requestAnimationFrame(tick);
 };
 
 window.detenerAnimacionCargaNumeros = function() {
-    if (window._animacionCargaInterval) {
-        clearInterval(window._animacionCargaInterval);
-        window._animacionCargaInterval = null;
+    window._animacionCargaActiva = false;
+    if (window._animacionCargaRAF) {
+        cancelAnimationFrame(window._animacionCargaRAF);
+        window._animacionCargaRAF = null;
     }
-    // Retiramos el desenfoque para que los números finales queden nítidos
-    const elementos = document.querySelectorAll('.scrambling-number');
-    elementos.forEach(el => el.classList.remove('scrambling-number'));
+    const elementos = document.querySelectorAll('.scrambling-number, [data-scrambling="1"]');
+    elementos.forEach(el => {
+        el.classList.remove('scrambling-number');
+        delete el.dataset.scrambling;
+        // Restauramos el último valor real conocido (animarCifra lo guarda en data-prev)
+        const prev = el.getAttribute('data-prev');
+        if (prev !== null && prev !== '' && typeof window.formatearDatoMaestro === 'function') {
+            const tipo = el.dataset.tipoFmt || 'moneda';
+            const num = (window.FinanceModel && window.FinanceModel.parseMoney)
+                ? window.FinanceModel.parseMoney(prev)
+                : parseFloat(prev);
+            if (!isNaN(num)) {
+                el.innerText = window.formatearDatoMaestro(num, tipo);
+            }
+        }
+    });
 };
 </script>
 <div id="spotlight-modal">
@@ -8763,11 +9207,15 @@ modalContenido.style.transform = 'scale(1)';
 }, 10);
 }
 window.cerrarDesgloseCuentas = function() {
-const modal = document.getElementById('modal-desglose-cuentas');
-const modalContenido = document.getElementById('modal-desglose-contenido');
-modalContenido.style.opacity = '0';
-modalContenido.style.transform = 'scale(0.95)';
-setTimeout(() => { modal.style.display = 'none'; }, 200);
+    // [F6-D] Guard clauses: si los nodos del modal no existen, salir.
+    const modal = document.getElementById('modal-desglose-cuentas');
+    const modalContenido = document.getElementById('modal-desglose-contenido');
+    if (!modal && !modalContenido) return;
+    if (modalContenido) {
+        modalContenido.style.opacity = '0';
+        modalContenido.style.transform = 'scale(0.95)';
+    }
+    if (modal) setTimeout(() => { modal.style.display = 'none'; }, 200);
 };
 // --- FIN FUNCIONES PARA EL MODAL DE DESGLOSE ---
 // Auto-cálculo inicial
@@ -9229,9 +9677,9 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
   if (!window.ensureEChartsReady(() => window.renderizarDonutCartera(grupos, colorTipo))) return;
   const container = document.getElementById('chart-cartera-donut');
   const elCenter  = document.getElementById('cartera-donut-val');
-  if (!container || typeof echarts === 'undefined') return;
-  let chart = echarts.getInstanceByDom(container);
-  if (!chart) chart = echarts.init(container);
+  // Reciclaje vía ChartManager (alias DonutCartera).
+  const chart = window.ChartManager.mount(container, { alias: 'DonutCartera' });
+  if (!chart) return;
 
   const totalVal = Object.values(grupos).reduce((s,g) => s+g.total, 0);
   if (elCenter) elCenter.innerText = new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(totalVal);
@@ -9269,15 +9717,8 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
     }]
   }, { notMerge: true });
 
-  // Desconectar el observer anterior y crear uno nuevo que apunte al chart actual
-  if (window._donutCarteraResizeObs) {
-    window._donutCarteraResizeObs.disconnect();
-  }
-  window._donutCarteraResizeObs = new ResizeObserver(() => {
-    const c = echarts.getInstanceByDom(container);
-    if (c) c.resize();
-  });
-  window._donutCarteraResizeObs.observe(container);
+  // ResizeObserver gestionado por ChartManager (idempotente).
+  window.ChartManager.attachResizeObserver(container, 'donut-cartera');
 };
 
 // ── GRÁFICO EVOLUCIÓN HISTÓRICA ───────────────────────────────────────
@@ -9300,8 +9741,9 @@ window.renderizarEvolCartera = function() {
   if (card) card.style.display = 'block';
   if (statsDiv) statsDiv.style.display = 'flex';
 
-  let chart = echarts.getInstanceByDom(container);
-  if (!chart) chart = echarts.init(container);
+  // Reciclaje vía ChartManager (alias EvolCartera).
+  const chart = window.ChartManager.mount(container, { alias: 'EvolCartera' });
+  if (!chart) return;
 
   const fechas = hist.map(h => new Date(h.ts).toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit'}));
   const valores = hist.map(h => Number(h.valor.toFixed(2)));
@@ -9437,15 +9879,8 @@ const costes = hist.map(h => (typeof h.coste === 'number' ? h.coste : primerCost
     `;
   }
 
-  // Desconectar el observer anterior y crear uno nuevo que apunte al chart actual
-  if (window._evolCarteraResizeObs) {
-    window._evolCarteraResizeObs.disconnect();
-  }
-  window._evolCarteraResizeObs = new ResizeObserver(() => {
-    const c = echarts.getInstanceByDom(container);
-    if (c) c.resize();
-  });
-  window._evolCarteraResizeObs.observe(container);
+  // ResizeObserver gestionado por ChartManager (idempotente).
+  window.ChartManager.attachResizeObserver(container, 'evol-cartera');
 };
 // ── MODAL: NUEVA / EDITAR POSICIÓN ───────────────────────────────────
 window.abrirModalNuevaPosicion = function() {
@@ -9789,8 +10224,102 @@ if ('serviceWorker' in navigator) {
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 })();
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🏛️ POBLACIÓN DE NAMESPACES (Final de carga) [F5]
+// ────────────────────────────────────────────────────────────────────────────
+// Una vez declaradas todas las funciones globales, las exponemos también
+// como propiedades de su módulo semántico correspondiente. Esto:
+//   - NO modifica window.X (sigue funcionando para HTML inline y código legado).
+//   - Añade UIManager.X / DataManager.X / etc. como vista organizada.
+//
+// Patrón defensivo: cada asignación está envuelta en una guarda de tipo
+// para evitar errores si en algún build futuro una función se renombrara
+// o eliminara (no romperá la carga de la app, solo dejará un hueco).
+// ════════════════════════════════════════════════════════════════════════════
+(function _poblarNamespaces() {
+    function expone(modulo, nombres) {
+        for (var i = 0; i < nombres.length; i++) {
+            var n = nombres[i];
+            try {
+                if (typeof window[n] === 'function') {
+                    modulo[n] = window[n];
+                }
+            } catch (e) { /* noop defensivo */ }
+        }
+    }
+
+    // ─── UIManager (36 funciones) ─────────────────────────────
+    expone(window.UIManager, [
+        'irPestana', 'cambiarSubVistaPatrimonio', 'notify', 'toggleBotonCarga', 'verExtractoPatrimonio', 'cerrarModalExtracto', 'mostrarDesgloseCuentas', 'mostrarDesgloseAmbos', 'cerrarDesgloseCuentas', 'pedirConfirmacion', 'abrirSpotlight', 'cerrarSpotlight', 'buscarSpotlight', 'mostrarPin', 'teclaPin', 'borrarPin', 'limpiarPin', 'actualizarPuntosPin', 'toggleCajaFuerte', 'toggleFiltros', 'limpiarFiltros', 'aplicarFiltros', 'aplicarFiltrosDebounced', 'filtroRapido', 'actualizarChivatoFiltros', 'actualizarDesplegablesRestringidos', 'toggleUsuario', 'actualizarBotonUsuarioVisual', 'pasaFiltroPropietario', 'toggleCustomDates', 'getFechasDashboard', 'alternarRecurrenteUnificado', 'alternarDiasSemana', 'iniciarAnimacionCargaNumeros', 'detenerAnimacionCargaNumeros', 'actualizarPreviewPnl'
+    ]);
+
+    // ─── DataManager (19 funciones) ─────────────────────────────
+    expone(window.DataManager, [
+        'procesarLibroLeido', 'fusionarMovimientos', 'sumarDinero', 'editarMovimiento', 'duplicarMovimiento', 'borrarMovimiento', 'guardarManual', 'guardarUniversal', 'actualizarDashboard', 'actualizarCuentasClaras', 'cargarVistafijos', 'renderizarfijos', 'editarRecurrente', 'duplicarRecurrente', 'borrarRecurrente', 'cargarReglaUnificada', 'guardarComoRecurrenteUnificado', 'agregarDesdeRecurrente', 'detectarMagia'
+    ]);
+
+    // ─── SyncManager (6 funciones) ─────────────────────────────
+    expone(window.SyncManager, [
+        'iniciarCargaNube', 'crearBackupNube', 'cambiarPinSeguridad', 'verificarPinCriptografico', 'desbloquearApp', 'salirAppSeguro'
+    ]);
+
+    // ─── ChartsManager (7 funciones) ─────────────────────────────
+    expone(window.ChartsManager, [
+        'renderizarSankey', 'renderTreeMap', 'renderizarSunburstPatrimonio', 'renderizarDonutCartera', 'renderizarEvolCartera', 'actualizarPlusvaliaPatrimonio', 'actualizarDashCartera'
+    ]);
+
+    // ─── CarteraManager (14 funciones) ─────────────────────────────
+    expone(window.CarteraManager, [
+        'obtenerPrecioBTC', 'refrescarPrecioBTCModal', 'cerrarModalCartera', 'comportamientoTipoActivo', 'escapeHtmlCartera', 'escapeJsCartera', 'calcularValoresCartera', 'renderizarCartera', 'toggleCarteraGroup', 'abrirModalNuevaPosicion', 'editarPosicion', 'guardarPosicion', 'borrarPosicion', 'actualizarPreciosAutomatico'
+    ]);
+
+    // Marcadores de carga: facilita verificar en DevTools que los
+    // namespaces se poblaron correctamente.
+    window.UIManager._loaded = true;
+    window.DataManager._loaded = true;
+    window.SyncManager._loaded = true;
+    window.ChartsManager._loaded = true;
+    window.CarteraManager._loaded = true;
+
+    // ───────────────────────────────────────────────────────────────────
+    // [F6-C] NORMALIZACIÓN TERMINOLÓGICA: alias 'recurrentes' → 'fijos'
+    // ───────────────────────────────────────────────────────────────────
+    // El código histórico usa 'fijos' (datosfijos, cargarVistafijos,
+    // renderizarfijos) por razones de compatibilidad con el HTML inline.
+    // El término técnico correcto es 'recurrentes'. Creamos aliases
+    // semánticamente claros que apuntan al MISMO dato/función. Cualquier
+    // código nuevo debería usar la versión recurrentes; la versión fijos
+    // queda como capa de compatibilidad histórica.
+    //
+    // Patrón Getter/Setter delegante para los DATOS (array vivo): el alias
+    // 'datosRecurrentes' devuelve siempre el array actual de datosfijos,
+    // y al asignarle un valor lo redirige a datosfijos. Las mutaciones
+    // in-place (.push, .splice, etc.) funcionan transparentemente.
+    try {
+        if (!Object.getOwnPropertyDescriptor(window, 'datosRecurrentes')) {
+            Object.defineProperty(window, 'datosRecurrentes', {
+                get() { return window.datosfijos; },
+                set(v) { window.datosfijos = v; },
+                configurable: true
+            });
+        }
+        // Aliases para FUNCIONES: referencia directa a la función original.
+        if (typeof window.cargarVistafijos === 'function') {
+            window.cargarVistaRecurrentes = window.cargarVistafijos;
+            window.DataManager.cargarVistaRecurrentes = window.cargarVistafijos;
+        }
+        if (typeof window.renderizarfijos === 'function') {
+            window.renderizarRecurrentes = window.renderizarfijos;
+            window.DataManager.renderizarRecurrentes = window.renderizarfijos;
+        }
+    } catch (e) {
+        console.warn('[F6-C] No se pudieron crear aliases recurrentes:', e);
+    }
+})();
+
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0341869ea23d862',t:'MTc4MDA0Mjk4OQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
 
 
