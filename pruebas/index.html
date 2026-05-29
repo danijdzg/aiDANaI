@@ -1545,7 +1545,7 @@ DN
 <span style="font-size:10px; color:#666; font-weight:600; margin-top:2px;">Flujo de ingresos y gastos del periodo</span>
 </div>
 <div style="width: 100%; height: 280px; padding: 0; margin-top: 10px;">
-<div id="chart-Sankey" style="width: 100%; height: 100%;"></div>
+<div id="chart-Sankey" style="width: 100%; height: 280px;"></div>
 </div>
 </div>
 <!-- 📈 TARJETA CARTERA (Módulo Inversiones) -->
@@ -2959,9 +2959,17 @@ window.ChartLifecycle = (function() {
             // Pequeño delay para dejar que el DOM respire tras la navegación gummy
             setTimeout(() => {
                 if (tabActiva === 'inicio') {
-                    if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
-                    else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
-                } else if (tabActiva === 'patrimonio') {
+    if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
+    else if (typeof window.actualizarDashboard === 'function') window.actualizarDashboard();
+    // Forzar resize del Sankey tras la transición de pestaña
+    setTimeout(function() {
+        if (window.echartSankey && !window.echartSankey.isDisposed()) {
+            window.echartSankey.resize();
+        } else if (window.datosResumen && window.datosResumen.length > 0 && typeof window.renderizarSankey === 'function') {
+            window.renderizarSankey(window.datosResumen.slice());
+        }
+    }, 350);
+} else if (tabActiva === 'patrimonio') {
                     if (typeof window.actualizarPatrimonio === 'function') window.actualizarPatrimonio();
                     if (typeof window.renderizarSunburstPatrimonio === 'function') window.renderizarSunburstPatrimonio();
                     if (typeof window.renderTreeMap === 'function') window.renderTreeMap();
@@ -6238,9 +6246,10 @@ window.renderizarSankey = function(datosPeriodo) {
     }
     // Reciclaje vía ChartManager (alias mantiene window.echartSankey para back-compat).
     const echartSankey = window.ChartManager.mount(container, {
-        alias: 'Sankey',
-        initOpts: { renderer: 'canvas' }
-    });
+    alias: 'Sankey',
+    forceNew: true,
+    initOpts: { renderer: 'canvas' }
+});
     // 1. Agrupar datos por concepto
     let totalIngresos = 0;
     const gastosPorConcepto = {};
@@ -6927,7 +6936,16 @@ if (ingresoTotalUltimoAno > 0) {
 // 8. RENDERIZADO DE GRÁFICOS SOLO EN LA PESTAÑA VISIBLE
 const tabActivaDashboard = window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio';
 if (tabActivaDashboard === 'inicio' && typeof window.renderizarSankey === 'function') {
- window.renderizarSankey(window.datosResumen);
+    const _datosParaSankey = window.datosResumen ? window.datosResumen.slice() : [];
+    if (window.echarts) {
+        window.renderizarSankey(_datosParaSankey);
+    } else {
+        window.AppAssets.echarts().then(function() {
+            window.renderizarSankey(_datosParaSankey);
+        }).catch(function() {
+            if (typeof notify === 'function') notify('No se pudieron cargar los gráficos', 'error');
+        });
+    }
 }
 if (tabActivaDashboard === 'patrimonio' && typeof renderizarGraficoEvolucion === 'function') {
  renderizarGraficoEvolucion(datosUsuario);
