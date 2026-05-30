@@ -39,7 +39,17 @@
                 event.preventDefault();
             }
         }, true);
-  
+        // Red de seguridad global: registra cualquier error/promesa no capturada
+        // (sin romper la app). Requiere window.AppLog, definido más abajo; por eso
+        // comprobamos su existencia antes de usarlo.
+        window.addEventListener('error', function(ev) {
+            if (isAsyncChannelNoise(ev.error || ev.message)) return;
+            if (window.AppLog) window.AppLog.warn('window.onerror', ev.error || ev.message, { file: ev.filename, line: ev.lineno });
+        });
+        window.addEventListener('unhandledrejection', function(ev) {
+            if (isAsyncChannelNoise(ev.reason)) return;
+            if (window.AppLog) window.AppLog.warn('unhandledrejection', ev.reason);
+        });
     })();
     // Carga diferida: mantiene un único index.html, pero despierta librerías pesadas solo cuando hacen falta.
     window.AppAssets = (function() {
@@ -2344,6 +2354,41 @@ GUARDAR OPERACIÓN <span class="material-icons">rocket_launch</span>
 <script>
 'use strict';
 // ============================================================
+// 🪵 LOGGER CENTRAL DE ERRORES (diagnóstico en producción)
+// ============================================================
+window.AppLog = (function() {
+    const MAX = 200;                 // máximo de errores en memoria
+    const buffer = [];               // anillo de errores recientes
+    function registrar(contexto, error, extra) {
+        const entrada = {
+            t: new Date().toISOString(),
+            ctx: contexto || 'desconocido',
+            msg: (error && error.message) ? error.message : String(error),
+            stack: (error && error.stack) ? error.stack : null,
+            extra: extra || null
+        };
+        buffer.push(entrada);
+        if (buffer.length > MAX) buffer.shift();
+        // En consola SIEMPRE (no rompe la app, pero deja rastro)
+        try { console.error('[' + entrada.ctx + ']', error, extra || ''); } catch (_) { /* console no disponible: ignorar a propósito (evita recursión en el propio logger) */ }
+        return entrada;
+    }
+    return {
+        // Para errores que NO deben molestar al usuario (silenciosos pero registrados)
+        warn: (ctx, err, extra) => registrar(ctx, err, extra),
+        // Para errores que SÍ debe ver el usuario
+        error: (ctx, err, extra) => {
+            const e = registrar(ctx, err, extra);
+            if (typeof notify === 'function') notify('⚠️ ' + e.msg, 'error');
+            return e;
+        },
+        // Para revisar el historial desde la consola: AppLog.dump()
+        dump: () => buffer.slice(),
+        // Para copiar todo el log (soporte): AppLog.exportar()
+        exportar: () => JSON.stringify(buffer, null, 2)
+    };
+})();
+// ============================================================
 // MODELO FINANCIERO CENTRAL
 // Se define al inicio para que cualquier carga local/nube tenga
 // helpers disponibles antes de procesar Excel o pintar la interfaz.
@@ -2361,7 +2406,7 @@ window.FinanceModel = (function() {
     function crearId() {
         try {
             if (typeof uuid === 'function') return uuid();
-        } catch (e) {}
+        } catch (e) { /* uuid() no disponible: usamos fallback de abajo, ignorar a propósito */ }
         if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
         return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
@@ -2949,7 +2994,7 @@ suscriptores[evento].push(callback);
 emitir: function(evento, datos) {
 if (suscriptores[evento]) {
 suscriptores[evento].forEach(cb => {
-try { cb(datos); } catch (err) {  }
+try { cb(datos); } catch (err) { window.AppLog && AppLog.warn('UIEvents:' + evento, err); }
 });
 }
 }
@@ -3844,7 +3889,7 @@ const arrayBuffer = await resContent.arrayBuffer();
 let wbWorker = null;
 if (window.AppXlsxWorker) {
 try { wbWorker = await window.AppXlsxWorker.read(arrayBuffer.slice(0)); }
-catch (workerError) {  }
+catch (workerError) { window.AppLog && AppLog.warn('xlsxWorker.read(nube)', workerError); }
 }
 if (window.AppAssets) await window.AppAssets.xlsx();
 // Aunque el Worker lea el libro, procesarLibroLeido necesita XLSX.utils en la ventana principal.
@@ -3887,7 +3932,7 @@ try {
         try {
             const metaRes = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}?$select=eTag`, { headers: { Authorization: `Bearer ${token}` } });
             if (metaRes.ok) { const m = await metaRes.json(); this.lastETag = m.eTag || null; }
-        } catch(e) { }
+        } catch(e) { window.AppLog && AppLog.warn('oneDrive.saveFile:etag', e); }
     }
     // ----------------------------------
 } catch (error) {
@@ -3993,7 +4038,7 @@ const patrones = {
 'success': [40, 20, 80],  // Patrón corto-pausa-largo → éxito 🎉
 };
 const patron = patrones[tipo] || [50];
-try { if (navigator.vibrate) navigator.vibrate(patron); } catch (e) {}
+try { if (navigator.vibrate) navigator.vibrate(patron); } catch (e) { /* vibración no soportada: ignorar a propósito */ }
 }
 /* --- SEGURIDAD: SANITIZACIÓN DE HTML --- */
 const Security = {
@@ -4091,6 +4136,8 @@ if(forzarManual) notify("✅ Backup creado en OneDrive", "success");
 // "No se ha hecho backup hoy" aunque se hubiera hecho correctamente.
 if (typeof actualizarInfoBackup === 'function') actualizarInfoBackup(true);
 } catch (e) {
+    window.AppLog && AppLog.warn('crearBackupNube', e);
+    if (forzarManual) notify('❌ No se pudo crear el backup', 'error');
 }
 };
 // ==========================================
@@ -4173,7 +4220,7 @@ try {
 let wbWorker = null;
 if (window.AppXlsxWorker) {
 try { wbWorker = await window.AppXlsxWorker.read(e.target.result.slice(0)); }
-catch (workerError) {  }
+catch (workerError) { window.AppLog && AppLog.warn('xlsxWorker.read(local)', workerError); }
 }
 if (window.AppAssets) await window.AppAssets.xlsx();
 const data = new Uint8Array(e.target.result);
@@ -4232,7 +4279,7 @@ const keyBenef = keys.find(k => k.toUpperCase().includes("BENEFICIARIO"));
 // --- LECTURA DIRECTA DE SEGURIDAD EXCEL ---
 const keyPin = keys.find(k => k.toUpperCase().includes("SEC_PIN_HASH"));
 if (keyPin && datosConfig[0][keyPin]) {
-    try { localStorage.setItem('aidanai_pw_v3', String(datosConfig[0][keyPin]).trim()); } catch(e) {}
+    try { localStorage.setItem('aidanai_pw_v3', String(datosConfig[0][keyPin]).trim()); } catch(e) { window.AppLog && AppLog.warn('cargarPinDesdeExcel', e); }
 }
 // ------------------------------------------
 datosConfig.forEach(fila => {
@@ -5003,7 +5050,7 @@ if (hayErrorVisual) {
 
 window.toggleBotonCarga('btn-modal-action', true);
 
-try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){}
+try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){ /* vibración no soportada: ignorar a propósito */ }
 
 // --- INTERCEPTOR RECURRENTE ---
 const chkRecurrente = document.getElementById('m-es-recurrente');
@@ -5219,7 +5266,7 @@ if(typeof vibrar === 'function') vibrar('clonar');
 // --- FUNCIÓN BORRAR: Elimina y guarda cambios ---
 window.borrarMovimiento = async function(id) {
 // --- NUEVA MEDIDA 1: EL TOQUE MÁGICO (Vibración al instante) ---
-try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){}
+try { if (navigator.vibrate) navigator.vibrate(40); } catch(e){ /* vibración no soportada: ignorar a propósito */ }
 // -------------------------------------------------------------
 // 1. Confirmación de seguridad
 const confirmado = await window.pedirConfirmacion(
@@ -7063,6 +7110,7 @@ const nuevo = await CryptoSystem.encriptar(datos, newVal);
 localStorage.setItem('DATA_ENCRIPTADA', nuevo);
 }
 } catch (e) {
+    window.AppLog && AppLog.warn('cambiarPin:reEncriptarCache', e);
 }
 // 7. Limpiar campos
 if (oldInput) oldInput.value = '';
@@ -7629,7 +7677,7 @@ window.agregarDesdeRecurrente = async function(idRecurrente, fechaPrevista) {
 if ('serviceWorker' in navigator) {
     // Solo arrancamos el motor offline si estamos en un servidor real o localhost
     if (window.location.protocol !== 'file:') {
-        navigator.serviceWorker.register('sw.js').catch(function() {});
+        navigator.serviceWorker.register('sw.js').catch(function(e) { window.AppLog && AppLog.warn('serviceWorker.register', e); });
     } else {
         }
 }
@@ -10152,7 +10200,7 @@ window.actualizarAnalisisCartera = function() {
     if (typeof _renderOrig === 'function' && !_renderOrig._analisisHook) {
         window.renderizarCartera = function() {
             const res = _renderOrig.apply(this, arguments);
-            try { window.actualizarAnalisisCartera(); } catch (e) {}
+            try { window.actualizarAnalisisCartera(); } catch (e) { window.AppLog && AppLog.warn('renderizarCartera:analisisHook', e); }
             return res;
         };
         window.renderizarCartera._analisisHook = true;
@@ -10322,9 +10370,10 @@ if ('serviceWorker' in navigator) {
             window.DataManager.renderizarRecurrentes = window.renderizarfijos;
         }
     } catch (e) {
+        window.AppLog && AppLog.warn('poblarNamespaces:alias', e);
     }
 })();
 
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a03c16ccef6f9d79',t:'MTc4MDEyNjgwOQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
