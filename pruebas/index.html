@@ -39,12 +39,7 @@
                 event.preventDefault();
             }
         }, true);
-        // Manejador global silencioso para errores no capturados en producción
-        window.addEventListener('unhandledrejection', function(event) {
-            if (!isAsyncChannelNoise(event.reason)) {
-                event.preventDefault(); // Silencia en producción, sin romper UX
-            }
-        });
+  
     })();
     // Carga diferida: mantiene un único index.html, pero despierta librerías pesadas solo cuando hacen falta.
     window.AppAssets = (function() {
@@ -321,7 +316,7 @@ header::-webkit-scrollbar { display: none !important; }
 }
 #ptr-indicator.loading .ptr-spinner { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
+.spin { animation: spin 0.8s linear infinite; display: inline-block; }
 /* ═══════════════════════════════════════════
    VIEWS — TABS
 ═══════════════════════════════════════════ */
@@ -1348,12 +1343,48 @@ input:not(:placeholder-shown) + .btn-clear-input { opacity: 1; pointer-events: a
 #contador-filas { display: block !important; visibility: visible !important; }
 
 /* ═══════════════════════════════════════════
-   DEEP SPACE (AMOLED — DESACTIVADO)
+   SELECTOR DE RANGO TEMPORAL (gráficos)
 ═══════════════════════════════════════════ */
-#deep-space { display: none; }
+.rango-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.55);
+    border-radius: var(--radius-pill);
+    padding: 5px 12px;
+    font-size: 10px; font-weight: 800;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.2s ease;
+    min-height: 28px;
+}
+.rango-btn:active { transform: scale(0.92); }
+.rango-btn.active {
+    background: rgba(0,184,255,0.15);
+    border-color: var(--c-primary);
+    color: var(--c-primary);
+    box-shadow: 0 0 10px rgba(0,184,255,0.18);
+}
 
-@media (min-width: 800px) { .chart-container { height: 200px; } }
-@media (min-width: 820px) { #app-viewport { width: 800px; } }
+/* ═══════════════════════════════════════════
+   SKELETON LOADERS (carga progresiva)
+═══════════════════════════════════════════ */
+@keyframes skeletonShimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+.skeleton-line {
+    display: inline-block;
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.3s ease-in-out infinite;
+    color: transparent !important;
+    user-select: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-line { animation: none; }
+}
 
     </style>
 </head>
@@ -1406,7 +1437,6 @@ input:not(:placeholder-shown) + .btn-clear-input { opacity: 1; pointer-events: a
 </div>
 <div id="app-viewport"></div>
 <template id="plantilla-app-secreta">
-<canvas id="deep-space"></canvas>
 <div class="app-layout">
 <header>
 <div class="header-ultra-compact">
@@ -1744,6 +1774,58 @@ DN
 
         </div>
 
+        <!-- TARJETA 1.5: ANÁLISIS DE RENDIMIENTO (NUEVO) -->
+        <div class="master-card" id="card-analisis-cartera" style="margin-top: 15px; display:none;">
+            <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                <span class="card-title" style="font-size:12px; letter-spacing:1px;">🔬 ANÁLISIS DE RENDIMIENTO</span>
+                <span style="font-size:9px; color:#666;">CÓMO EVOLUCIONAN REALMENTE TUS INVERSIONES</span>
+            </div>
+
+            <!-- Variación por periodo -->
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:12px;">
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:10px 6px; text-align:center;">
+                    <div style="font-size:8px; color:#FFD60A; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">HOY</div>
+                    <div id="ana-var-dia" class="value-privacy-blur" style="font-size:13px; font-weight:900; color:#888;">---</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:10px 6px; text-align:center;">
+                    <div style="font-size:8px; color:#FFD60A; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">ESTE MES</div>
+                    <div id="ana-var-mes" class="value-privacy-blur" style="font-size:13px; font-weight:900; color:#888;">---</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:12px; padding:10px 6px; text-align:center;">
+                    <div style="font-size:8px; color:#FFD60A; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">AÑO (YTD)</div>
+                    <div id="ana-var-ano" class="value-privacy-blur" style="font-size:13px; font-weight:900; color:#888;">---</div>
+                </div>
+            </div>
+
+            <!-- Rentabilidad anualizada (XIRR) + Diversificación -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                <div style="background:rgba(0,184,255,0.05); border:1px solid rgba(0,184,255,0.15); border-radius:12px; padding:12px 8px; text-align:center;">
+                    <div style="font-size:8px; color:#FFD60A; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">RENTAB. ANUALIZADA <span title="Tasa interna de retorno (money-weighted). Tiene en cuenta cuándo invertiste cada cantidad, no solo el total." style="cursor:help; opacity:0.6;">ⓘ</span></div>
+                    <div id="ana-xirr" class="value-privacy-blur" style="font-size:16px; font-weight:900; color:#00B8FF;">---</div>
+                    <div id="ana-xirr-label" style="font-size:8px; color:#666; margin-top:2px;">TIR anual</div>
+                </div>
+                <div style="background:rgba(0,184,255,0.05); border:1px solid rgba(0,184,255,0.15); border-radius:12px; padding:12px 8px; text-align:center;">
+                    <div style="font-size:8px; color:#FFD60A; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">DIVERSIFICACIÓN</div>
+                    <div id="ana-diversif" style="font-size:16px; font-weight:900; color:#39FF14;">---</div>
+                    <div class="pos-weight-bar-bg" style="margin-top:6px;"><div id="ana-diversif-bar" class="pos-weight-bar-fill" style="width:0%; background:#39FF14;"></div></div>
+                </div>
+            </div>
+
+            <!-- Mejor y peor posición -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+                <div style="background:rgba(57,255,20,0.05); border:1px solid rgba(57,255,20,0.2); border-radius:12px; padding:10px 10px;">
+                    <div style="font-size:8px; color:#39FF14; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">▲ MEJOR POSICIÓN</div>
+                    <div id="ana-mejor-tic" style="font-size:13px; font-weight:900; color:#fff;">---</div>
+                    <div id="ana-mejor-val" class="value-privacy-blur" style="font-size:12px; font-weight:800; color:#39FF14; margin-top:2px;">---</div>
+                </div>
+                <div style="background:rgba(255,46,77,0.05); border:1px solid rgba(255,46,77,0.2); border-radius:12px; padding:10px 10px;">
+                    <div style="font-size:8px; color:#FF2E4D; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">▼ PEOR POSICIÓN</div>
+                    <div id="ana-peor-tic" style="font-size:13px; font-weight:900; color:#fff;">---</div>
+                    <div id="ana-peor-val" class="value-privacy-blur" style="font-size:12px; font-weight:800; color:#FF2E4D; margin-top:2px;">---</div>
+                </div>
+            </div>
+        </div>
+
         <!-- TARJETA 2: DISTRIBUCIÓN DE CARTERA (donut) -->
         <div class="master-card" style="margin-top: 15px;">
             <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
@@ -1775,6 +1857,14 @@ DN
                     <span class="material-icons" style="font-size:12px; vertical-align:middle;">refresh</span>
                 </button>
             </div>
+            <!-- Selector de rango temporal (NUEVO) -->
+            <div id="evol-rango-selector" style="display:flex; gap:6px; justify-content:center; margin:10px 0 4px 0;">
+                <button class="rango-btn" data-rango="30" onclick="window.cambiarRangoEvolCartera('30')">1M</button>
+                <button class="rango-btn" data-rango="90" onclick="window.cambiarRangoEvolCartera('90')">3M</button>
+                <button class="rango-btn" data-rango="180" onclick="window.cambiarRangoEvolCartera('180')">6M</button>
+                <button class="rango-btn" data-rango="365" onclick="window.cambiarRangoEvolCartera('365')">1A</button>
+                <button class="rango-btn active" data-rango="all" onclick="window.cambiarRangoEvolCartera('all')">TODO</button>
+            </div>
             <div id="evol-stats" style="display:none; gap:0; padding:10px 0 4px 0; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:8px;"></div>
             <div style="width:100%; height:260px;">
                 <div id="chart-cartera-evol" style="width:100%; height:100%;"></div>
@@ -1785,9 +1875,17 @@ DN
         <div class="master-card" style="margin-top: 15px; margin-bottom: 20px;">
             <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
                 <span class="card-title" style="font-size: 12px; color: #aaa;">📋 MIS POSICIONES</span>
-                <button onclick="window.abrirModalNuevaPosicion && window.abrirModalNuevaPosicion()" style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:4px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:1px;">
-                    <span class="material-icons" style="font-size:12px; vertical-align:middle;">add</span> NUEVA
-                </button>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <select id="orden-cartera-sel" onchange="window.cambiarOrdenCartera(this.value)" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#ccc; border-radius:20px; font-size:9px; font-weight:800; padding:4px 8px; outline:none; cursor:pointer; font-family:'Inter',sans-serif; text-transform:uppercase; color-scheme:dark;">
+                        <option value="valor">↕ Valor</option>
+                        <option value="pnl">↕ P&L €</option>
+                        <option value="rent">↕ Rentab. %</option>
+                        <option value="nombre">↕ Nombre</option>
+                    </select>
+                    <button onclick="window.abrirModalNuevaPosicion && window.abrirModalNuevaPosicion()" style="background:rgba(57,255,20,0.1); border:1px solid rgba(57,255,20,0.4); color:#39FF14; padding:4px 12px; border-radius:20px; font-size:10px; font-weight:900; cursor:pointer; letter-spacing:1px;">
+                        <span class="material-icons" style="font-size:12px; vertical-align:middle;">add</span> NUEVA
+                    </button>
+                </div>
             </div>
             <!-- Pills de resumen rápido: Invertido / Rentabilidad / Posiciones -->
             <div style="display:flex; gap:8px; padding:10px 4px 6px 4px; flex-wrap:wrap;">
@@ -3126,136 +3224,6 @@ if (toast.parentNode === container) container.removeChild(toast);
 window.mostrarEstado       = window.notify;
 window.mostrarToast        = window.notify;
 /* ============================================================
-🚀 SPACE ENGINE V3 — Súper Ligero, 3D y Espectacular
-============================================================ */
-const SpaceEngine = (() => {
-let canvas, ctx, w, h, animationId;
-let stars = [];
-let shootingStars = [];
-// CONFIGURACIÓN OPTIMIZADA
-const CONFIG = {
-starCount: 220,          // Mantenemos número bajo para rendimiento
-shootingStarFreq: 0.012, // Frecuencia de estrellas fugaces
-bgColor: '#000000',      // Fondo negro puro
-baseSpeed: 0.05          // Velocidad base del efecto 3D (Parallax)
-};
-// Paleta extendida: Blancas, Azuladas (calientes), Amarillentas y Naranjas (frías)
-const starColors = ['#ffffff', '#e0f0ff', '#b5d5ff', '#fff4e0', '#ffebd6', '#ffd2b5'];
-// CLASE: ESTRELLA DE FONDO (Con efecto Parallax 3D)
-class Star {
-constructor() { this.reset(true); }
-reset(randomizeX = false) {
-// Si nace por primera vez, posición aleatoria. Si reaparece, nace en la derecha.
-this.x = randomizeX ? Math.random() * w : w;
-this.y = Math.random() * h;
-// El tamaño determina la capa de profundidad (Parallax)
-this.size = Math.random() * 1.8 + 0.2;
-this.baseAlpha = Math.random() * 0.6 + 0.1;
-this.phase = Math.random() * Math.PI * 2;
-this.color = starColors[Math.floor(Math.random() * starColors.length)];
-this.blinkSpeed = Math.random() * 0.03 + 0.01;
-// MAGIA 3D: Las estrellas más grandes (más cerca) se mueven más rápido
-this.driftSpeed = (this.size * CONFIG.baseSpeed) + 0.01;
-}
-update() {
-this.phase += this.blinkSpeed; // Parpadeo orgánico
-this.x -= this.driftSpeed;     // Deriva hacia la izquierda
-if (this.x < 0) this.reset(false); // Si sale de pantalla, vuelve a nacer
-}
-draw() {
-const currentAlpha = this.baseAlpha + Math.sin(this.phase) * 0.4;
-// TRUCO DE RENDIMIENTO: Falso resplandor (Halo) solo para estrellas grandes y en su pico de brillo
-if (this.size > 1.2 && currentAlpha > 0.6) {
-ctx.globalAlpha = 0.15;
-ctx.fillStyle = this.color;
-ctx.fillRect(this.x - 1, this.y - 1, this.size + 2, this.size + 2);
-}
-ctx.globalAlpha = Math.max(0, currentAlpha);
-ctx.fillStyle = this.color;
-ctx.fillRect(this.x, this.y, this.size, this.size);
-}
-}
-// CLASE: ESTRELLA FUGAZ (Más dramática y con destello eléctrico)
-class ShootingStar {
-constructor() { this.reset(); }
-reset() {
-this.x = Math.random() * w * 1.5; // Pueden nacer más a la derecha para cruzar toda la pantalla
-this.y = -20;
-this.speed = Math.random() * 20 + 15; // Velocidad de impacto
-this.size = Math.random() * 1.5 + 1;
-// Caída diagonal dramática cruzando el espacio
-this.dirX = -1;
-this.dirY = Math.random() * 0.5 + 0.5;
-this.length = Math.random() * 80 + 50;
-this.color = (Math.random() > 0.7) ? '#00e5ff' : '#ffffff'; // Cian eléctrico (neón) o blanco
-}
-update() {
-this.x += this.speed * this.dirX;
-this.y += this.speed * this.dirY;
-return !(this.x < -this.length || this.x > w + this.length || this.y > h + this.length);
-}
-draw() {
-const tailX = this.x - (this.length * this.dirX);
-const tailY = this.y - (this.length * this.dirY);
-// 1. Cola semitransparente (Súper eficiente, un solo trazo)
-ctx.globalAlpha = 0.4;
-ctx.beginPath();
-ctx.strokeStyle = this.color;
-ctx.lineWidth = this.size * 0.8;
-ctx.moveTo(tailX, tailY);
-ctx.lineTo(this.x, this.y);
-ctx.stroke();
-// 2. Halo de resplandor del núcleo (Falso Glow)
-ctx.globalAlpha = 0.4;
-ctx.fillStyle = this.color;
-ctx.fillRect(this.x - 1, this.y - 1, this.size * 2.5, this.size * 2.5);
-// 3. Cabeza brillante ardiente
-ctx.globalAlpha = 1;
-ctx.fillStyle = '#ffffff';
-ctx.fillRect(this.x, this.y, this.size * 1.5, this.size * 1.5);
-}
-}
-const init = () => {
-canvas = document.getElementById('deep-space');
-if(!canvas) return;
-ctx = canvas.getContext('2d', { alpha: false });
-resize();
-window.addEventListener('resize', resize);
-stars = Array.from({ length: CONFIG.starCount }, () => new Star());
-animate();
-};
-const resize = () => {
-w = canvas.width = window.innerWidth;
-h = canvas.height = window.innerHeight;
-};
-const animate = () => {
-// Limpieza de pantalla con negro puro
-ctx.globalAlpha = 1;
-ctx.fillStyle = CONFIG.bgColor;
-ctx.fillRect(0, 0, w, h);
-// Renderizado del Parallax estelar
-for (let i = 0; i < stars.length; i++) {
-stars[i].update();
-stars[i].draw();
-}
-// Inyección de estrellas fugaces
-if (Math.random() < CONFIG.shootingStarFreq) {
-shootingStars.push(new ShootingStar());
-}
-// Motor de física de fugaces (bucle invertido súper rápido)
-for (let i = shootingStars.length - 1; i >= 0; i--) {
-const star = shootingStars[i];
-if (star.update()) {
-star.draw();
-} else {
-shootingStars.splice(i, 1);
-}
-}
-animationId = requestAnimationFrame(animate);
-};
-return { start: init };
-})();
-/* ============================================================
 🔒 CRYPTOSYSTEM — AES-GCM-256 con PBKDF2-SHA256
 Responsabilidad única: encriptar/desencriptar blobs en b64.
 ============================================================ */
@@ -3385,18 +3353,12 @@ const PinSecurity = (() => {
     return { guardarNuevo, verificar, setSession, getSession, esVirgen, hashear: _hash };
 })();
 
-// ==========================================
-// 1. VARIABLES GLOBALES ESTRICTAS
-// ==========================================
-// [F4] Los valores iniciales de modoNube e idEnEdicion ahora viven en AppState
-// (definido más abajo). Estas asignaciones siguen siendo válidas porque los
-// setters delegantes los redirigirán a AppState una vez esté creado.
-window.modoNube = false;
+
 window.datos = [];
 window.datosPropietario = [];
 window.datosResumen = [];
 window.mapaCuentas = {};
-window.idEnEdicion = null;
+
 // 🔄 SINCRONIZADOR DE FILTRO DE USUARIO (Getter/Setter reactivo)
 Object.defineProperty(window, 'filtroUsuarioActual', {
     get() {
@@ -3438,16 +3400,6 @@ Object.defineProperty(window, 'modoTransaccionActual', {
     },
     configurable: true
 });
-
-// ════════════════════════════════════════════════════════════════════════════
-// 🔄 SINCRONIZADORES DE ESTADO UI/FLAGS (Getter/Setter delegantes) [F4]
-// ────────────────────────────────────────────────────────────────────────────
-// Los siguientes Object.defineProperty centralizan en AppState el estado
-// mutable de UI/flags que antes vivía suelto en window.*. La API externa
-// (window.ordenActivo, window.modoNube, etc.) NO cambia: cualquier código
-// existente que lea o escriba estas propiedades sigue funcionando idénticamente.
-// El beneficio es trazabilidad: hay una única fuente de verdad (AppState).
-// ════════════════════════════════════════════════════════════════════════════
 
 // ── ordenActivo: criterio de ordenación del Diario (campo + asc/desc) ──────
 Object.defineProperty(window, 'ordenActivo', {
@@ -3514,69 +3466,14 @@ Object.defineProperty(window, '_appDesbloqueada', {
     },
     configurable: true
 });
-// ============================================================================
-// 🛡️ BLINDAJE DE PRODUCCIÓN: FILTRADO DE PROPIETARIO Y FORMATOS GLOBALES
-// ============================================================================
-// ─── Alias globales del singleton FinanceModel.format.raw (back-compat) ─────
-// Antes se creaban 3 instancias Intl.NumberFormat nuevas aquí. Ahora son
-// referencias al singleton centralizado, evitando duplicación de objetos.
-// Cualquier código legado que use window.FMT_NUM/FMT_EUR2/FMT_PCT sigue
-// funcionando idénticamente.
 window.FMT_NUM  = window.FinanceModel.format.raw.num2;
 window.FMT_EUR2 = window.FinanceModel.format.raw.eur2;
 window.FMT_PCT  = window.FinanceModel.format.raw.pct;
-
-// ════════════════════════════════════════════════════════════════════════════
-// 🏛️ NAMESPACES SEMÁNTICOS (Arquitectura Modular) [F5]
-// ────────────────────────────────────────────────────────────────────────────
-// Cinco módulos namespace que agrupan las 84 funciones de la aplicación
-// por dominio. Las funciones siguen viviendo en sus posiciones originales
-// (window.X); estos módulos exponen referencias adicionales para acceso
-// estructurado. La "población" real ocurre al FINAL del archivo (bloque
-// "POBLACIÓN DE NAMESPACES"), una vez todas las funciones globales están
-// declaradas. Estos objetos se crean aquí para que estén disponibles
-// desde cualquier punto del script.
-//
-// Convención:
-//   UIManager        → navegación, modales, toasts, filtros, PIN, spotlight
-//   DataManager      → procesamiento Excel, movimientos, recurrentes, dashboard
-//   SyncManager      → sincronización OneDrive, backups, autenticación
-//   ChartsManager    → renderizado de gráficos analíticos (extensión de F2)
-//   CarteraManager   → módulo de cartera de inversiones (BTC/EUR + activos)
-// ════════════════════════════════════════════════════════════════════════════
 window.UIManager      = window.UIManager      || Object.create(null);
 window.DataManager    = window.DataManager    || Object.create(null);
 window.SyncManager    = window.SyncManager    || Object.create(null);
 window.ChartsManager  = window.ChartsManager  || Object.create(null);
 window.CarteraManager = window.CarteraManager || Object.create(null);
-
-// ════════════════════════════════════════════════════════════════════════════
-// 📊 ChartManager — CICLO DE VIDA UNIFICADO DE INSTANCIAS ECHARTS
-// ────────────────────────────────────────────────────────────────────────────
-// Centraliza la gestión de TODAS las instancias ECharts de la aplicación
-// (Sankey, TreeMap, Sunburst, Donut, Evolución, etc.). Previene las dos
-// fuentes principales de fuga de memoria:
-//
-//   1. ResizeObservers duplicados que se multiplicaban en cada render
-//      (cada uno mantenía vivo el contenedor + la instancia anterior).
-//   2. Instancias huérfanas tras navegar entre pestañas o reabrir modales
-//      sin disposer la anterior.
-//
-// API canónica:
-//   ChartManager.mount(container, opts?)    → instancia ECharts reutilizada
-//     opts.forceNew=true  → dispose() previo y crea nueva (para gráficos
-//                            que dependen de cambios de tamaño del contenedor)
-//     opts.initOpts       → segundo arg de echarts.init (ej. {renderer:'canvas'})
-//   ChartManager.get(container)             → instancia o null
-//   ChartManager.dispose(container)         → libera memoria
-//   ChartManager.attachResizeObserver(container, key)
-//                                           → conecta ResizeObserver UNA vez
-//                                              por key, idempotente
-//
-// La instancia se registra también en window[`echart${alias}`] cuando se
-// pasa opts.alias, manteniendo back-compat con código legado que accede
-// directamente (p.ej. window.echartSankey, listener de orientación).
-// ════════════════════════════════════════════════════════════════════════════
 window.ChartManager = (function() {
     const _resizeObservers = Object.create(null); // key → ResizeObserver
 
@@ -4148,7 +4045,7 @@ document.getElementById('btn-load-cloud').style.display = modoNube ? 'flex' : 'n
 // El botón de guardar cambia según el modo
 const btnGuardar = document.getElementById('btn-guardar');
 if (btnGuardar) btnGuardar.style.display = modoNube ? 'none' : 'flex';
-if ((window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio') === 'movs' && typeof renderizar === 'function') renderizar();
+if ((window.AppRuntime ? window.AppRuntime.activeTab() : 'inicio') === 'diario' && typeof renderizar === 'function') renderizar();
 if (window.AppRuntime) window.AppRuntime.scheduleDashboard(true);
 else if (typeof actualizarDashboard === 'function') actualizarDashboard();
 }
@@ -4444,15 +4341,8 @@ window.datos.sort((a, b) => b.ts - a.ts);
 window.listaCuentasConfig = [...new Set(window.listaCuentasConfig)].sort();
 window.listaConceptosConfig = [...new Set(window.listaConceptosConfig)].sort();
 window.listaBeneficiariosConfig = [...new Set(window.listaBeneficiariosConfig)].sort();
-// ── MÓDULO CARTERA: Leer hoja CARTERA ──────────────────────────────────
-function valCampo(fila, posiblesNombres) { 
-    for (let nom of posiblesNombres) {
-        if (fila[nom] !== undefined && fila[nom] !== '') return fila[nom];
-    }
-    const clave = Object.keys(fila).find(k => posiblesNombres.some(pn => k.toUpperCase() === pn.toUpperCase()));
-    return clave ? fila[clave] : '';
-}
-	const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
+
+const wsCarteraName = wb.SheetNames.find(n => /^CARTERA$/i.test(n.trim()));
 
 if (wsCarteraName) {
     const rawCartera = XLSX.utils.sheet_to_json(wb.Sheets[wsCarteraName], { defval: "" });
@@ -5529,7 +5419,7 @@ if(icono) icono.style.color = '#666';
 function actualizarPatrimonio() {
     // 1. Localizar elementos de la interfaz
     const contenedorLista = document.getElementById('lista-grupos-patrimonio');
-    const elTotalDetalle = document.getElementById('total-patri-valor'); 
+    const elTotalDetalle = null; // ID 'total-patri-valor' no existe en el HTML 
     const elTotalCambio = document.getElementById('total-patri-cambio');   
     const elTotalHome = document.getElementById('d-patri-total');
     
@@ -5594,8 +5484,7 @@ function actualizarPatrimonio() {
 
     // 4. Inyección en la UI Superior (Efecto Odómetro y Desglose de Leyenda)
     if (elTotalDetalle) {
-        window.animarCifra('total-patri-valor', sumaTotal, 'moneda');
-    }
+            }
 
     if (elTotalCambio) {
         // Formateador interno rápido sin decimales para la leyenda limpia
@@ -6829,34 +6718,6 @@ if (hayDatosAno) {
  gastoMensualMedio = (gastoTotalUltimoAno / diasDif) * 30.44;
 }
 if (gastoMensualMedio < 1) gastoMensualMedio = 1;
-
-// A) COBERTURA
-let mesesCobertura = totalLiquidez / gastoMensualMedio;
-if (mesesCobertura < 0) mesesCobertura = 0;
-const elCob = document.getElementById('d-cobertura');
-if(elCob) {
- let mesesC = Math.floor(mesesCobertura);
- let diasC = Math.round((mesesCobertura - mesesC) * 30.44);
- if (diasC >= 30) { mesesC += 1; diasC = 0; }
- elCob.innerText = `${mesesC} mes${mesesC !== 1 ? 'es' : ''} y ${diasC} día${diasC !== 1 ? 's' : ''}`;
- elCob.style.fontSize = "19px";
- elCob.style.color = "var(--c-primary, #0A84FF)";
-}
-
-// B) LIBERTAD
-let mesesLibertad = totalPatrimonio / gastoMensualMedio;
-if (mesesLibertad < 0) mesesLibertad = 0;
-let aniosLib = Math.floor(mesesLibertad / 12);
-let mesesLib = Math.floor(mesesLibertad % 12);
-let rentaPasivaAnual = totalInversion * 0.04;
-let gastoAnualProyectado = gastoMensualMedio * 12;
-let pctLibertad = (rentaPasivaAnual / gastoAnualProyectado) * 100;
-const elLib = document.getElementById('d-libertad');
-if(elLib) {
- elLib.innerText = `${aniosLib} año${aniosLib !== 1 ? 's' : ''} y ${mesesLib} mes${mesesLib !== 1 ? 'es' : ''}`;
- elLib.style.fontSize = "19px";
- elLib.style.color = "var(--c-primary, #0A84FF)";
-}
 
 // C) AHORRO ESTRUCTURAL
 let tasaAhorroEstructural = 0;
@@ -8262,20 +8123,8 @@ limite.setDate(hoy.getDate() + 15);
 limite.setHours(23,59,59,999);
 const proximos = fijos.filter(r => {
 if (!r.fechaProx) return false;
-let fechaRec;
-if (typeof r.fechaProx === 'number') {
-    // Serial de Excel → Date local
-    fechaRec = new Date(Math.round((r.fechaProx - 25569) * 86400 * 1000));
-} else {
-    const str = String(r.fechaProx).trim();
-    const parts = str.split('-');
-    if (parts.length === 3 && parts[0].length === 4) {
-        // YYYY-MM-DD → forzamos local para evitar desfase UTC
-        fechaRec = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    } else {
-        fechaRec = new Date(str);
-    }
-}
+// Usa el motor central que ya programaste y que es más robusto
+const fechaRec = window.FinanceModel.parseFecha(r.fechaProx);
 if (!fechaRec || isNaN(fechaRec.getTime())) return false;
 fechaRec.setHours(12,0,0,0);
 if (typeof window.pasaFiltroPropietario === 'function' && !window.pasaFiltroPropietario({ cuenta: r.cuenta || '', beneficiario: '' })) return false;
@@ -8951,13 +8800,11 @@ window.detenerAnimacionCargaNumeros = function() {
     elementos.forEach(el => {
         el.classList.remove('scrambling-number');
         delete el.dataset.scrambling;
-        // Restauramos el último valor real conocido (animarCifra lo guarda en data-prev)
         const prev = el.getAttribute('data-prev');
         if (prev !== null && prev !== '' && typeof window.formatearDatoMaestro === 'function') {
             const tipo = el.dataset.tipoFmt || 'moneda';
-            const num = (window.FinanceModel && window.FinanceModel.parseMoney)
-                ? window.FinanceModel.parseMoney(prev)
-                : parseFloat(prev);
+            // USAR parseMoney PARA EVITAR BUG DE DECIMALES EUROPEOS:
+            const num = window.FinanceModel.parseMoney(prev); 
             if (!isNaN(num)) {
                 el.innerText = window.formatearDatoMaestro(num, tipo);
             }
@@ -9542,7 +9389,18 @@ window.renderizarCartera = function() {
             <div id="${groupId}" style="display:block;">`;
 
         const totalValorCartera = r.totalValor || 1;
-        g.posiciones.sort((a,b) => window.getValorMercadoPosicionCartera(b) - window.getValorMercadoPosicionCartera(a)).forEach(pos => {
+        const _ordCartera = window.ordenCartera || 'valor';
+        g.posiciones.sort((a, b) => {
+            if (_ordCartera === 'pnl') {
+                return window.getPnlPosicionCartera(b) - window.getPnlPosicionCartera(a);
+            } else if (_ordCartera === 'rent') {
+                return window.getRentabilidadPosicionCartera(b) - window.getRentabilidadPosicionCartera(a);
+            } else if (_ordCartera === 'nombre') {
+                return String(a.ticker || a.nombre || '').localeCompare(String(b.ticker || b.nombre || ''));
+            }
+            // por defecto: valor de mercado descendente
+            return window.getValorMercadoPosicionCartera(b) - window.getValorMercadoPosicionCartera(a);
+        }).forEach(pos => {
             const valPos = window.getValorMercadoPosicionCartera(pos);
             const pesoPct = (valPos / totalValorCartera) * 100;
             const alertaPeso = pesoPct > 40 ? '🔴 ' : pesoPct > 25 ? '🟡 ' : '';
@@ -9573,7 +9431,7 @@ window.renderizarCartera = function() {
                 </div>
                 <div style="text-align:right; flex-shrink:0;">
                     <div class="cartera-valor" style="font-size:14px; font-weight:800; color:#fff;">${fmt2(valPos)}</div>
-                    <div class="cartera-pnl ${pnlClass}" style="font-size:11px; font-weight:700;">${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%)</div>
+                    <div class="cartera-pnl ${pnlClass}" style="font-size:11px; font-weight:700;">${pnlPos >= 0 ? '▲' : '▼'} ${pnlSig}${fmt2(pnlPos)} (${pnlSig}${rentPos.toFixed(2)}%)</div>
                     <div style="font-size:9px; color:#555; margin-top:2px;">Invertido: ${fmt2(pos.precioCompra)}</div>
                     <div class="pos-weight-pct" style="font-size:9px; font-weight:700; color:rgba(255,214,10,0.75); margin-top:2px;">${pesoPct.toFixed(1)}% cartera</div>
                 </div>
@@ -9668,7 +9526,11 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
 // ── GRÁFICO EVOLUCIÓN HISTÓRICA ───────────────────────────────────────
 window.renderizarEvolCartera = function() {
   if (!window.ensureEChartsReady(() => window.renderizarEvolCartera())) return;
-  const hist = window.historicoCartera || [];
+  // 🆕 Aplicamos el rango temporal seleccionado (1M/3M/6M/1A/TODO) sobre una COPIA
+  const _histFull = window.historicoCartera || [];
+  const hist = (typeof window.filtrarHistoricoPorRango === 'function')
+      ? window.filtrarHistoricoPorRango(_histFull.slice())
+      : _histFull.slice();
   const card = document.getElementById('card-evol-cartera');
   const container = document.getElementById('chart-cartera-evol');
   const statsDiv = document.getElementById('evol-stats'); // nuevo div de estadísticas
@@ -10013,8 +9875,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.UIEvents) {
       window.UIEvents.on('datos:actualizados', function() {
         if (typeof window.calcularValoresCartera === 'function') window.calcularValoresCartera();
-        const tabInv = document.getElementById('tab-inversiones');
-        if (tabInv && tabInv.classList.contains('active')) window.renderizarCartera();
+        const tabActiva = window.AppRuntime ? window.AppRuntime.activeTab() : '';
+        if (tabActiva === 'patrimonio') window.renderizarCartera();
       });
     }
   }, 800);
@@ -10074,6 +9936,231 @@ window.actualizarPreciosAutomatico = async function(modoSilencioso = false) {
         if (iconDash && !modoSilencioso) iconDash.textContent = '⚡';
     }
 };
+// ══════════════════════════════════════════════════════════════════════
+// 🆕 MEJORAS CARTERA ACTIVA — Orden, rango temporal, XIRR y análisis
+//    (NOTA: NO se toca la lógica BTC/Binance. BTC sigue siendo BTC.)
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Cambiar criterio de ordenación de posiciones ──────────────────────
+window.cambiarOrdenCartera = function(criterio) {
+    window.ordenCartera = criterio || 'valor';
+    if (typeof window.renderizarCartera === 'function') window.renderizarCartera();
+    if (typeof vibrar === 'function') vibrar('tecla');
+};
+
+// ── Cambiar rango temporal del gráfico de evolución ───────────────────
+window.rangoEvolCartera = window.rangoEvolCartera || 'all';
+window.cambiarRangoEvolCartera = function(rango) {
+    window.rangoEvolCartera = rango || 'all';
+    // Resaltar el botón activo
+    document.querySelectorAll('#evol-rango-selector .rango-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.rango === window.rangoEvolCartera);
+    });
+    if (typeof window.renderizarEvolCartera === 'function') window.renderizarEvolCartera();
+    if (typeof vibrar === 'function') vibrar('tecla');
+};
+
+// ── Filtra el histórico según el rango temporal elegido ───────────────
+window.filtrarHistoricoPorRango = function(hist) {
+    const rango = window.rangoEvolCartera || 'all';
+    if (rango === 'all' || !hist || hist.length === 0) return hist;
+    const dias = parseInt(rango, 10);
+    if (isNaN(dias)) return hist;
+    const corte = Date.now() - dias * 86400000;
+    const filtrado = hist.filter(h => h.ts >= corte);
+    // Si no hay puntos suficientes en el rango, devolvemos al menos los 2 últimos
+    return filtrado.length >= 2 ? filtrado : hist.slice(-2);
+};
+
+// ── MOTOR XIRR (rentabilidad money-weighted / anualizada) ─────────────
+//    Calcula la tasa interna de retorno teniendo en cuenta CUÁNDO se
+//    invirtió cada cantidad. Cada compra = flujo negativo en su fecha;
+//    el valor de mercado actual = flujo positivo hoy.
+window.calcularXIRRCartera = function(posiciones) {
+    if (!posiciones || posiciones.length === 0) return null;
+    const flujos = [];
+    let valorActualTotal = 0;
+    posiciones.forEach(p => {
+        const pos = window.sanitizarPosicionCartera(p);
+        const coste = window.getCostePosicionCartera(pos);   // total invertido
+        const valor = window.getValorMercadoPosicionCartera(pos);
+        valorActualTotal += valor;
+        if (coste > 0) {
+            let fecha = pos.fechaCompra ? new Date(pos.fechaCompra) : null;
+            if (!fecha || isNaN(fecha.getTime())) fecha = new Date(Date.now() - 365 * 86400000);
+            flujos.push({ ts: fecha.getTime(), monto: -coste });
+        }
+    });
+    if (flujos.length === 0 || valorActualTotal <= 0) return null;
+    flujos.push({ ts: Date.now(), monto: valorActualTotal });
+
+    // Necesitamos al menos un negativo y un positivo
+    const hayNeg = flujos.some(f => f.monto < 0);
+    const hayPos = flujos.some(f => f.monto > 0);
+    if (!hayNeg || !hayPos) return null;
+
+    const t0 = Math.min(...flujos.map(f => f.ts));
+    const anios = (ts) => (ts - t0) / (365 * 86400000);
+    const van = (tasa) => flujos.reduce((acc, f) => acc + f.monto / Math.pow(1 + tasa, anios(f.ts)), 0);
+
+    // Bisección robusta entre -0.99 y +10 (−99% a +1000% anual)
+    let lo = -0.9999, hi = 10.0;
+    let vanLo = van(lo), vanHi = van(hi);
+    if (isNaN(vanLo) || isNaN(vanHi) || vanLo * vanHi > 0) {
+        // Fallback: si no cambia de signo, devolvemos rentabilidad simple anualizada aproximada
+        return null;
+    }
+    let tasa = 0;
+    for (let i = 0; i < 100; i++) {
+        tasa = (lo + hi) / 2;
+        const v = van(tasa);
+        if (Math.abs(v) < 0.01) break;
+        if (v * vanLo < 0) { hi = tasa; } else { lo = tasa; vanLo = v; }
+    }
+    if (!isFinite(tasa)) return null;
+    return tasa * 100; // en %
+};
+
+// ── Variación del valor de cartera en un periodo (desde histórico) ────
+window.variacionPeriodoCartera = function(diasAtras) {
+    const hist = window.historicoCartera || [];
+    if (hist.length < 1 || !window.resumenCartera) return null;
+    const valorHoy = window.resumenCartera.totalValor;
+    let referencia = null;
+    if (diasAtras === 'ytd') {
+        const inicioAno = new Date(new Date().getFullYear(), 0, 1).getTime();
+        const candidatos = hist.filter(h => h.ts <= inicioAno);
+        referencia = candidatos.length ? candidatos[candidatos.length - 1] : hist[0];
+    } else {
+        const corte = Date.now() - diasAtras * 86400000;
+        const candidatos = hist.filter(h => h.ts <= corte);
+        referencia = candidatos.length ? candidatos[candidatos.length - 1] : null;
+    }
+    if (!referencia || !referencia.valor) return null;
+    const dif = valorHoy - referencia.valor;
+    const pct = referencia.valor > 0 ? (dif / referencia.valor) * 100 : 0;
+    return { dif, pct };
+};
+
+// ── Pinta una celda de variación (€ y %) con color y flecha ───────────
+window._pintarVariacion = function(idEl, datos) {
+    const el = document.getElementById(idEl);
+    if (!el) return;
+    if (!datos) { el.innerText = 'n/d'; el.style.color = '#666'; return; }
+    const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
+    const pos = datos.dif >= 0;
+    const flecha = pos ? '▲' : '▼';
+    el.innerHTML = flecha + ' ' + (pos ? '+' : '') + datos.pct.toFixed(2) + '%';
+    el.style.color = pos ? '#39FF14' : '#FF2E4D';
+    el.title = (pos ? '+' : '') + fmt2(datos.dif);
+};
+
+// ── ANÁLISIS DE RENDIMIENTO (tarjeta nueva) ───────────────────────────
+window.actualizarAnalisisCartera = function() {
+    const card = document.getElementById('card-analisis-cartera');
+    const r = window.resumenCartera;
+    if (!card) return;
+    if (!r || r.numPosiciones === 0) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    const posiciones = r.posiciones || [];
+
+    // 1) Variación por periodo (necesita histórico; si no hay, muestra n/d)
+    window._pintarVariacion('ana-var-dia', window.variacionPeriodoCartera(1));
+    window._pintarVariacion('ana-var-mes', window.variacionPeriodoCartera(30));
+    window._pintarVariacion('ana-var-ano', window.variacionPeriodoCartera('ytd'));
+
+    // 2) Rentabilidad anualizada (XIRR), con fallback a rentabilidad simple
+    const xirr = window.calcularXIRRCartera(posiciones);
+    const elX = document.getElementById('ana-xirr');
+    const elXLbl = document.getElementById('ana-xirr-label');
+    if (elX) {
+        if (xirr !== null && isFinite(xirr)) {
+            const signo = xirr >= 0 ? '+' : '';
+            elX.innerText = signo + xirr.toFixed(2) + '%';
+            elX.style.color = xirr >= 0 ? '#39FF14' : '#FF2E4D';
+            if (elXLbl) elXLbl.innerText = 'TIR anual (XIRR)';
+        } else {
+            // Fallback: rentabilidad simple total
+            const signo = r.rentabilidad >= 0 ? '+' : '';
+            elX.innerText = signo + r.rentabilidad.toFixed(2) + '%';
+            elX.style.color = r.rentabilidad >= 0 ? '#39FF14' : '#FF2E4D';
+            if (elXLbl) elXLbl.innerText = 'Rentab. total (sin fechas)';
+        }
+    }
+
+    // 3) Diversificación (índice Herfindahl invertido → 0-100, más alto = más diversificado)
+    const elDiv = document.getElementById('ana-diversif');
+    const elDivBar = document.getElementById('ana-diversif-bar');
+    if (elDiv) {
+        const total = r.totalValor || 0;
+        if (total > 0 && posiciones.length > 0) {
+            let hhi = 0;
+            posiciones.forEach(p => {
+                const peso = window.getValorMercadoPosicionCartera(p) / total;
+                hhi += peso * peso;
+            });
+            // Score normalizado: 1 posición => 0; muchas iguales => ~100
+            const n = posiciones.length;
+            let score;
+            if (n <= 1) score = 0;
+            else score = Math.max(0, Math.min(100, ((1 / hhi - 1) / (n - 1)) * 100));
+            let etiqueta, color;
+            if (score >= 66) { etiqueta = 'Alta'; color = '#39FF14'; }
+            else if (score >= 33) { etiqueta = 'Media'; color = '#FFD60A'; }
+            else { etiqueta = 'Baja'; color = '#FF2E4D'; }
+            elDiv.innerText = etiqueta;
+            elDiv.style.color = color;
+            if (elDivBar) { elDivBar.style.width = score.toFixed(0) + '%'; elDivBar.style.background = color; }
+            elDiv.title = 'Score ' + score.toFixed(0) + '/100 · ' + n + ' posiciones';
+        } else {
+            elDiv.innerText = 'n/d';
+            elDiv.style.color = '#666';
+            if (elDivBar) elDivBar.style.width = '0%';
+        }
+    }
+
+    // 4) Mejor y peor posición por rentabilidad %
+    let mejor = null, peor = null;
+    posiciones.forEach(p => {
+        const rent = window.getRentabilidadPosicionCartera(p);
+        const coste = window.getCostePosicionCartera(p);
+        if (coste <= 0) return;
+        if (!mejor || rent > mejor.rent) mejor = { pos: p, rent };
+        if (!peor || rent < peor.rent) peor = { pos: p, rent };
+    });
+    const setPos = (idTic, idVal, dato) => {
+        const elT = document.getElementById(idTic);
+        const elV = document.getElementById(idVal);
+        if (!elT || !elV) return;
+        if (!dato) { elT.innerText = '---'; elV.innerText = '---'; return; }
+        const p = dato.pos;
+        const fmt2 = (v) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v);
+        const pnl = window.getPnlPosicionCartera(p);
+        elT.innerText = (p.ticker || p.nombre || '—');
+        const signo = dato.rent >= 0 ? '+' : '';
+        elV.innerHTML = signo + dato.rent.toFixed(2) + '% · ' + signo + fmt2(pnl);
+        elV.style.color = dato.rent >= 0 ? '#39FF14' : '#FF2E4D';
+    };
+    setPos('ana-mejor-tic', 'ana-mejor-val', mejor);
+    setPos('ana-peor-tic', 'ana-peor-val', peor);
+};
+
+// ── Enganche: cada vez que se renderiza la cartera, refrescar análisis ─
+(function() {
+    const _renderOrig = window.renderizarCartera;
+    if (typeof _renderOrig === 'function' && !_renderOrig._analisisHook) {
+        window.renderizarCartera = function() {
+            const res = _renderOrig.apply(this, arguments);
+            try { window.actualizarAnalisisCartera(); } catch (e) {}
+            return res;
+        };
+        window.renderizarCartera._analisisHook = true;
+    }
+})();
+
+// ── FIN MEJORAS CARTERA ACTIVA ────────────────────────────────────────
+
 // ── FIN MOTOR CARTERA ─────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(reg => {
@@ -10164,22 +10251,14 @@ if ('serviceWorker' in navigator) {
     
     // Observar cambios en el DOM usando la versión throttled para no interferir
     // con inyecciones masivas de innerHTML (ej: renderizarCartera)
-    const observer = new MutationObserver(corregirEspaciadoThrottled);
+    const observer = new MutationObserver((mutations) => {
+    // Solo disparar si cambia la visibilidad de las pestañas, no por los números animados
+    const debeActuar = mutations.some(m => m.attributeName === 'class' || m.type === 'childList');
+    if (debeActuar) corregirEspaciadoThrottled();
+});
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 })();
 
-// ════════════════════════════════════════════════════════════════════════════
-// 🏛️ POBLACIÓN DE NAMESPACES (Final de carga) [F5]
-// ────────────────────────────────────────────────────────────────────────────
-// Una vez declaradas todas las funciones globales, las exponemos también
-// como propiedades de su módulo semántico correspondiente. Esto:
-//   - NO modifica window.X (sigue funcionando para HTML inline y código legado).
-//   - Añade UIManager.X / DataManager.X / etc. como vista organizada.
-//
-// Patrón defensivo: cada asignación está envuelta en una guarda de tipo
-// para evitar errores si en algún build futuro una función se renombrara
-// o eliminara (no romperá la carga de la app, solo dejará un hueco).
-// ════════════════════════════════════════════════════════════════════════════
 (function _poblarNamespaces() {
     function expone(modulo, nombres) {
         for (let i = 0; i < nombres.length; i++) {
@@ -10225,20 +10304,6 @@ if ('serviceWorker' in navigator) {
     window.ChartsManager._loaded = true;
     window.CarteraManager._loaded = true;
 
-    // ───────────────────────────────────────────────────────────────────
-    // [F6-C] NORMALIZACIÓN TERMINOLÓGICA: alias 'recurrentes' → 'fijos'
-    // ───────────────────────────────────────────────────────────────────
-    // El código histórico usa 'fijos' (datosfijos, cargarVistafijos,
-    // renderizarfijos) por razones de compatibilidad con el HTML inline.
-    // El término técnico correcto es 'recurrentes'. Creamos aliases
-    // semánticamente claros que apuntan al MISMO dato/función. Cualquier
-    // código nuevo debería usar la versión recurrentes; la versión fijos
-    // queda como capa de compatibilidad histórica.
-    //
-    // Patrón Getter/Setter delegante para los DATOS (array vivo): el alias
-    // 'datosRecurrentes' devuelve siempre el array actual de datosfijos,
-    // y al asignarle un valor lo redirige a datosfijos. Las mutaciones
-    // in-place (.push, .splice, etc.) funcionan transparentemente.
     try {
         if (!Object.getOwnPropertyDescriptor(window, 'datosRecurrentes')) {
             Object.defineProperty(window, 'datosRecurrentes', {
@@ -10262,26 +10327,4 @@ if ('serviceWorker' in navigator) {
 
 </script>
 </body>
-
-<!-- CAMBIOS:
-BUGS CORREGIDOS:
-- [CF-TRACKER] Eliminado script de rastreo Cloudflare inyectado al final del body
-- [SW-EMPTY-ELSE] Corregido bloque else vacío en registro del Service Worker
-- [LS-QUOTA] localStorage.setItem DATA_ENCRIPTADA y aidanai_pw_v3 envueltos en try/catch para manejar cuota excedida de forma silenciosa
-- [UNHANDLED-REJECTIONS] Añadido manejador global silencioso de promesas rechazadas no capturadas (producción)
-
-CÓDIGO ELIMINADO:
-- 24 llamadas console.log/warn/error eliminadas
-- Script de rastreo Cloudflare Challenge Platform (cdn-cgi) eliminado
-- Comentarios decorativos de desarrollo (bloques ═══) eliminados del CSS
-- Bloque else {} vacío del registro del Service Worker eliminado
-- Líneas en blanco finales excesivas eliminadas
-
-HARDENING / MEJORAS:
-- 'use strict' añadido en bloque principal de script (complementa los ya existentes en initPWA e IIFE corregirEspacio)
-- Meta tags de producción añadidos: robots noindex/nofollow, format-detection, referrer no-referrer
-- 15 declaraciones var reemplazadas por let/const (IIFEs de espaciado y namespaces)
-- Manejador global unhandledrejection extendido para captura silenciosa de errores en producción
-- Cuota de localStorage gestionada gracefully (sin romper flujo si está lleno)
--->
 </html>
