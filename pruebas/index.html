@@ -9191,15 +9191,19 @@ window.calcularValoresCartera = function() {
     const costeTotal = window.getCostePosicionCartera(pos);
     const valorActual = window.getValorMercadoPosicionCartera(pos);
 
-    totalCoste += costeTotal;
-    totalValor += valorActual;
+    // ── AUTOCUSTODIA excluida del valor invertido ──────────────────────
+    const esAutocustodia = window.normalizarTipoCartera(pos.tipo) === 'AUTOCUSTODIA';
+    if (!esAutocustodia) {
+        totalCoste += costeTotal;
+        totalValor += valorActual;
+    }
 
     const cuenta = pos.cuenta ? String(pos.cuenta).toUpperCase().trim() : null;
     if (cuenta) {
       costePorCuenta[cuenta] = (costePorCuenta[cuenta] || 0) + costeTotal;
       valorPorCuenta[cuenta] = (valorPorCuenta[cuenta] || 0) + valorActual;
     }
-  });
+});
 
   // 🧮 Actualizar cuentas: el saldo contable SIEMPRE será igual al COSTE TOTAL
   if (window.mapaCuentas) {
@@ -9239,7 +9243,7 @@ window.calcularValoresCartera = function() {
     totalCoste,
     plusvalia,
     rentabilidad,
-    numPosiciones: posicionesFiltradas.length,
+    numPosiciones: posicionesFiltradas.filter(p => window.normalizarTipoCartera(p.tipo) !== 'AUTOCUSTODIA').length,
     posiciones: posicionesFiltradas.map(p => window.sanitizarPosicionCartera(p))
   };
 
@@ -9406,11 +9410,11 @@ window.renderizarCartera = function() {
     }).map(p => window.sanitizarPosicionCartera(p));
 
     posicionesFiltradas.forEach(pos => {
-        const tipo = window.normalizarTipoCartera(pos.tipo);
-        if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
-        const valPos = window.getValorMercadoPosicionCartera(pos);
-        grupos[tipo].total += valPos;
-        grupos[tipo].posiciones.push(pos);
+      const tipo = window.normalizarTipoCartera(pos.tipo);
+      if (tipo === 'AUTOCUSTODIA') return; // ── Excluir del donut
+      if (!grupos[tipo]) grupos[tipo] = { total: 0, posiciones: [] };
+      grupos[tipo].total += window.getValorMercadoPosicionCartera(pos);
+      grupos[tipo].posiciones.push(pos);
     });
 
     // 3. GENERAR EL LISTADO HTML DINÁMICO
@@ -9524,6 +9528,11 @@ window.renderizarDonutCartera = function(grupos, colorTipo) {
       grupos[tipo].posiciones.push(pos);
     });
   }
+  // ── Excluir AUTOCUSTODIA de la distribución ──────────────────────────
+  const gruposSinAuto = Object.fromEntries(
+    Object.entries(grupos).filter(([tipo]) => tipo !== 'AUTOCUSTODIA')
+  );
+  grupos = gruposSinAuto;
   if (!window.ensureEChartsReady(() => window.renderizarDonutCartera(grupos, colorTipo))) return;
   const container = document.getElementById('chart-cartera-donut');
   const elCenter  = document.getElementById('cartera-donut-val');
@@ -10111,7 +10120,10 @@ window.actualizarAnalisisCartera = function() {
     if (!r || r.numPosiciones === 0) { card.style.display = 'none'; return; }
     card.style.display = 'block';
 
-    const posiciones = r.posiciones || [];
+    // ── Excluir AUTOCUSTODIA del análisis de rendimiento ────────────────
+    const posiciones = (r.posiciones || []).filter(
+        p => window.normalizarTipoCartera(p.tipo) !== 'AUTOCUSTODIA'
+    );
 
     // 1) Variación por periodo (necesita histórico; si no hay, muestra n/d)
     window._pintarVariacion('ana-var-dia', window.variacionPeriodoCartera(1));
